@@ -1,9 +1,10 @@
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, Auth, UserCredential } from 'firebase/auth';
-import { getStorage, FirebaseStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { getStorage, FirebaseStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { getMessaging, Messaging, getToken } from 'firebase/messaging';
 import { getAnalytics, isSupported, Analytics, logEvent, setUserId as setFbUserId } from 'firebase/analytics';
 import { getFirestore, Firestore, collection, addDoc, serverTimestamp, doc, setDoc } from 'firebase/firestore';
+import { getDatabase, Database, ref as rtdbRef, push as rtdbPush, set as rtdbSet } from 'firebase/database';
 
 // Official Nexus Firebase configuration
 const metaEnv = (import.meta as any).env || {};
@@ -11,6 +12,7 @@ const metaEnv = (import.meta as any).env || {};
 export const firebaseConfig = {
   apiKey: metaEnv.VITE_FIREBASE_API_KEY || "AIzaSyBGwj2ppva8ZRG1ftf7_B-0G0oGuec5paM",
   authDomain: metaEnv.VITE_FIREBASE_AUTH_DOMAIN || "nexus-platform-cb84c.firebaseapp.com",
+  databaseURL: metaEnv.VITE_FIREBASE_DATABASE_URL || "https://nexus-platform-cb84c-default-rtdb.firebaseio.com",
   projectId: metaEnv.VITE_FIREBASE_PROJECT_ID || "nexus-platform-cb84c",
   storageBucket: metaEnv.VITE_FIREBASE_STORAGE_BUCKET || "nexus-platform-cb84c.firebasestorage.app",
   messagingSenderId: metaEnv.VITE_FIREBASE_MESSAGING_SENDER_ID || "866191964279",
@@ -30,6 +32,13 @@ let app: FirebaseApp = getApps().length > 0 ? getApp() : initializeApp(firebaseC
 let auth: Auth = getAuth(app);
 let firestore: Firestore = getFirestore(app);
 let storage: FirebaseStorage = getStorage(app);
+
+let rtdb: Database | null = null;
+try {
+  rtdb = getDatabase(app);
+} catch (e) {
+  console.warn('Realtime Database init note:', e);
+}
 
 let googleProvider: GoogleAuthProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
@@ -57,11 +66,14 @@ if (typeof window !== 'undefined') {
   }
 }
 
-export { app, auth, firestore, googleProvider, storage, messaging, analytics };
+export { app, auth, firestore, rtdb, googleProvider, storage, messaging, analytics };
 
 /**
  * Real-Time User Activity Tracking for Firebase Console
- * Logs to both Google Analytics (StreamView) and Cloud Firestore ('user_activities' collection)
+ * Logs to:
+ * 1. Firebase Realtime Database ('user_activities' and 'users_online')
+ * 2. Cloud Firestore ('user_activities')
+ * 3. Google Analytics (Realtime StreamView)
  */
 export interface UserActivityData {
   userId?: string;
@@ -83,7 +95,34 @@ export async function trackUserActivity(data: UserActivityData): Promise<void> {
   try {
     const timestamp = new Date().toISOString();
 
-    // 1. Log to Firebase Google Analytics (visible in Analytics -> Realtime / StreamView)
+    // 1. Log to Firebase Realtime Database (visible in Realtime Database -> Data tab)
+    if (rtdb) {
+      try {
+        const activitiesRef = rtdbRef(rtdb, 'user_activities');
+        await rtdbPush(activitiesRef, {
+          userId: data.userId || 'anonymous',
+          username: data.username || 'anonymous',
+          action: data.action,
+          details: data.details || {},
+          timestamp: Date.now(),
+          time: new Date().toLocaleTimeString(),
+          date: new Date().toLocaleDateString(),
+        });
+
+        if (data.userId) {
+          const presenceRef = rtdbRef(rtdb, `users_online/${data.userId}`);
+          await rtdbSet(presenceRef, {
+            userId: data.userId,
+            username: data.username || '',
+            lastAction: data.action,
+            lastActive: Date.now(),
+            isOnline: data.action !== 'logout',
+          });
+        }
+      } catch (e) {}
+    }
+
+    // 2. Log to Firebase Google Analytics (visible in Analytics -> Realtime / StreamView)
     if (analytics) {
       try {
         (logEvent as any)(analytics, data.action, {
@@ -98,7 +137,7 @@ export async function trackUserActivity(data: UserActivityData): Promise<void> {
       } catch (e) {}
     }
 
-    // 2. Log in Real-Time to Cloud Firestore (visible in Firestore Database -> 'user_activities')
+    // 3. Log in Real-Time to Cloud Firestore (visible in Firestore Database -> 'user_activities')
     if (firestore) {
       try {
         await addDoc(collection(firestore, 'user_activities'), {
@@ -111,7 +150,7 @@ export async function trackUserActivity(data: UserActivityData): Promise<void> {
           screen: typeof window !== 'undefined' ? `${window.innerWidth}x${window.innerHeight}` : '',
         });
 
-        // 3. Update Live Online Presence in 'users_live_presence'
+        // Update Live Online Presence in Firestore
         if (data.userId) {
           await setDoc(
             doc(firestore, 'users_live_presence', data.userId),
@@ -185,7 +224,7 @@ export async function uploadToFirebaseStorage(file: File, folder = 'avatars'): P
   }
 
   const cleanFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '');
-  const fileRef = ref(storage, `${folder}/${Date.now()}_${cleanFileName}`);
+  const fileRef = storageRef(storage, `${folder}/${Date.now()}_${cleanFileName}`);
   const snapshot = await uploadBytes(fileRef, file);
   return await getDownloadURL(snapshot.ref);
 }
