@@ -150,13 +150,24 @@ app.post('/api/subscriptions/cancel', requireAuth, subsCtrl.cancelSubscription);
 app.post('/api/subscriptions/create-razorpay-order', requireAuth, subsCtrl.createRazorpayOrderHttp);
 app.post('/api/subscriptions/verify-payment', requireAuth, subsCtrl.verifyRazorpayPaymentHttp);
 
-// 7. Serve static client in production
-const clientDistDir = path.resolve(__dirname, '../../client/dist');
-if (fs.existsSync(clientDistDir)) {
+// 7. Serve static client in production (with multi-path fallback for local, Render, and Docker)
+const candidateDistPaths = [
+  path.resolve(__dirname, '../../client/dist'),
+  path.resolve(__dirname, '../client/dist'),
+  path.resolve(__dirname, './client/dist'),
+  path.resolve(process.cwd(), 'client/dist'),
+  path.resolve(process.cwd(), '../client/dist'),
+];
+const clientDistDir = candidateDistPaths.find((dirPath) => fs.existsSync(dirPath));
+
+if (clientDistDir) {
+  console.log(`🚀 Serving static web client from: ${clientDistDir}`);
   app.use(express.static(clientDistDir));
   app.get('*', (_req, res) => {
     res.sendFile(path.join(clientDistDir, 'index.html'));
   });
+} else {
+  console.warn('⚠️ Warning: client/dist not found. Please run `npm run build:client`.');
 }
 
 // 8. Server Protocol Setup (HTTPS or HTTP)
