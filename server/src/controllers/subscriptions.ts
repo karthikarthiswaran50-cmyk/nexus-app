@@ -203,41 +203,11 @@ export async function verifyRazorpayPaymentHttp(req: AuthenticatedRequest, res: 
   }
 }
 
-// 3. Fallback Instant Direct Upgrade
+// 3. Strict Subscription Upgrade Gate (Requires payment verification)
 export async function subscribePlan(req: AuthenticatedRequest, res: Response): Promise<void> {
-  try {
-    const userId = req.user?.userId;
-    const { planId, billingCycle = 'monthly' } = req.body;
-
-    if (!userId || !planId) {
-      res.status(400).json({ error: 'Missing plan ID.' });
-      return;
-    }
-
-    const targetPlan = SUBSCRIPTION_PLANS.find((p) => p.id === planId);
-    if (!targetPlan) {
-      res.status(400).json({ error: 'Invalid plan selected.' });
-      return;
-    }
-
-    activateSubscription({
-      userId,
-      planId,
-      billingCycle,
-      paymentId: `pay_direct_${Date.now()}`,
-      orderId: `order_direct_${Date.now()}`,
-    });
-
-    const user = getUserWithPlan(userId);
-    res.json({
-      message: `Successfully subscribed to ${targetPlan.name}!`,
-      user,
-      plan: targetPlan,
-    });
-  } catch (error) {
-    console.error('subscribePlan error:', error);
-    res.status(500).json({ error: 'Failed to process subscription.' });
-  }
+  res.status(403).json({
+    error: 'Direct subscription upgrade is disabled. Please pay ₹99 for Pro or ₹199 for VIP via Razorpay.',
+  });
 }
 
 // 4. Cancel Subscription

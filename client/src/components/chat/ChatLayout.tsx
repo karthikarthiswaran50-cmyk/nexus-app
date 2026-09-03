@@ -215,7 +215,11 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
               </button>
             </div>
             <div className="flex-1 h-full min-h-0">
-              <ChatRoom otherUser={selectedUser} onViewProfile={onViewProfile} />
+              <ChatRoom
+                otherUser={selectedUser}
+                onViewProfile={onViewProfile}
+                onNavigateToSubscription={onNavigateToSubscription}
+              />
             </div>
           </div>
         ) : (

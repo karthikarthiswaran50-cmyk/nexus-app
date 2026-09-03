@@ -70,7 +70,7 @@ export const SubscriptionView: React.FC = () => {
     loadRazorpayScript();
   }, []);
 
-  // 1. Razorpay Official Checkout Gateway (UPI, GPay, PhonePe, Cards, NetBanking)
+  // Razorpay Official Checkout Gateway (UPI, GPay, PhonePe, Cards, NetBanking)
   const handleRazorpayPayment = async () => {
     if (!selectedPlanForCheckout) return;
 
@@ -85,83 +85,56 @@ export const SubscriptionView: React.FC = () => {
       const orderData = orderRes.data;
       const isScriptLoaded = await loadRazorpayScript();
 
-      // If Razorpay SDK loaded and real key provided
-      if (isScriptLoaded && (window as any).Razorpay && !orderData.isMock) {
-        const options = {
-          key: orderData.keyId,
-          amount: orderData.amount,
-          currency: orderData.currency || 'INR',
-          name: 'Nexus Real-Time Platform',
-          description: `${selectedPlanForCheckout.name} Subscription (${billingCycle})`,
-          image: 'https://cdn-icons-png.flaticon.com/512/9422/9422896.png',
-          order_id: orderData.orderId,
-          prefill: {
-            name: orderData.user?.name || user?.full_name,
-            email: orderData.user?.email || user?.email,
-          },
-          theme: {
-            color: '#6366f1',
-          },
-          handler: async function (response: any) {
-            try {
-              // Verify payment on backend
-              await axios.post('/api/subscriptions/verify-payment', {
-                orderId: orderData.orderId,
-                paymentId: response.razorpay_payment_id,
-                signature: response.razorpay_signature,
-                planId: selectedPlanForCheckout.id,
-                billingCycle,
-              });
-
-              triggerSuccess(selectedPlanForCheckout.name);
-            } catch (err) {
-              alert('Payment verification failed. Please check your credentials.');
-            }
-          },
-          modal: {
-            ondismiss: function () {
-              setProcessing(false);
-            },
-          },
-        };
-
-        const rzp = new (window as any).Razorpay(options);
-        rzp.open();
-      } else {
-        // Instant simulated verification for Test/Demo mode
-        await axios.post('/api/subscriptions/verify-payment', {
-          orderId: orderData.orderId,
-          paymentId: `pay_mock_${Date.now()}`,
-          signature: 'mock_signature',
-          planId: selectedPlanForCheckout.id,
-          billingCycle,
-        });
-
-        triggerSuccess(selectedPlanForCheckout.name);
+      if (!isScriptLoaded || !(window as any).Razorpay) {
+        alert('Could not load Razorpay SDK. Please check your internet connection and try again.');
+        setProcessing(false);
+        return;
       }
+
+      const options = {
+        key: orderData.keyId,
+        amount: orderData.amount,
+        currency: orderData.currency || 'INR',
+        name: 'Nexus Platform',
+        description: `${selectedPlanForCheckout.name} Subscription (${billingCycle})`,
+        image: 'https://cdn-icons-png.flaticon.com/512/9422/9422896.png',
+        order_id: orderData.orderId,
+        prefill: {
+          name: orderData.user?.name || user?.full_name,
+          email: orderData.user?.email || user?.email,
+        },
+        theme: {
+          color: '#6366f1',
+        },
+        handler: async function (response: any) {
+          try {
+            // Verify HMAC signature strictly on backend
+            await axios.post('/api/subscriptions/verify-payment', {
+              orderId: orderData.orderId,
+              paymentId: response.razorpay_payment_id,
+              signature: response.razorpay_signature,
+              planId: selectedPlanForCheckout.id,
+              billingCycle,
+            });
+
+            triggerSuccess(selectedPlanForCheckout.name);
+          } catch (err: any) {
+            alert(err.response?.data?.error || 'Payment verification failed. Access not granted.');
+          } finally {
+            setProcessing(false);
+          }
+        },
+        modal: {
+          ondismiss: function () {
+            setProcessing(false);
+          },
+        },
+      };
+
+      const rzp = new (window as any).Razorpay(options);
+      rzp.open();
     } catch (err: any) {
-      console.warn('Razorpay checkout error, falling back to direct:', err);
-      await handleDirectSubscribe();
-    } finally {
-      setProcessing(false);
-    }
-  };
-
-  // 2. Direct Instant Activation
-  const handleDirectSubscribe = async () => {
-    if (!selectedPlanForCheckout) return;
-
-    setProcessing(true);
-    try {
-      await axios.post('/api/subscriptions/subscribe', {
-        planId: selectedPlanForCheckout.id,
-        billingCycle,
-      });
-
-      triggerSuccess(selectedPlanForCheckout.name);
-    } catch (err: any) {
-      alert(err.response?.data?.error || 'Subscription processing failed');
-    } finally {
+      alert(err.response?.data?.error || 'Failed to initiate Razorpay order.');
       setProcessing(false);
     }
   };
@@ -458,78 +431,35 @@ export const SubscriptionView: React.FC = () => {
               </div>
             </div>
 
-            {/* Payment Mode Selector */}
-            <div className="grid grid-cols-2 gap-2 mb-5">
+            <div className="space-y-4">
+              <div className="p-3.5 rounded-xl bg-dark-800/60 border border-dark-700 space-y-2">
+                <p className="text-xs text-white font-medium flex items-center gap-2">
+                  <QrCode className="w-4 h-4 text-brand-400" />
+                  Official Razorpay Payment Gateway:
+                </p>
+                <p className="text-[11px] text-dark-300 leading-relaxed">
+                  • **UPI:** Google Pay, PhonePe, Paytm, BHIM, CRED<br />
+                  • **Cards:** All Visa, Mastercard, RuPay & Amex<br />
+                  • **NetBanking & All Indian Banks**
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 text-[11px] text-dark-400">
+                <Lock className="w-3.5 h-3.5 text-emerald-400" />
+                <span>256-Bit Encrypted & RBI Compliant</span>
+              </div>
+
               <button
                 type="button"
-                onClick={() => setPaymentMode('razorpay')}
-                className={`py-2.5 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 border transition-all ${
-                  paymentMode === 'razorpay'
-                    ? 'bg-brand-600 border-brand-500 text-white shadow-md'
-                    : 'bg-dark-800 border-dark-700 text-dark-300 hover:text-white'
-                }`}
+                onClick={handleRazorpayPayment}
+                disabled={processing}
+                className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-bold text-xs shadow-lg shadow-emerald-500/25 flex items-center justify-center gap-2 transition-all disabled:opacity-50"
               >
-                <Smartphone className="w-3.5 h-3.5" />
-                <span>UPI / Razorpay</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setPaymentMode('direct')}
-                className={`py-2.5 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 border transition-all ${
-                  paymentMode === 'direct'
-                    ? 'bg-brand-600 border-brand-500 text-white shadow-md'
-                    : 'bg-dark-800 border-dark-700 text-dark-300 hover:text-white'
-                }`}
-              >
-                <Zap className="w-3.5 h-3.5" />
-                <span>Instant Upgrade</span>
+                {processing
+                  ? 'Connecting to Razorpay...'
+                  : `Pay ₹${(billingCycle === 'yearly' ? selectedPlanForCheckout.priceYearly : selectedPlanForCheckout.priceMonthly).toLocaleString('en-IN')} via Razorpay UPI / Card`}
               </button>
             </div>
-
-            {paymentMode === 'razorpay' ? (
-              <div className="space-y-4">
-                <div className="p-3.5 rounded-xl bg-dark-800/60 border border-dark-700 space-y-2">
-                  <p className="text-xs text-white font-medium flex items-center gap-2">
-                    <QrCode className="w-4 h-4 text-brand-400" />
-                    Supported Payment Methods:
-                  </p>
-                  <p className="text-[11px] text-dark-300 leading-relaxed">
-                    • **UPI:** Google Pay, PhonePe, Paytm, BHIM, CRED<br />
-                    • **Cards:** Visa, Mastercard, RuPay, Amex<br />
-                    • **NetBanking & Wallets**
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-2 text-[11px] text-dark-400">
-                  <Lock className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Razorpay PCI-DSS Level 1 256-bit Encrypted</span>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleRazorpayPayment}
-                  disabled={processing}
-                  className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-bold text-xs shadow-lg shadow-emerald-500/25 flex items-center justify-center gap-2 transition-all disabled:opacity-50"
-                >
-                  {processing ? 'Opening Razorpay Gateway...' : `Pay ₹${(billingCycle === 'yearly' ? selectedPlanForCheckout.priceYearly : selectedPlanForCheckout.priceMonthly).toLocaleString('en-IN')} via Razorpay`}
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <p className="text-xs text-dark-300">
-                  This simulated instant activation upgrades your subscription immediately without opening payment popups. Perfect for local testing and demonstration.
-                </p>
-
-                <button
-                  type="button"
-                  onClick={handleDirectSubscribe}
-                  disabled={processing}
-                  className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-brand-600 to-accent-violet hover:from-brand-500 hover:to-violet-500 text-white font-bold text-xs shadow-lg shadow-brand-500/25 flex items-center justify-center gap-2 transition-all disabled:opacity-50"
-                >
-                  {processing ? 'Activating...' : `Instant Upgrade to ${selectedPlanForCheckout.name}`}
-                </button>
-              </div>
-            )}
           </div>
         </div>
       )}

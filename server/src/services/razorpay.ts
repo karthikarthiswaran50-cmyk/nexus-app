@@ -85,12 +85,7 @@ export function verifyPaymentSignature(params: {
 }): boolean {
   const { orderId, paymentId, signature } = params;
 
-  // If mock order, bypass signature verification
-  if (orderId.startsWith('order_mock_')) {
-    return true;
-  }
-
-  if (!signature || !RAZORPAY_KEY_SECRET) {
+  if (!signature || !RAZORPAY_KEY_SECRET || !orderId || !paymentId) {
     return false;
   }
 
