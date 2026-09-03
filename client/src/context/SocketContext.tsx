@@ -4,7 +4,7 @@ import axios from 'axios';
 import { useAuth } from './AuthContext';
 import { User, CallType, Message, ActiveCallSession } from '../types';
 import { soundEffects } from '../utils/soundEffects';
-import { requestFcmToken } from '../config/firebase';
+import { requestFcmToken, trackUserActivity } from '../config/firebase';
 
 interface IncomingCallData {
   caller: User;
@@ -159,6 +159,18 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       callType,
       role: 'caller',
     });
+
+    // Track call initiation in Firebase Console
+    trackUserActivity({
+      userId: user.id,
+      username: user.username,
+      action: 'call_started',
+      details: {
+        callType,
+        recipientId: peerUser.id,
+        recipientUsername: peerUser.username,
+      },
+    });
   }, [socket, user]);
 
   const acceptIncomingCall = useCallback(() => {
@@ -173,8 +185,21 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       isIncoming: true,
       sdpOffer: incomingCall.sdpOffer,
     });
+
+    // Track answered call in Firebase Console
+    trackUserActivity({
+      userId: user?.id,
+      username: user?.username,
+      action: 'call_answered',
+      details: {
+        callType: incomingCall.callType,
+        callerId: incomingCall.caller.id,
+        callerUsername: incomingCall.caller.username,
+      },
+    });
+
     setIncomingCall(null);
-  }, [incomingCall]);
+  }, [incomingCall, user]);
 
   const rejectIncomingCall = useCallback(() => {
     if (!incomingCall || !socket) return;
@@ -195,9 +220,20 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         targetUserId: activeCall.peerUser.id,
         callType: activeCall.callType,
       });
+
+      // Track call ended in Firebase Console
+      trackUserActivity({
+        userId: user?.id,
+        username: user?.username,
+        action: 'call_ended',
+        details: {
+          callType: activeCall.callType,
+          peerUserId: activeCall.peerUser.id,
+        },
+      });
     }
     setActiveCall(null);
-  }, [activeCall, socket]);
+  }, [activeCall, socket, user]);
 
   const clearIncomingCall = () => {
     soundEffects.stopIncomingCallTone();

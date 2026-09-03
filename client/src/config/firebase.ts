@@ -1,8 +1,9 @@
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, Auth, UserCredential } from 'firebase/auth';
 import { getStorage, FirebaseStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { getMessaging, Messaging, getToken, onMessage } from 'firebase/messaging';
-import { getAnalytics, isSupported, Analytics } from 'firebase/analytics';
+import { getMessaging, Messaging, getToken } from 'firebase/messaging';
+import { getAnalytics, isSupported, Analytics, logEvent, setUserId as setFbUserId } from 'firebase/analytics';
+import { getFirestore, Firestore, collection, addDoc, serverTimestamp, doc, setDoc } from 'firebase/firestore';
 
 // Official Nexus Firebase configuration
 const metaEnv = (import.meta as any).env || {};
@@ -27,10 +28,12 @@ export const isFirebaseConfigured = (): boolean => {
 
 let app: FirebaseApp = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 let auth: Auth = getAuth(app);
+let firestore: Firestore = getFirestore(app);
+let storage: FirebaseStorage = getStorage(app);
+
 let googleProvider: GoogleAuthProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
 
-let storage: FirebaseStorage = getStorage(app);
 let messaging: Messaging | null = null;
 let analytics: Analytics | null = null;
 
@@ -54,7 +57,80 @@ if (typeof window !== 'undefined') {
   }
 }
 
-export { app, auth, googleProvider, storage, messaging, analytics };
+export { app, auth, firestore, googleProvider, storage, messaging, analytics };
+
+/**
+ * Real-Time User Activity Tracking for Firebase Console
+ * Logs to both Google Analytics (StreamView) and Cloud Firestore ('user_activities' collection)
+ */
+export interface UserActivityData {
+  userId?: string;
+  username?: string;
+  action:
+    | 'login'
+    | 'logout'
+    | 'call_started'
+    | 'call_answered'
+    | 'call_ended'
+    | 'chat_sent'
+    | 'plan_view'
+    | 'checkout_click'
+    | 'profile_updated';
+  details?: Record<string, any>;
+}
+
+export async function trackUserActivity(data: UserActivityData): Promise<void> {
+  try {
+    const timestamp = new Date().toISOString();
+
+    // 1. Log to Firebase Google Analytics (visible in Analytics -> Realtime / StreamView)
+    if (analytics) {
+      try {
+        (logEvent as any)(analytics, data.action, {
+          user_id: data.userId || 'anonymous',
+          username: data.username || 'anonymous',
+          timestamp,
+          ...data.details,
+        });
+        if (data.userId) {
+          setFbUserId(analytics, data.userId);
+        }
+      } catch (e) {}
+    }
+
+    // 2. Log in Real-Time to Cloud Firestore (visible in Firestore Database -> 'user_activities')
+    if (firestore) {
+      try {
+        await addDoc(collection(firestore, 'user_activities'), {
+          userId: data.userId || 'anonymous',
+          username: data.username || 'anonymous',
+          action: data.action,
+          details: data.details || {},
+          timestamp: serverTimestamp(),
+          device: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown',
+          screen: typeof window !== 'undefined' ? `${window.innerWidth}x${window.innerHeight}` : '',
+        });
+
+        // 3. Update Live Online Presence in 'users_live_presence'
+        if (data.userId) {
+          await setDoc(
+            doc(firestore, 'users_live_presence', data.userId),
+            {
+              userId: data.userId,
+              username: data.username || '',
+              lastAction: data.action,
+              lastActive: serverTimestamp(),
+              isOnline: data.action !== 'logout',
+            },
+            { merge: true }
+          );
+        }
+      } catch (e) {}
+    }
+  } catch (err) {
+    console.debug('Activity tracking log:', err);
+  }
+}
 
 /**
  * 1-Click Google Sign In with Popup

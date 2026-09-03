@@ -23,6 +23,7 @@ import {
   X,
 } from 'lucide-react';
 import axios from 'axios';
+import { trackUserActivity } from '../../config/firebase';
 
 interface ChatRoomProps {
   otherUser: User;
@@ -117,13 +118,25 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onViewProfile, on
       type: 'text',
     });
 
+    // Track chat activity in Firebase Console
+    trackUserActivity({
+      userId: user.id,
+      username: user.username,
+      action: 'chat_sent',
+      details: {
+        type: 'text',
+        recipientId: otherUser.id,
+        recipientUsername: otherUser.username,
+      },
+    });
+
     setInputText('');
     sendTyping(otherUser.id, false);
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !socket) return;
+    if (!file || !socket || !user) return;
 
     const formData = new FormData();
     formData.append('file', file);
@@ -140,6 +153,18 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onViewProfile, on
         content: isImage ? 'Sent an image' : `Sent file: ${file.name}`,
         type: isImage ? 'image' : 'text',
         mediaUrl: res.data.url,
+      });
+
+      // Track media upload activity in Firebase Console
+      trackUserActivity({
+        userId: user.id,
+        username: user.username,
+        action: 'chat_sent',
+        details: {
+          type: isImage ? 'image' : 'file',
+          recipientId: otherUser.id,
+          fileName: file.name,
+        },
       });
     } catch (err) {
       console.error('File upload failed:', err);

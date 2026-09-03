@@ -18,6 +18,7 @@ import {
   Smartphone,
 } from 'lucide-react';
 import axios from 'axios';
+import { trackUserActivity } from '../../config/firebase';
 
 // Dynamically load Razorpay Checkout script
 const loadRazorpayScript = (): Promise<boolean> => {
@@ -73,6 +74,18 @@ export const SubscriptionView: React.FC = () => {
   // Razorpay Official Checkout Gateway (UPI, GPay, PhonePe, Cards, NetBanking)
   const handleRazorpayPayment = async () => {
     if (!selectedPlanForCheckout) return;
+
+    // Track checkout click in Firebase Console
+    trackUserActivity({
+      userId: user?.id,
+      username: user?.username,
+      action: 'checkout_click',
+      details: {
+        planId: selectedPlanForCheckout.id,
+        planName: selectedPlanForCheckout.name,
+        billingCycle,
+      },
+    });
 
     setProcessing(true);
     try {

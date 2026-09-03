@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import axios from 'axios';
 import { User, UserSettings } from '../types';
-import { signInWithGoogle } from '../config/firebase';
+import { signInWithGoogle, trackUserActivity } from '../config/firebase';
 
 interface AuthContextType {
   user: User | null;
@@ -74,6 +74,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(res.data.user);
     axios.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
     
+    // Log user activity to Firebase
+    trackUserActivity({
+      userId: res.data.user?.id,
+      username: res.data.user?.username,
+      action: 'login',
+      details: { method: 'credentials', role: res.data.user?.plan_id || 'free' },
+    });
+
     // Fetch settings
     try {
       const setRes = await axios.get('/api/users/settings');
@@ -98,6 +106,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.setItem('nexus_saved_username', res.data.user.username);
     }
 
+    // Log Google sign-in activity to Firebase
+    trackUserActivity({
+      userId: res.data.user?.id,
+      username: res.data.user?.username,
+      action: 'login',
+      details: { method: 'google', email: res.data.user?.email },
+    });
+
     try {
       const setRes = await axios.get('/api/users/settings');
       setSettings(setRes.data.settings);
@@ -112,6 +128,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(res.data.user);
     axios.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
 
+    // Log registration activity to Firebase
+    trackUserActivity({
+      userId: res.data.user?.id,
+      username: res.data.user?.username,
+      action: 'login',
+      details: { method: 'new_registration', email: data.email },
+    });
+
     try {
       const setRes = await axios.get('/api/users/settings');
       setSettings(setRes.data.settings);
@@ -119,6 +143,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = () => {
+    if (user) {
+      trackUserActivity({
+        userId: user.id,
+        username: user.username,
+        action: 'logout',
+      });
+    }
     localStorage.removeItem('nexus_auth_token');
     setToken(null);
     setUser(null);
