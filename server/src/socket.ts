@@ -140,6 +140,11 @@ export function setupSocket(io: Server) {
       sdpOffer: any;
     }) => {
       const { receiverId, callType, sdpOffer } = data;
+      if (!receiverId || receiverId === userId) {
+        socket.emit('call:error', { message: 'Invalid call recipient.' });
+        return;
+      }
+
       const caller = getUserWithPlan(userId);
       const receiver = getUserWithPlan(receiverId);
 

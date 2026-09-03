@@ -1,8 +1,9 @@
 import { Request, Response } from 'express';
-import { db } from '../db.js';
+import { db, persistMessageToPg } from '../db.js';
 import { AuthenticatedRequest } from '../middleware/auth.js';
 import { getUserWithPlan } from './auth.js';
 import { Conversation, Message } from '../types.js';
+import { sanitizeText } from '../utils/sanitize.js';
 
 export async function getConversations(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
@@ -129,17 +130,31 @@ export function saveMessage(params: {
   }
 
   const msgId = 'msg_' + Math.random().toString(36).substring(2, 10) + Date.now().toString(36);
+  const cleanContent = type === 'text' ? sanitizeText(content) : content;
+
   db.prepare(`
     INSERT INTO messages (id, conversation_id, sender_id, receiver_id, content, type, media_url, is_read, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)
-  `).run(msgId, conv.id, senderId, receiverId, content, type, mediaUrl || null, now);
+  `).run(msgId, conv.id, senderId, receiverId, cleanContent, type, mediaUrl || null, now);
+
+  // Asynchronously persist to PostgreSQL
+  persistMessageToPg({
+    id: msgId,
+    conversation_id: conv.id,
+    sender_id: senderId,
+    receiver_id: receiverId,
+    content: cleanContent,
+    type,
+    media_url: mediaUrl || undefined,
+    is_read: 0,
+  });
 
   const message: Message = {
     id: msgId,
     conversation_id: conv.id,
     sender_id: senderId,
     receiver_id: receiverId,
-    content,
+    content: cleanContent,
     type,
     media_url: mediaUrl,
     is_read: false,

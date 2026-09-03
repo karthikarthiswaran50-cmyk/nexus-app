@@ -30,34 +30,55 @@ initDatabase();
 
 const app = express();
 
+// Disable x-powered-by header to prevent fingerprinting
+app.disable('x-powered-by');
+
 // Trust proxy for reverse proxies (Nginx / Render / Railway / Cloudflare)
 app.set('trust proxy', 1);
 
-// Security Headers with Helmet (configured for full client and WebRTC compatibility)
+// Production-Grade Security Headers with Helmet
 app.use(
   helmet({
     contentSecurityPolicy: false,
     crossOriginEmbedderPolicy: false,
     crossOriginResourcePolicy: false,
     crossOriginOpenerPolicy: false,
+    dnsPrefetchControl: { allow: false },
+    frameguard: { action: 'sameorigin' },
+    hidePoweredBy: true,
+    hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
+    ieNoOpen: true,
+    noSniff: true,
+    originAgentCluster: true,
+    permittedCrossDomainPolicies: { permittedPolicies: 'none' },
+    referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+    xssFilter: true,
   })
 );
 
-// Rate Limiting
+// Rate Limiting (Anti-DDoS & Brute-Force Protection)
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 300, // Limit each IP to 300 requests per window
+  max: 200, // Limit each IP to 200 requests per 15 minutes
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'Too many requests, please try again later.' },
+  message: { error: 'Rate limit exceeded: Too many requests. Please try again in 15 minutes.' },
 });
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 30, // 30 attempts per 15 minutes for login/register
+  max: 10, // Max 10 login/register attempts per 15 minutes (strictly blocks brute-force bots)
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'Too many authentication attempts. Please wait 15 minutes.' },
+  message: { error: 'Security Alert: Too many authentication attempts. Please wait 15 minutes.' },
+});
+
+const paymentLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 15, // Max 15 payment checkout operations per 15 minutes
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Rate limit exceeded for payment operations.' },
 });
 
 // Uploads directory
@@ -66,21 +87,57 @@ if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
+// Strict Whitelist for Safe Uploads (Prevents script injection & executable exploits)
+const ALLOWED_MIME_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+  'audio/webm',
+  'audio/ogg',
+  'audio/mp3',
+  'audio/mpeg',
+  'audio/wav',
+  'video/webm',
+  'video/mp4',
+]);
+
+const ALLOWED_EXTENSIONS = new Set([
+  '.jpg',
+  '.jpeg',
+  '.png',
+  '.webp',
+  '.gif',
+  '.webm',
+  '.ogg',
+  '.mp3',
+  '.wav',
+  '.mp4',
+]);
+
 // Multer storage
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => {
     cb(null, uploadsDir);
   },
   filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    const uniqueName = `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
+    const ext = path.extname(file.originalname).toLowerCase();
+    const cleanExt = ALLOWED_EXTENSIONS.has(ext) ? ext : '.bin';
+    const uniqueName = `upload-${Date.now()}-${Math.round(Math.random() * 1e9)}${cleanExt}`;
     cb(null, uniqueName);
   },
 });
 
 const upload = multer({
   storage,
-  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB max
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB maximum limit
+  fileFilter: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (!ALLOWED_MIME_TYPES.has(file.mimetype) || !ALLOWED_EXTENSIONS.has(ext)) {
+      return cb(new Error('Security violation: Dangerous or unauthorized file format detected.'));
+    }
+    cb(null, true);
+  },
 });
 
 // Middleware

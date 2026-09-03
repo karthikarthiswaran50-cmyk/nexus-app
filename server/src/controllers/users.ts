@@ -1,8 +1,9 @@
 import { Request, Response } from 'express';
-import { db } from '../db.js';
+import { db, persistUserToPg, persistSettingsToPg } from '../db.js';
 import { AuthenticatedRequest } from '../middleware/auth.js';
 import { getUserWithPlan } from './auth.js';
 import { UserWithPlan, UserSettings } from '../types.js';
+import { sanitizeText } from '../utils/sanitize.js';
 
 export async function getUsers(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
@@ -86,17 +87,30 @@ export async function updateProfile(req: AuthenticatedRequest, res: Response): P
       return;
     }
 
-    const updatedName = full_name !== undefined ? full_name.trim() : current.full_name;
-    const updatedAvatar = avatar_url !== undefined ? avatar_url.trim() : current.avatar_url;
-    const updatedBio = bio !== undefined ? bio.trim() : current.bio;
-    const updatedStatus = status !== undefined ? status.trim() : current.status;
-    const updatedCountry = country !== undefined ? country.trim() : current.country;
+    const updatedName = full_name !== undefined ? sanitizeText(full_name) : current.full_name;
+    const updatedAvatar = avatar_url !== undefined ? String(avatar_url).substring(0, 500) : current.avatar_url;
+    const updatedBio = bio !== undefined ? sanitizeText(bio) : current.bio;
+    const updatedStatus = status !== undefined ? sanitizeText(status) : current.status;
+    const updatedCountry = country !== undefined ? sanitizeText(country) : current.country;
 
     db.prepare(`
       UPDATE users 
       SET full_name = ?, avatar_url = ?, bio = ?, status = ?, country = ?, updated_at = datetime('now')
       WHERE id = ?
     `).run(updatedName, updatedAvatar, updatedBio, updatedStatus, updatedCountry, userId);
+
+    // Persist to PostgreSQL
+    persistUserToPg({
+      id: userId,
+      email: current.email,
+      username: current.username,
+      password_hash: current.password_hash,
+      full_name: updatedName,
+      avatar_url: updatedAvatar,
+      bio: updatedBio,
+      status: updatedStatus,
+      country: updatedCountry,
+    });
 
     const user = getUserWithPlan(userId);
     res.json({ user, message: 'Profile updated successfully.' });

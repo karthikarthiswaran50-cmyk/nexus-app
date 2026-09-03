@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import { db, persistUserToPg, persistSubscriptionToPg, persistSettingsToPg } from '../db.js';
 import { JWT_SECRET, AuthenticatedRequest } from '../middleware/auth.js';
 import { User, UserWithPlan, Subscription } from '../types.js';
+import { sanitizeText, sanitizeUsername, sanitizeEmail, validatePasswordStrength } from '../utils/sanitize.js';
 
 export async function register(req: Request, res: Response): Promise<void> {
   try {
@@ -14,16 +15,17 @@ export async function register(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    const cleanEmail = email.trim().toLowerCase();
-    const cleanUsername = username.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+    const cleanEmail = sanitizeEmail(email);
+    const cleanUsername = sanitizeUsername(username);
 
     if (cleanUsername.length < 3) {
       res.status(400).json({ error: 'Username must be at least 3 alphanumeric characters.' });
       return;
     }
 
-    if (password.length < 6) {
-      res.status(400).json({ error: 'Password must be at least 6 characters.' });
+    const pwCheck = validatePasswordStrength(password);
+    if (!pwCheck.valid) {
+      res.status(400).json({ error: pwCheck.reason });
       return;
     }
 
@@ -35,14 +37,15 @@ export async function register(req: Request, res: Response): Promise<void> {
     }
 
     const userId = 'usr_' + Math.random().toString(36).substring(2, 10) + Date.now().toString(36);
-    const salt = bcrypt.genSaltSync(10);
+    const salt = bcrypt.genSaltSync(12); // High-security 12 rounds bcrypt salt
     const passwordHash = bcrypt.hashSync(password, salt);
     const now = new Date().toISOString();
     const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
 
-    const avatar = avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${cleanUsername}`;
-    const userBio = bio || 'Hello! I am new here on Nexus.';
-    const userCountry = country || 'Global';
+    const cleanFullName = sanitizeText(full_name);
+    const avatar = avatar_url ? String(avatar_url).substring(0, 500) : `https://api.dicebear.com/7.x/bottts/svg?seed=${cleanUsername}`;
+    const userBio = sanitizeText(bio || 'Hello! I am new here on Nexus.');
+    const userCountry = sanitizeText(country || 'Global');
 
     // Insert user
     db.prepare(`
