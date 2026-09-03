@@ -1,0 +1,179 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum PlanId {
+  free
+  pro
+  vip
+}
+
+enum SubscriptionStatus {
+  active
+  cancelled
+  past_due
+  trialing
+  incomplete
+}
+
+enum BillingCycle {
+  monthly
+  yearly
+}
+
+enum CallType {
+  audio
+  video
+}
+
+enum CallStatus {
+  initiated
+  ringing
+  connected
+  completed
+  missed
+  rejected
+  busy
+  failed
+}
+
+enum MessageType {
+  text
+  image
+  audio
+  system
+  call_log
+}
+
+model User {
+  id                String         @id @default(uuid())
+  email             String         @unique
+  username          String         @unique
+  passwordHash      String         @map("password_hash")
+  fullName          String         @map("full_name")
+  avatarUrl         String         @default("") @map("avatar_url")
+  bio               String         @default("")
+  status            String         @default("Hey there! I am using Nexus.")
+  country           String         @default("Global")
+  stripeCustomerId  String?        @unique @map("stripe_customer_id")
+  createdAt         DateTime       @default(now()) @map("created_at")
+  updatedAt         DateTime       @updatedAt @map("updated_at")
+
+  subscription      Subscription?
+  settings          UserSettings?
+  invoices          SubscriptionInvoice[]
+  messagesSent      Message[]      @relation("SentMessages")
+  messagesReceived  Message[]      @relation("ReceivedMessages")
+  callsInitiated    CallLog[]      @relation("InitiatedCalls")
+  callsReceived     CallLog[]      @relation("ReceivedCalls")
+  conversations1    Conversation[] @relation("User1Conversations")
+  conversations2    Conversation[] @relation("User2Conversations")
+
+  @@map("users")
+}
+
+model Subscription {
+  id                   String             @id @default(uuid())
+  userId               String             @unique @map("user_id")
+  planId               PlanId             @default(free) @map("plan_id")
+  status               SubscriptionStatus @default(active)
+  stripeSubscriptionId String?            @unique @map("stripe_subscription_id")
+  stripePriceId        String?            @map("stripe_price_id")
+  currentPeriodEnd     DateTime           @map("current_period_end")
+  billingCycle         BillingCycle       @default(monthly) @map("billing_cycle")
+  cancelAtPeriodEnd    Boolean            @default(false) @map("cancel_at_period_end")
+  createdAt            DateTime           @default(now()) @map("created_at")
+  updatedAt            DateTime           @updatedAt @map("updated_at")
+
+  user                 User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("subscriptions")
+}
+
+model SubscriptionInvoice {
+  id               String   @id @default(uuid())
+  userId           String   @map("user_id")
+  planId           PlanId   @map("plan_id")
+  amount           Float
+  currency         String   @default("USD")
+  status           String   @default("paid")
+  invoiceNumber    String   @map("invoice_number")
+  stripeInvoiceId  String?  @map("stripe_invoice_id")
+  hostedInvoiceUrl String?  @map("hosted_invoice_url")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("subscription_invoices")
+}
+
+model UserSettings {
+  id                String  @id @default(uuid())
+  userId            String  @unique @map("user_id")
+  theme             String  @default("dark")
+  allowCallsFrom    String  @default("everyone") @map("allow_calls_from")
+  notificationSound Boolean @default(true) @map("notification_sound")
+  readReceipts      Boolean @default(true) @map("read_receipts")
+  autoAcceptCalls   Boolean @default(false) @map("auto_accept_calls")
+
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_settings")
+}
+
+model Conversation {
+  id            String    @id @default(uuid())
+  user1Id       String    @map("user1_id")
+  user2Id       String    @map("user2_id")
+  lastMessageAt DateTime  @default(now()) @map("last_message_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  user1         User      @relation("User1Conversations", fields: [user1Id], references: [id], onDelete: Cascade)
+  user2         User      @relation("User2Conversations", fields: [user2Id], references: [id], onDelete: Cascade)
+  messages      Message[]
+
+  @@unique([user1Id, user2Id])
+  @@map("conversations")
+}
+
+model Message {
+  id             String      @id @default(uuid())
+  conversationId String      @map("conversation_id")
+  senderId       String      @map("sender_id")
+  receiverId     String      @map("receiver_id")
+  content        String
+  type           MessageType @default(text)
+  mediaUrl       String?     @map("media_url")
+  isRead         Boolean     @default(false) @map("is_read")
+  createdAt      DateTime    @default(now()) @map("created_at")
+
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender         User         @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver       User         @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@index([receiverId, isRead])
+  @@map("messages")
+}
+
+model CallLog {
+  id         String     @id @default(uuid())
+  callerId   String     @map("caller_id")
+  receiverId String     @map("receiver_id")
+  callType   CallType   @default(video) @map("call_type")
+  status     CallStatus @default(completed)
+  duration   Int        @default(0) // seconds
+  startedAt  DateTime   @default(now()) @map("started_at")
+  endedAt    DateTime?  @map("ended_at")
+
+  caller     User       @relation("InitiatedCalls", fields: [callerId], references: [id], onDelete: Cascade)
+  receiver   User       @relation("ReceivedCalls", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@index([callerId, receiverId])
+  @@map("call_logs")
+}

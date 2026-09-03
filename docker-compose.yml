@@ -1,0 +1,94 @@
+services:
+  # 1. Main Application Service (Node.js + WebRTC Signaling + Express)
+  nexus-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: nexus-app
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      - NODE_ENV=production
+      - PORT=5000
+      - DATABASE_URL=postgresql://nexus_user:nexus_secure_password_2026@nexus-db:5432/nexus_db?schema=public
+      - JWT_SECRET=nexus_super_secret_jwt_key_production_2026_x7a9
+      - RAZORPAY_KEY_ID=${RAZORPAY_KEY_ID:-rzp_test_TXF5SluUsurkPR}
+      - RAZORPAY_KEY_SECRET=${RAZORPAY_KEY_SECRET:-mVI6wCvvrgMuag6slvLA606C}
+      - RAZORPAY_WEBHOOK_SECRET=${RAZORPAY_WEBHOOK_SECRET:-nexus_razorpay_webhook_secret_2026}
+      - TURN_URL=turn:nexus-coturn:3478
+      - TURN_USERNAME=nexus_user
+      - TURN_CREDENTIAL=nexus_turn_password_2026
+    volumes:
+      - app_uploads:/app/server/uploads
+      - app_data:/app/server/data
+    depends_on:
+      nexus-db:
+        condition: service_healthy
+    networks:
+      - nexus-network
+
+  # 2. Production PostgreSQL Database
+  nexus-db:
+    image: postgres:16-alpine
+    container_name: nexus-db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=nexus_user
+      - POSTGRES_PASSWORD=nexus_secure_password_2026
+      - POSTGRES_DB=nexus_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nexus_user -d nexus_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - nexus-network
+
+  # 3. Coturn STUN / TURN Server (For guaranteed WebRTC media NAT traversal)
+  nexus-coturn:
+    image: coturn/coturn:latest
+    container_name: nexus-coturn
+    restart: unless-stopped
+    ports:
+      - "3478:3478/tcp"
+      - "3478:3478/udp"
+      - "5349:5349/tcp"
+      - "5349:5349/udp"
+      - "49152-49200:49152-49200/udp"
+    volumes:
+      - ./coturn/turnserver.conf:/etc/coturn/turnserver.conf:ro
+    command:
+      - "-c"
+      - "/etc/coturn/turnserver.conf"
+    networks:
+      - nexus-network
+
+  # 4. Nginx Reverse Proxy with HTTPS / SSL Termination
+  nexus-nginx:
+    image: nginx:alpine
+    container_name: nexus-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - nexus-app
+    networks:
+      - nexus-network
+
+volumes:
+  postgres_data:
+  app_uploads:
+  app_data:
+
+networks:
+  nexus-network:
+    driver: bridge

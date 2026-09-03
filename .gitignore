@@ -1,0 +1,46 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Production build outputs
+dist/
+build/
+
+# Tools & Local Binaries
+tools/
+tools/git/
+
+# Local Environment & Secrets (Never commit .env files)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+server/.env
+
+# Local SSL certs
+certs/
+server/certs/
+nginx/ssl/
+
+# User media uploads & local database
+uploads/
+server/uploads/
+data/
+server/data/
+*.sqlite
+*.sqlite3
+*.db
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# Editor and OS
+.DS_Store
+.vscode/
+.idea/
+Thumbs.db
