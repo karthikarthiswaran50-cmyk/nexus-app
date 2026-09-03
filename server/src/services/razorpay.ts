@@ -1,6 +1,6 @@
 import Razorpay from 'razorpay';
 import crypto from 'node:crypto';
-import { db } from '../db.js';
+import { db, persistSubscriptionToPg } from '../db.js';
 import { SUBSCRIPTION_PLANS } from '../controllers/subscriptions.js';
 import { SubscriptionPlanId } from '../types.js';
 
@@ -127,6 +127,16 @@ export function activateSubscription(params: {
       VALUES (?, ?, ?, 'active', ?, ?, ?)
     `).run(`sub_${userId}`, userId, planId, expiresAt, billingCycle, now);
   }
+
+  // Persist to PostgreSQL database
+  persistSubscriptionToPg({
+    id: (existingSub as any)?.id || `sub_${userId}`,
+    user_id: userId,
+    plan_id: planId,
+    status: 'active',
+    current_period_end: expiresAt,
+    billing_cycle: billingCycle,
+  });
 
   // Insert invoice record
   const invoiceNumber = `INV-RZP-${Date.now().toString().slice(-6)}`;

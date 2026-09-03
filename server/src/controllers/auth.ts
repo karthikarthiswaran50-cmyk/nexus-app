@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { db } from '../db.js';
+import { db, persistUserToPg, persistSubscriptionToPg, persistSettingsToPg } from '../db.js';
 import { JWT_SECRET, AuthenticatedRequest } from '../middleware/auth.js';
 import { User, UserWithPlan, Subscription } from '../types.js';
 
@@ -61,6 +61,36 @@ export async function register(req: Request, res: Response): Promise<void> {
       INSERT INTO user_settings (id, user_id, theme, allow_calls_from, notification_sound, read_receipts, auto_accept_calls)
       VALUES (?, ?, 'dark', 'everyone', 1, 1, 0)
     `).run(`set_${userId}`, userId);
+
+    // Asynchronously persist to permanent PostgreSQL Database
+    persistUserToPg({
+      id: userId,
+      email: cleanEmail,
+      username: cleanUsername,
+      password_hash: passwordHash,
+      full_name,
+      avatar_url: avatar,
+      bio: userBio,
+      status: 'Online on Nexus',
+      country: userCountry,
+    });
+    persistSubscriptionToPg({
+      id: `sub_${userId}`,
+      user_id: userId,
+      plan_id: 'free',
+      status: 'active',
+      current_period_end: expiresAt,
+      billing_cycle: 'monthly',
+    });
+    persistSettingsToPg({
+      id: `set_${userId}`,
+      user_id: userId,
+      theme: 'dark',
+      allow_calls_from: 'everyone',
+      notification_sound: 1,
+      read_receipts: 1,
+      auto_accept_calls: 0,
+    });
 
     const token = jwt.sign(
       { userId, email: cleanEmail, username: cleanUsername },

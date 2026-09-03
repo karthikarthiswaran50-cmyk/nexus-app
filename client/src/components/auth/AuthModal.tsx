@@ -6,9 +6,10 @@ import { Avatar } from '../common/Avatar';
 export const AuthModal: React.FC = () => {
   const { login, register, loginDemoUser } = useAuth();
   const [isRegister, setIsRegister] = useState(false);
-  const [loginInput, setLoginInput] = useState('');
+  const [loginInput, setLoginInput] = useState(() => localStorage.getItem('nexus_saved_username') || '');
   const [password, setPassword] = useState('');
-  
+  const [rememberMe, setRememberMe] = useState(true);
+
   // Registration form
   const [fullName, setFullName] = useState('');
   const [username, setUsername] = useState('');
@@ -46,6 +47,9 @@ export const AuthModal: React.FC = () => {
     setLoading(true);
     try {
       await login(loginInput, password);
+      if (rememberMe) {
+        localStorage.setItem('nexus_saved_username', loginInput.trim());
+      }
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to login. Please check credentials.');
     } finally {
@@ -70,6 +74,7 @@ export const AuthModal: React.FC = () => {
         avatar_url: selectedAvatar,
         bio: bio || undefined,
       });
+      localStorage.setItem('nexus_saved_username', username.trim());
     } catch (err: any) {
       setError(err.response?.data?.error || 'Registration failed. Try a different username or email.');
     } finally {
@@ -230,6 +235,18 @@ export const AuthModal: React.FC = () => {
                     className="w-full pl-10 pr-4 py-2.5 bg-dark-800 border border-dark-700 rounded-xl text-sm text-white placeholder:text-dark-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition-all"
                   />
                 </div>
+              </div>
+
+              <div className="flex items-center justify-between pt-1 text-xs text-dark-300">
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                    className="w-4 h-4 rounded border-dark-700 bg-dark-800 text-brand-500 focus:ring-0 focus:ring-offset-0"
+                  />
+                  <span className="text-dark-300 text-xs">Remember my username</span>
+                </label>
               </div>
 
               <button
