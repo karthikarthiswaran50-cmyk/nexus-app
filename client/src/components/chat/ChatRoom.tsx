@@ -24,6 +24,7 @@ import {
   Mic,
   Trash2,
   Loader2,
+  ArrowLeft,
 } from 'lucide-react';
 import axios from 'axios';
 import { trackUserActivity } from '../../config/firebase';
@@ -31,11 +32,12 @@ import { VoicePlayer } from './VoicePlayer';
 
 interface ChatRoomProps {
   otherUser: User;
+  onBack?: () => void;
   onViewProfile?: (user: User) => void;
   onNavigateToSubscription?: () => void;
 }
 
-export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onViewProfile, onNavigateToSubscription }) => {
+export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewProfile, onNavigateToSubscription }) => {
   const { user } = useAuth();
   const { socket, onlineUserIds, startCall, latestMessage, typingMap, sendTyping } = useSocket();
 
@@ -300,11 +302,21 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onViewProfile, on
   };
 
   return (
-    <div className="h-full flex flex-col bg-dark-950 border border-dark-800 rounded-2xl overflow-hidden shadow-xl">
+    <div className="h-full flex flex-col bg-dark-950 border-0 sm:border border-dark-800 rounded-none sm:rounded-2xl overflow-hidden shadow-xl">
       
       {/* Chat Header */}
-      <div className="p-4 px-6 bg-dark-900/90 border-b border-dark-800 backdrop-blur-md flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-3.5">
+      <div className="p-3 sm:p-4 px-4 sm:px-6 bg-dark-900/90 border-b border-dark-800 backdrop-blur-md flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-2.5 sm:gap-3.5">
+          {onBack && (
+            <button
+              type="button"
+              onClick={onBack}
+              className="lg:hidden p-2 -ml-1.5 rounded-xl text-dark-300 hover:text-white hover:bg-dark-800 transition-all active:scale-95"
+              title="Back to conversations"
+            >
+              <ArrowLeft className="w-5 h-5 text-brand-400" />
+            </button>
+          )}
           <Avatar
             src={otherUser.avatar_url}
             name={otherUser.full_name}
@@ -313,9 +325,9 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onViewProfile, on
             showOnlineStatus
             planId={otherUser.plan_id}
           />
-          <div>
+          <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h2 className="text-base font-bold text-white">{otherUser.full_name}</h2>
+              <h2 className="text-sm sm:text-base font-bold text-white truncate max-w-[140px] sm:max-w-[220px]">{otherUser.full_name}</h2>
               <PlanBadge planId={otherUser.plan_id} size="sm" />
             </div>
             <p className="text-xs text-dark-400 flex items-center gap-1.5">

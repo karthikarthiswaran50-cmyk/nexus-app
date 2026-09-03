@@ -93,18 +93,18 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
   };
 
   return (
-    <div className="h-[calc(100vh-5rem)] grid grid-cols-1 lg:grid-cols-12 gap-4 p-4 sm:p-6 overflow-hidden max-w-7xl mx-auto">
+    <div className="h-[calc(100dvh-4rem)] md:h-[calc(100dvh-5rem)] grid grid-cols-1 lg:grid-cols-12 gap-0 lg:gap-4 p-0 sm:p-4 lg:p-6 overflow-hidden max-w-7xl mx-auto w-full">
       
       {/* Left Sidebar: Conversations list */}
       <div
-        className={`lg:col-span-4 h-full flex flex-col bg-dark-900 border border-dark-800 rounded-2xl overflow-hidden shadow-xl ${
+        className={`lg:col-span-4 h-full flex flex-col bg-dark-900 border-0 sm:border border-dark-800 rounded-none sm:rounded-2xl overflow-hidden shadow-xl ${
           selectedUser ? 'hidden lg:flex' : 'flex'
         }`}
       >
         {/* Header */}
-        <div className="p-4 border-b border-dark-800 bg-dark-900/90 backdrop-blur-md">
+        <div className="p-3.5 sm:p-4 border-b border-dark-800 bg-dark-900/90 backdrop-blur-md">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-lg font-bold text-white flex items-center gap-2">
+            <h2 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
               <MessageSquare className="w-5 h-5 text-brand-400" />
               Messages
             </h2>
@@ -204,19 +204,10 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
       <div className={`lg:col-span-8 h-full ${selectedUser ? 'block' : 'hidden lg:block'}`}>
         {selectedUser ? (
           <div className="h-full flex flex-col">
-            {/* Mobile Back button */}
-            <div className="lg:hidden mb-2">
-              <button
-                type="button"
-                onClick={() => setSelectedUser(null)}
-                className="text-xs text-brand-400 hover:text-brand-300 font-medium flex items-center gap-1"
-              >
-                ← Back to chats
-              </button>
-            </div>
             <div className="flex-1 h-full min-h-0">
               <ChatRoom
                 otherUser={selectedUser}
+                onBack={() => setSelectedUser(null)}
                 onViewProfile={onViewProfile}
                 onNavigateToSubscription={onNavigateToSubscription}
               />

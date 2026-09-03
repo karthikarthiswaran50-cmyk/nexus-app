@@ -23,6 +23,11 @@ import {
   Compass,
   Smartphone,
   Download,
+  CheckCircle2,
+  Share2,
+  ExternalLink,
+  ShieldCheck,
+  Radio,
 } from 'lucide-react';
 
 export type NavTab = 'chats' | 'calls' | 'directory' | 'subscription' | 'profile' | 'settings';
@@ -35,12 +40,18 @@ export const AppLayout: React.FC = () => {
   const [selectedUserForChat, setSelectedUserForChat] = useState<User | null>(null);
   const [viewProfileUser, setViewProfileUser] = useState<User | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [showInstallModal, setShowInstallModal] = useState(false);
+  const [isStandalone, setIsStandalone] = useState(false);
   
   // PWA Install prompt state
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [canInstall, setCanInstall] = useState(false);
 
   useEffect(() => {
+    // Check if running as installed standalone PWA
+    const checkStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone;
+    setIsStandalone(!!checkStandalone);
+
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e);
@@ -60,10 +71,11 @@ export const AppLayout: React.FC = () => {
       const { outcome } = await deferredPrompt.userChoice;
       if (outcome === 'accepted') {
         setCanInstall(false);
+        setShowInstallModal(false);
       }
       setDeferredPrompt(null);
     } else {
-      alert('To install on Mobile:\n• Android Chrome: Tap ⋮ menu > "Install App" or "Add to Home Screen"\n• iPhone Safari: Tap Share button > "Add to Home Screen"');
+      setShowInstallModal(true);
     }
   };
 
@@ -87,7 +99,7 @@ export const AppLayout: React.FC = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-dark-950 text-dark-100 flex flex-col selection:bg-brand-500 selection:text-white pb-16 md:pb-0">
+    <div className="h-[100dvh] bg-dark-950 text-dark-100 flex flex-col selection:bg-brand-500 selection:text-white overflow-hidden">
       
       {/* Global Call Modals (always listening) */}
       <IncomingCallModal />
@@ -102,27 +114,27 @@ export const AppLayout: React.FC = () => {
       )}
 
       {/* Top Navbar */}
-      <header className="h-16 border-b border-dark-800/80 bg-dark-900/80 backdrop-blur-xl sticky top-0 z-40 px-4 sm:px-6 flex items-center justify-between">
+      <header className="h-14 sm:h-16 border-b border-dark-800/80 bg-dark-900/90 backdrop-blur-xl sticky top-0 z-40 px-3.5 sm:px-6 flex items-center justify-between shrink-0">
         
         {/* Brand Logo & Connection Status */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5 sm:gap-3">
           <div
             onClick={() => { setCurrentTab('chats'); setSelectedUserForChat(null); }}
-            className="flex items-center gap-2.5 cursor-pointer group"
+            className="flex items-center gap-2 sm:gap-2.5 cursor-pointer group"
           >
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-brand-600 to-accent-violet flex items-center justify-center text-white shadow-lg shadow-brand-500/25 group-hover:scale-105 transition-transform">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-tr from-brand-600 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-brand-500/25 group-hover:scale-105 transition-transform">
               <Video className="w-4 h-4" />
             </div>
             <div>
-              <span className="text-base font-extrabold tracking-tight text-white flex items-center gap-1.5 leading-none">
-                Nexus <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-brand-500/20 text-brand-300 border border-brand-500/30">CALL</span>
+              <span className="text-sm sm:text-base font-extrabold tracking-tight text-white flex items-center gap-1.5 leading-none">
+                Nexus <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-brand-500/20 text-brand-300 border border-brand-500/30">APP</span>
               </span>
             </div>
           </div>
 
-          <div className="hidden sm:flex items-center gap-1.5 text-[11px] px-2.5 py-0.5 rounded-full bg-dark-800/80 border border-dark-700/60 text-dark-300 ml-3">
+          <div className="flex items-center gap-1.5 text-[10px] sm:text-[11px] px-2 sm:px-2.5 py-0.5 rounded-full bg-dark-800/80 border border-dark-700/60 text-dark-300">
             <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-400' : 'bg-rose-400 animate-pulse'}`} />
-            <span>{isConnected ? 'Gateway Active' : 'Connecting...'}</span>
+            <span className="hidden xs:inline">{isConnected ? 'Live' : 'Connecting...'}</span>
           </div>
         </div>
 
@@ -169,22 +181,25 @@ export const AppLayout: React.FC = () => {
         </nav>
 
         {/* User Status Card & Actions */}
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2 sm:gap-2.5">
           
-          {/* Mobile Install App Button */}
-          <button
-            type="button"
-            onClick={handleInstallApp}
-            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600/20 to-teal-500/20 hover:from-emerald-600/30 hover:to-teal-500/30 border border-emerald-500/30 text-emerald-300 text-xs font-semibold transition-all shadow-sm"
-          >
-            <Smartphone className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Install App</span>
-          </button>
+          {/* Mobile/Desktop Install APK Button */}
+          {!isStandalone && (
+            <button
+              type="button"
+              onClick={handleInstallApp}
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-[11px] sm:text-xs font-bold transition-all shadow-md shadow-emerald-500/20 active:scale-95"
+              title="Install Mobile App / APK"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Install App</span>
+            </button>
+          )}
 
           <button
             type="button"
             onClick={() => { setCurrentTab('profile'); setViewProfileUser(null); }}
-            className="flex items-center gap-2.5 p-1.5 pr-3 rounded-2xl bg-dark-800/80 hover:bg-dark-800 border border-dark-700/80 transition-all text-left"
+            className="flex items-center gap-2 p-1 sm:p-1.5 sm:pr-3 rounded-2xl bg-dark-800/80 hover:bg-dark-800 border border-dark-700/80 transition-all text-left"
           >
             <Avatar
               src={user?.avatar_url}
@@ -194,7 +209,7 @@ export const AppLayout: React.FC = () => {
               showOnlineStatus
               planId={user?.plan_id}
             />
-            <div className="hidden sm:block">
+            <div className="hidden lg:block">
               <p className="text-xs font-bold text-white leading-tight truncate max-w-[120px]">{user?.full_name}</p>
               <p className="text-[10px] text-dark-400 uppercase tracking-wider">{user?.plan_id || 'free'} Tier</p>
             </div>
@@ -204,7 +219,7 @@ export const AppLayout: React.FC = () => {
           <button
             type="button"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="md:hidden p-2 rounded-xl bg-dark-800 text-dark-300 hover:text-white border border-dark-700"
+            className="md:hidden p-1.5 rounded-xl bg-dark-800 text-dark-300 hover:text-white border border-dark-700"
           >
             {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
@@ -213,15 +228,17 @@ export const AppLayout: React.FC = () => {
 
       {/* Mobile Drawer Menu */}
       {mobileMenuOpen && (
-        <div className="md:hidden bg-dark-900 border-b border-dark-800 p-4 space-y-2 animate-in slide-in-from-top duration-200">
-          <button
-            type="button"
-            onClick={() => { handleInstallApp(); setMobileMenuOpen(false); }}
-            className="w-full px-4 py-2.5 rounded-xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 font-bold text-xs flex items-center justify-center gap-2 mb-2"
-          >
-            <Download className="w-4 h-4" />
-            <span>📱 Install Nexus on Mobile Home Screen</span>
-          </button>
+        <div className="md:hidden bg-dark-900 border-b border-dark-800 p-4 space-y-2 animate-in slide-in-from-top duration-200 z-30 shrink-0 shadow-2xl">
+          {!isStandalone && (
+            <button
+              type="button"
+              onClick={() => { handleInstallApp(); setMobileMenuOpen(false); }}
+              className="w-full px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 text-white font-bold text-xs flex items-center justify-center gap-2 mb-2 shadow-lg shadow-emerald-500/20"
+            >
+              <Download className="w-4 h-4" />
+              <span>📱 Install Nexus App (APK) on Phone</span>
+            </button>
+          )}
 
           {navItems.map((item) => {
             const Icon = item.icon;
@@ -255,7 +272,7 @@ export const AppLayout: React.FC = () => {
       )}
 
       {/* Main App Content Body */}
-      <main className="flex-1 flex flex-col overflow-hidden">
+      <main className="flex-1 flex flex-col overflow-hidden min-h-0">
         {currentTab === 'chats' && (
           <div className="flex-1 flex overflow-hidden">
             <ChatLayout
@@ -268,7 +285,7 @@ export const AppLayout: React.FC = () => {
         )}
 
         {currentTab === 'calls' && (
-          <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+          <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 pb-20 md:pb-6">
             <CallsView
               onStartChat={handleStartChatWithUser}
               onViewProfile={handleViewProfile}
@@ -277,7 +294,7 @@ export const AppLayout: React.FC = () => {
         )}
 
         {currentTab === 'directory' && (
-          <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+          <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 pb-20 md:pb-6">
             <DirectoryView
               onStartChat={handleStartChatWithUser}
               onViewProfile={handleViewProfile}
@@ -286,13 +303,13 @@ export const AppLayout: React.FC = () => {
         )}
 
         {currentTab === 'subscription' && (
-          <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+          <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 pb-20 md:pb-6">
             <SubscriptionView />
           </div>
         )}
 
         {currentTab === 'profile' && (
-          <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+          <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 pb-20 md:pb-6">
             <ProfileView
               viewUser={viewProfileUser}
               onNavigateToSubscription={() => setCurrentTab('subscription')}
@@ -301,19 +318,19 @@ export const AppLayout: React.FC = () => {
         )}
 
         {currentTab === 'settings' && (
-          <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+          <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 pb-20 md:pb-6">
             <SettingsView />
           </div>
         )}
       </main>
 
-      {/* Mobile Bottom Navigation Bar (1-thumb easy tapping) */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-dark-900/95 backdrop-blur-xl border-t border-dark-800/80 z-40 flex items-center justify-around px-2">
+      {/* Mobile Bottom Navigation Bar (WhatsApp Style, 1-thumb touch) */}
+      <nav className="md:hidden h-14 sm:h-16 bg-dark-900/95 backdrop-blur-xl border-t border-dark-800/80 z-40 flex items-center justify-around px-2 shrink-0 pb-[env(safe-area-inset-bottom)]">
         <button
           type="button"
           onClick={() => { setCurrentTab('chats'); setSelectedUserForChat(null); }}
-          className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all ${
-            currentTab === 'chats' ? 'text-brand-400 font-bold' : 'text-dark-400'
+          className={`flex flex-col items-center gap-0.5 py-1 px-3 rounded-xl transition-all ${
+            currentTab === 'chats' ? 'text-brand-400 font-bold scale-105' : 'text-dark-400'
           }`}
         >
           <MessageSquare className="w-5 h-5" />
@@ -323,8 +340,8 @@ export const AppLayout: React.FC = () => {
         <button
           type="button"
           onClick={() => setCurrentTab('calls')}
-          className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all ${
-            currentTab === 'calls' ? 'text-brand-400 font-bold' : 'text-dark-400'
+          className={`flex flex-col items-center gap-0.5 py-1 px-3 rounded-xl transition-all ${
+            currentTab === 'calls' ? 'text-brand-400 font-bold scale-105' : 'text-dark-400'
           }`}
         >
           <Phone className="w-5 h-5" />
@@ -334,8 +351,8 @@ export const AppLayout: React.FC = () => {
         <button
           type="button"
           onClick={() => setCurrentTab('directory')}
-          className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all ${
-            currentTab === 'directory' ? 'text-brand-400 font-bold' : 'text-dark-400'
+          className={`flex flex-col items-center gap-0.5 py-1 px-3 rounded-xl transition-all ${
+            currentTab === 'directory' ? 'text-brand-400 font-bold scale-105' : 'text-dark-400'
           }`}
         >
           <Compass className="w-5 h-5" />
@@ -345,25 +362,96 @@ export const AppLayout: React.FC = () => {
         <button
           type="button"
           onClick={() => setCurrentTab('subscription')}
-          className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all ${
-            currentTab === 'subscription' ? 'text-emerald-400 font-bold' : 'text-dark-400'
+          className={`flex flex-col items-center gap-0.5 py-1 px-3 rounded-xl transition-all ${
+            currentTab === 'subscription' ? 'text-emerald-400 font-bold scale-105' : 'text-dark-400'
           }`}
         >
-          <Sparkles className="w-5 h-5" />
-          <span className="text-[10px]">₹99 Pro</span>
+          <Sparkles className="w-5 h-5 text-emerald-400" />
+          <span className="text-[10px] text-emerald-400">₹99 Pro</span>
         </button>
 
         <button
           type="button"
           onClick={() => { setCurrentTab('profile'); setViewProfileUser(null); }}
-          className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all ${
-            currentTab === 'profile' ? 'text-brand-400 font-bold' : 'text-dark-400'
+          className={`flex flex-col items-center gap-0.5 py-1 px-3 rounded-xl transition-all ${
+            currentTab === 'profile' ? 'text-brand-400 font-bold scale-105' : 'text-dark-400'
           }`}
         >
           <UserIcon className="w-5 h-5" />
           <span className="text-[10px]">Profile</span>
         </button>
       </nav>
+
+      {/* ========================================================================= */}
+      {/* 📱 Mobile App (APK / PWA) Installation Modal                             */}
+      {/* ========================================================================= */}
+      {showInstallModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-dark-950/85 backdrop-blur-md animate-in fade-in">
+          <div className="relative w-full max-w-md bg-dark-900 border border-dark-800 rounded-3xl p-6 shadow-2xl space-y-5 animate-in zoom-in-95">
+            <button
+              type="button"
+              onClick={() => setShowInstallModal(false)}
+              className="absolute top-4 right-4 p-1.5 rounded-full hover:bg-dark-800 text-dark-400 hover:text-white"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            {/* Header */}
+            <div className="text-center space-y-2">
+              <div className="w-16 h-16 mx-auto rounded-3xl bg-gradient-to-tr from-brand-600 via-indigo-600 to-teal-500 flex items-center justify-center text-white shadow-xl shadow-brand-500/25">
+                <Smartphone className="w-8 h-8" />
+              </div>
+              <h3 className="text-lg font-extrabold text-white">Install Nexus Mobile App</h3>
+              <p className="text-xs text-dark-300 leading-relaxed max-w-xs mx-auto">
+                Get the full-screen native experience, instant push call ringers, and faster loading on your phone.
+              </p>
+            </div>
+
+            {/* Options Tabs / Steps */}
+            <div className="space-y-3">
+              {/* Android Box */}
+              <div className="p-4 rounded-2xl bg-dark-800/80 border border-dark-700/80 space-y-2">
+                <div className="flex items-center gap-2 text-xs font-bold text-emerald-400">
+                  <span>🤖 Android Phone (Chrome / Brave / Edge)</span>
+                </div>
+                <p className="text-xs text-dark-300">
+                  Tap the button below to install directly to your app drawer, or tap the <strong className="text-white">⋮ menu</strong> at top right and choose <strong className="text-white">"Install App"</strong>.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleInstallApp}
+                  className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 transition-all active:scale-95"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Install Nexus App Now</span>
+                </button>
+              </div>
+
+              {/* iOS Box */}
+              <div className="p-4 rounded-2xl bg-dark-800/80 border border-dark-700/80 space-y-1.5">
+                <div className="flex items-center gap-2 text-xs font-bold text-cyan-400">
+                  <span>🍏 iPhone / iPad (Safari)</span>
+                </div>
+                <p className="text-xs text-dark-300">
+                  1. Tap the <strong className="text-white">Share button (📤)</strong> at bottom of Safari.<br />
+                  2. Scroll down and tap <strong className="text-white">"Add to Home Screen"</strong>.
+                </p>
+              </div>
+            </div>
+
+            <div className="pt-1 text-center">
+              <button
+                type="button"
+                onClick={() => setShowInstallModal(false)}
+                className="text-xs text-dark-400 hover:text-white font-medium"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };
