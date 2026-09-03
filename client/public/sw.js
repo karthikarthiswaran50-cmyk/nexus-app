@@ -1,42 +1,19 @@
-// Nexus PWA Service Worker
-const CACHE_NAME = 'nexus-cache-v1';
-const STATIC_ASSETS = [
-  '/',
-  '/manifest.json',
-  '/icon-192.svg',
-];
+// Nexus PWA Service Worker v3 (Auto-purging corrupt cache & Safe Pass-through)
+const CACHE_NAME = 'nexus-cache-v3';
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(STATIC_ASSETS);
-    })
-  );
   self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) => {
-      return Promise.all(
-        keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))
-      );
-    })
+      return Promise.all(keys.map((k) => caches.delete(k)));
+    }).then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
-self.addEventListener('fetch', (event) => {
-  // Only cache GET requests and non-API / non-socket requests
-  if (
-    event.request.method === 'GET' &&
-    !event.request.url.includes('/api/') &&
-    !event.request.url.includes('/socket.io/')
-  ) {
-    event.respondWith(
-      caches.match(event.request).then((cachedResponse) => {
-        return cachedResponse || fetch(event.request).catch(() => cachedResponse);
-      })
-    );
-  }
+// Pass-through fetch event (ensures PWA install criteria without breaking network loads)
+self.addEventListener('fetch', () => {
+  return;
 });

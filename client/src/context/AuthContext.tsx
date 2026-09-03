@@ -55,6 +55,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } else {
       setLoading(false);
     }
+
+    // Safety fallback: Never keep loading screen for more than 2 seconds
+    const safetyTimer = setTimeout(() => {
+      setLoading(false);
+    }, 2000);
+
+    return () => clearTimeout(safetyTimer);
   }, [token]);
 
   const login = async (loginStr: string, passwordStr: string) => {
