@@ -2,16 +2,19 @@ import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, Auth, UserCredential } from 'firebase/auth';
 import { getStorage, FirebaseStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { getMessaging, Messaging, getToken, onMessage } from 'firebase/messaging';
+import { getAnalytics, isSupported, Analytics } from 'firebase/analytics';
 
-// Firebase configuration from Vite environment variables
+// Official Nexus Firebase configuration
 const metaEnv = (import.meta as any).env || {};
-const firebaseConfig = {
-  apiKey: metaEnv.VITE_FIREBASE_API_KEY || '',
-  authDomain: metaEnv.VITE_FIREBASE_AUTH_DOMAIN || '',
-  projectId: metaEnv.VITE_FIREBASE_PROJECT_ID || '',
-  storageBucket: metaEnv.VITE_FIREBASE_STORAGE_BUCKET || '',
-  messagingSenderId: metaEnv.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
-  appId: metaEnv.VITE_FIREBASE_APP_ID || '',
+
+export const firebaseConfig = {
+  apiKey: metaEnv.VITE_FIREBASE_API_KEY || "AIzaSyBGwj2ppva8ZRG1ftf7_B-0G0oGuec5paM",
+  authDomain: metaEnv.VITE_FIREBASE_AUTH_DOMAIN || "nexus-platform-cb84c.firebaseapp.com",
+  projectId: metaEnv.VITE_FIREBASE_PROJECT_ID || "nexus-platform-cb84c",
+  storageBucket: metaEnv.VITE_FIREBASE_STORAGE_BUCKET || "nexus-platform-cb84c.firebasestorage.app",
+  messagingSenderId: metaEnv.VITE_FIREBASE_MESSAGING_SENDER_ID || "866191964279",
+  appId: metaEnv.VITE_FIREBASE_APP_ID || "1:866191964279:web:5d6d6cd724155869b9ae72",
+  measurementId: metaEnv.VITE_FIREBASE_MEASUREMENT_ID || "G-WCXMQ15D9W",
 };
 
 export const isFirebaseConfigured = (): boolean => {
@@ -22,43 +25,43 @@ export const isFirebaseConfigured = (): boolean => {
   );
 };
 
-let app: FirebaseApp | null = null;
-let auth: Auth | null = null;
-let googleProvider: GoogleAuthProvider | null = null;
-let storage: FirebaseStorage | null = null;
-let messaging: Messaging | null = null;
+let app: FirebaseApp = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+let auth: Auth = getAuth(app);
+let googleProvider: GoogleAuthProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({ prompt: 'select_account' });
 
-if (isFirebaseConfigured()) {
-  try {
-    app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
-    auth = getAuth(app);
-    googleProvider = new GoogleAuthProvider();
-    googleProvider.setCustomParameters({ prompt: 'select_account' });
-    storage = getStorage(app);
-    
-    // Messaging only supported in browsers with Notification / SW API
-    if (typeof window !== 'undefined' && 'Notification' in window && 'serviceWorker' in navigator) {
+let storage: FirebaseStorage = getStorage(app);
+let messaging: Messaging | null = null;
+let analytics: Analytics | null = null;
+
+// Initialize Analytics if supported in current browser environment
+if (typeof window !== 'undefined') {
+  isSupported().then((supported) => {
+    if (supported) {
       try {
-        messaging = getMessaging(app);
-      } catch (e) {
-        console.warn('FCM Messaging initialization skipped in current context:', e);
-      }
+        analytics = getAnalytics(app);
+      } catch (e) {}
     }
-  } catch (err) {
-    console.error('Firebase initialization error:', err);
+  }).catch(() => {});
+
+  // Messaging (FCM) supported in modern browsers with Notification & ServiceWorker
+  if ('Notification' in window && 'serviceWorker' in navigator) {
+    try {
+      messaging = getMessaging(app);
+    } catch (e) {
+      console.warn('FCM Messaging initialization skipped in current context:', e);
+    }
   }
 }
 
-export { app, auth, googleProvider, storage, messaging };
+export { app, auth, googleProvider, storage, messaging, analytics };
 
 /**
  * 1-Click Google Sign In with Popup
  */
 export async function signInWithGoogle(): Promise<{ idToken: string; user: any }> {
   if (!auth || !googleProvider) {
-    throw new Error(
-      'Firebase is not configured yet. Please provide your VITE_FIREBASE_API_KEY and credentials in your environment.'
-    );
+    throw new Error('Firebase Auth is not ready.');
   }
 
   const credential: UserCredential = await signInWithPopup(auth, googleProvider);
@@ -102,10 +105,11 @@ export async function requestFcmToken(vapidKey?: string): Promise<string | null>
  */
 export async function uploadToFirebaseStorage(file: File, folder = 'avatars'): Promise<string> {
   if (!storage) {
-    throw new Error('Firebase Storage is not configured.');
+    throw new Error('Firebase Storage is not ready.');
   }
 
-  const fileRef = ref(storage, `${folder}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '')}`);
+  const cleanFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '');
+  const fileRef = ref(storage, `${folder}/${Date.now()}_${cleanFileName}`);
   const snapshot = await uploadBytes(fileRef, file);
   return await getDownloadURL(snapshot.ref);
 }

@@ -23,6 +23,24 @@ services:
         sync: false
       - key: RAZORPAY_WEBHOOK_SECRET
         sync: false
+      - key: VITE_FIREBASE_API_KEY
+        value: "AIzaSyBGwj2ppva8ZRG1ftf7_B-0G0oGuec5paM"
+      - key: VITE_FIREBASE_AUTH_DOMAIN
+        value: "nexus-platform-cb84c.firebaseapp.com"
+      - key: VITE_FIREBASE_PROJECT_ID
+        value: "nexus-platform-cb84c"
+      - key: VITE_FIREBASE_STORAGE_BUCKET
+        value: "nexus-platform-cb84c.firebasestorage.app"
+      - key: VITE_FIREBASE_MESSAGING_SENDER_ID
+        value: "866191964279"
+      - key: VITE_FIREBASE_APP_ID
+        value: "1:866191964279:web:5d6d6cd724155869b9ae72"
+      - key: VITE_FIREBASE_MEASUREMENT_ID
+        value: "G-WCXMQ15D9W"
+      - key: FIREBASE_PROJECT_ID
+        value: "nexus-platform-cb84c"
+      - key: FIREBASE_STORAGE_BUCKET
+        value: "nexus-platform-cb84c.firebasestorage.app"
 
 databases:
   # Managed PostgreSQL Database on Render
