@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import axios from 'axios';
 import { User, UserSettings } from '../types';
+import { signInWithGoogle } from '../config/firebase';
 
 interface AuthContextType {
   user: User | null;
@@ -8,6 +9,7 @@ interface AuthContextType {
   token: string | null;
   loading: boolean;
   login: (login: string, pass: string) => Promise<void>;
+  loginWithGoogle: () => Promise<void>;
   register: (data: { email: string; username: string; password: string; full_name: string; avatar_url?: string; bio?: string; country?: string }) => Promise<void>;
   logout: () => void;
   refreshUser: () => Promise<void>;
@@ -83,6 +85,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await login(username, 'password123');
   };
 
+  const loginWithGoogle = async () => {
+    const { idToken } = await signInWithGoogle();
+    const res = await axios.post('/api/auth/firebase-login', { idToken });
+    const newToken = res.data.token;
+    localStorage.setItem('nexus_auth_token', newToken);
+    setToken(newToken);
+    setUser(res.data.user);
+    axios.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
+
+    if (res.data.user?.username) {
+      localStorage.setItem('nexus_saved_username', res.data.user.username);
+    }
+
+    try {
+      const setRes = await axios.get('/api/users/settings');
+      setSettings(setRes.data.settings);
+    } catch (e) {}
+  };
+
   const register = async (data: { email: string; username: string; password: string; full_name: string; avatar_url?: string; bio?: string; country?: string }) => {
     const res = await axios.post('/api/auth/register', data);
     const newToken = res.data.token;
@@ -134,6 +155,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         token,
         loading,
         login,
+        loginWithGoogle,
         register,
         logout,
         refreshUser,

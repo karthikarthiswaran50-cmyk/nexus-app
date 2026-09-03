@@ -182,3 +182,25 @@ export async function updateSettings(req: AuthenticatedRequest, res: Response): 
     res.status(500).json({ error: 'Failed to update settings.' });
   }
 }
+
+export async function updateFcmToken(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const userId = req.user?.userId;
+    const { token } = req.body;
+    if (!userId || !token) {
+      res.status(400).json({ error: 'User ID and FCM token are required.' });
+      return;
+    }
+
+    db.prepare(`
+      UPDATE user_settings
+      SET fcm_token = ?
+      WHERE user_id = ?
+    `).run(String(token).trim(), userId);
+
+    res.json({ success: true, message: 'FCM push token registered.' });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update FCM token.' });
+  }
+}
+

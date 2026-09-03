@@ -6,6 +6,7 @@ import { saveMessage } from './controllers/chat.js';
 import { recordCallLog } from './controllers/calls.js';
 import { getUserWithPlan } from './controllers/auth.js';
 import { db } from './db.js';
+import { sendCallPushNotification, sendMessagePushNotification } from './services/firebase.js';
 
 interface SocketUser {
   userId: string;
@@ -174,9 +175,22 @@ export function setupSocket(io: Server) {
           duration: 0,
         });
 
+        // Trigger mobile push notification via FCM so recipient's device receives notification
+        try {
+          const receiverSettings = db.prepare('SELECT fcm_token FROM user_settings WHERE user_id = ?').get(receiverId) as any;
+          if (receiverSettings?.fcm_token) {
+            sendCallPushNotification({
+              fcmToken: receiverSettings.fcm_token,
+              callerName: caller.full_name,
+              callerAvatar: caller.avatar_url,
+              callType,
+            });
+          }
+        } catch (e) {}
+
         socket.emit('call:user_offline', {
           receiverId,
-          message: `${receiver.full_name} is currently offline.`,
+          message: `${receiver.full_name} is currently offline. A push notification was sent to their device.`,
         });
         return;
       }

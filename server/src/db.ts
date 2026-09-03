@@ -86,9 +86,14 @@ export function initDatabase() {
       allow_calls_from TEXT NOT NULL DEFAULT 'everyone',
       notification_sound INTEGER NOT NULL DEFAULT 1,
       read_receipts INTEGER NOT NULL DEFAULT 1,
-      auto_accept_calls INTEGER NOT NULL DEFAULT 0
+      auto_accept_calls INTEGER NOT NULL DEFAULT 0,
+      fcm_token TEXT
     );
   `);
+
+  try {
+    db.exec(`ALTER TABLE user_settings ADD COLUMN fcm_token TEXT;`);
+  } catch (e) {}
 
   // 4. Conversations table
   db.exec(`

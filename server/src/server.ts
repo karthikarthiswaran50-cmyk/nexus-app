@@ -166,6 +166,7 @@ app.get('/api/health', (_req, res) => {
 // 1. Auth Routes (Rate limited)
 app.post('/api/auth/register', authLimiter, authCtrl.register);
 app.post('/api/auth/login', authLimiter, authCtrl.login);
+app.post('/api/auth/firebase-login', authLimiter, authCtrl.firebaseLogin);
 app.get('/api/auth/me', requireAuth, authCtrl.getMe);
 app.post('/api/auth/update-password', requireAuth, authCtrl.updatePassword);
 
@@ -174,6 +175,7 @@ app.get('/api/users', requireAuth, apiLimiter, usersCtrl.getUsers);
 app.get('/api/users/settings', requireAuth, usersCtrl.getSettings);
 app.put('/api/users/settings', requireAuth, usersCtrl.updateSettings);
 app.put('/api/users/profile', requireAuth, usersCtrl.updateProfile);
+app.post('/api/users/fcm-token', requireAuth, usersCtrl.updateFcmToken);
 app.get('/api/users/:id', requireAuth, usersCtrl.getUserByIdOrUsername);
 
 // 3. Chat Routes

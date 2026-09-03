@@ -1,8 +1,10 @@
 import React, { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
+import axios from 'axios';
 import { useAuth } from './AuthContext';
 import { User, CallType, Message, ActiveCallSession } from '../types';
 import { soundEffects } from '../utils/soundEffects';
+import { requestFcmToken } from '../config/firebase';
 
 interface IncomingCallData {
   caller: User;
@@ -61,6 +63,13 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     newSocket.on('connect', () => {
       setIsConnected(true);
       newSocket.emit('presence:get_online');
+
+      // Request and register mobile FCM push token for incoming calls
+      requestFcmToken().then((fcmToken) => {
+        if (fcmToken) {
+          axios.post('/api/users/fcm-token', { token: fcmToken }).catch(() => {});
+        }
+      }).catch(() => {});
     });
 
     newSocket.on('disconnect', () => {

@@ -5,6 +5,7 @@ import { db, persistUserToPg, persistSubscriptionToPg, persistSettingsToPg } fro
 import { JWT_SECRET, AuthenticatedRequest } from '../middleware/auth.js';
 import { User, UserWithPlan, Subscription } from '../types.js';
 import { sanitizeText, sanitizeUsername, sanitizeEmail, validatePasswordStrength } from '../utils/sanitize.js';
+import { verifyFirebaseIdToken } from '../services/firebase.js';
 
 export async function register(req: Request, res: Response): Promise<void> {
   try {
@@ -222,3 +223,96 @@ export function getUserWithPlan(userId: string): UserWithPlan | null {
 
   return row || null;
 }
+
+export async function firebaseLogin(req: Request, res: Response): Promise<void> {
+  try {
+    const { idToken } = req.body;
+    if (!idToken) {
+      res.status(400).json({ error: 'Firebase ID token is required.' });
+      return;
+    }
+
+    const decoded = await verifyFirebaseIdToken(idToken);
+    if (!decoded || !decoded.email) {
+      res.status(401).json({ error: 'Invalid or unverified Firebase ID token.' });
+      return;
+    }
+
+    const cleanEmail = sanitizeEmail(decoded.email);
+    let user = db.prepare('SELECT * FROM users WHERE lower(email) = ?').get(cleanEmail) as unknown as User | undefined;
+
+    const now = new Date().toISOString();
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+
+    if (!user) {
+      // Auto-provision user from Google / Firebase profile
+      const rawName = decoded.name || cleanEmail.split('@')[0];
+      const baseUsername = sanitizeUsername(rawName.replace(/\s+/g, '_'));
+      const cleanUsername = (baseUsername || 'user') + '_' + Math.random().toString(36).substring(2, 6);
+      const userId = 'usr_fb_' + Math.random().toString(36).substring(2, 8) + Date.now().toString(36);
+      const randomPasswordHash = bcrypt.hashSync(Math.random().toString(36), 12);
+      const avatar = decoded.picture || `https://api.dicebear.com/7.x/bottts/svg?seed=${cleanUsername}`;
+      const fullName = sanitizeText(decoded.name || cleanUsername);
+
+      db.prepare(`
+        INSERT INTO users (id, email, username, password_hash, full_name, avatar_url, bio, status, country, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(userId, cleanEmail, cleanUsername, randomPasswordHash, fullName, avatar, 'Joined via Google', 'Online on Nexus', 'Global', now, now);
+
+      db.prepare(`
+        INSERT INTO subscriptions (id, user_id, plan_id, status, current_period_end, billing_cycle, created_at)
+        VALUES (?, ?, 'free', 'active', ?, 'monthly', ?)
+      `).run(`sub_${userId}`, userId, expiresAt, now);
+
+      db.prepare(`
+        INSERT INTO user_settings (id, user_id, theme, allow_calls_from, notification_sound, read_receipts, auto_accept_calls)
+        VALUES (?, ?, 'dark', 'everyone', 1, 1, 0)
+      `).run(`set_${userId}`, userId);
+
+      // Persist to PostgreSQL
+      persistUserToPg({
+        id: userId,
+        email: cleanEmail,
+        username: cleanUsername,
+        password_hash: randomPasswordHash,
+        full_name: fullName,
+        avatar_url: avatar,
+        bio: 'Joined via Google',
+        status: 'Online on Nexus',
+        country: 'Global',
+      });
+      persistSubscriptionToPg({
+        id: `sub_${userId}`,
+        user_id: userId,
+        plan_id: 'free',
+        status: 'active',
+        current_period_end: expiresAt,
+        billing_cycle: 'monthly',
+      });
+      persistSettingsToPg({
+        id: `set_${userId}`,
+        user_id: userId,
+        theme: 'dark',
+        allow_calls_from: 'everyone',
+        notification_sound: 1,
+        read_receipts: 1,
+        auto_accept_calls: 0,
+      });
+
+      user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as unknown as User;
+    }
+
+    const token = jwt.sign(
+      { userId: user.id, email: user.email, username: user.username },
+      JWT_SECRET,
+      { expiresIn: '30d' }
+    );
+
+    const userWithPlan = getUserWithPlan(user.id);
+    res.json({ token, user: userWithPlan });
+  } catch (error) {
+    console.error('Firebase login error:', error);
+    res.status(500).json({ error: 'Authentication with Firebase failed.' });
+  }
+}
+
