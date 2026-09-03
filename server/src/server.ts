@@ -33,11 +33,13 @@ const app = express();
 // Trust proxy for reverse proxies (Nginx / Render / Railway / Cloudflare)
 app.set('trust proxy', 1);
 
-// Security Headers with Helmet
+// Security Headers with Helmet (configured for full client and WebRTC compatibility)
 app.use(
   helmet({
-    contentSecurityPolicy: false, // Disabled for flexible media stream and avatar loading
+    contentSecurityPolicy: false,
     crossOriginEmbedderPolicy: false,
+    crossOriginResourcePolicy: false,
+    crossOriginOpenerPolicy: false,
   })
 );
 

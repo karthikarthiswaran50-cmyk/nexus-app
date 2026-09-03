@@ -34,9 +34,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const fetchSession = async (currentToken: string) => {
     try {
       axios.defaults.headers.common['Authorization'] = `Bearer ${currentToken}`;
-      const res = await axios.get('/api/auth/me');
-      setUser(res.data.user);
-      setSettings(res.data.settings);
+      const res = await axios.get('/api/auth/me', { timeout: 5000 });
+      if (res.data?.user) {
+        setUser(res.data.user);
+        setSettings(res.data.settings);
+      } else {
+        logout();
+      }
     } catch (err) {
       console.error('Session restore failed:', err);
       logout();
