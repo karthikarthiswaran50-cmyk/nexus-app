@@ -39,8 +39,8 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
     id: 'pro',
     name: 'Nexus Pro',
     tagline: 'High-definition video calling, screen sharing, & unlimited chat',
-    priceMonthly: 799, // ₹799/month
-    priceYearly: 7999, // ₹7,999/year
+    priceMonthly: 99, // ₹99/month
+    priceYearly: 999, // ₹999/year
     features: [
       'Unlimited 1-on-1 HD Video & Audio Calls',
       'Crystal-Clear Screen Sharing',
@@ -65,8 +65,8 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
     id: 'vip',
     name: 'Nexus Ultra VIP',
     tagline: 'The ultimate suite for creators, teams, and power communicators',
-    priceMonthly: 1999, // ₹1,999/month
-    priceYearly: 19999, // ₹19,999/year
+    priceMonthly: 199, // ₹199/month
+    priceYearly: 1999, // ₹1,999/year
     features: [
       'Everything in Nexus Pro included',
       'Ultra VIP Gold Profile Badge 👑',
