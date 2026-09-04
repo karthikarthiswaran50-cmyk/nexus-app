@@ -5,7 +5,7 @@ import { useAuth } from './AuthContext';
 import { User, CallType, Message, ActiveCallSession } from '../types';
 import { soundEffects } from '../utils/soundEffects';
 import { requestFcmToken, trackUserActivity } from '../config/firebase';
-import { showCallNotification, closeCallNotification, showMessageNotification } from '../utils/notifications';
+import { showCallNotification, closeCallNotification, showMessageNotification, subscribeToWebPush } from '../utils/notifications';
 
 interface IncomingCallData {
   caller: User;
@@ -17,6 +17,7 @@ interface SocketContextType {
   socket: Socket | null;
   isConnected: boolean;
   onlineUserIds: Set<string>;
+  reachableUserIds: Set<string>;
   incomingCall: IncomingCallData | null;
   activeCall: ActiveCallSession | null;
   setActiveCall: (session: ActiveCallSession | null) => void;
@@ -38,6 +39,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [onlineUserIds, setOnlineUserIds] = useState<Set<string>>(new Set());
+  const [reachableUserIds, setReachableUserIds] = useState<Set<string>>(new Set());
   const [incomingCall, setIncomingCall] = useState<IncomingCallData | null>(null);
   const [activeCall, setActiveCall] = useState<ActiveCallSession | null>(null);
   const [latestMessage, setLatestMessage] = useState<Message | null>(null);
@@ -64,13 +66,17 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     newSocket.on('connect', () => {
       setIsConnected(true);
       newSocket.emit('presence:get_online');
+      newSocket.emit('call:check_pending');
 
-      // Request and register mobile FCM push token for incoming calls
-      requestFcmToken().then((fcmToken) => {
-        if (fcmToken) {
-          axios.post('/api/users/fcm-token', { token: fcmToken }).catch(() => {});
-        }
-      }).catch(() => {});
+      // Auto-register Web Push & FCM if permission is granted
+      if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+        subscribeToWebPush().catch(() => {});
+        requestFcmToken().then((fcmToken) => {
+          if (fcmToken) {
+            axios.post('/api/users/fcm-token', { token: fcmToken }).catch(() => {});
+          }
+        }).catch(() => {});
+      }
     });
 
     newSocket.on('disconnect', () => {
@@ -79,6 +85,14 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     newSocket.on('presence:online_list', (userIds: string[]) => {
       setOnlineUserIds(new Set(userIds));
+    });
+
+    newSocket.on('presence:reachable_list', (userIds: string[]) => {
+      setReachableUserIds(new Set(userIds));
+    });
+
+    newSocket.on('call:ringing', (data: { receiverId: string; message?: string }) => {
+      setCallBannerMessage(data.message || '📞 Ringing mobile device...');
     });
 
     // Handle Incoming Call
@@ -277,6 +291,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         socket,
         isConnected,
         onlineUserIds,
+        reachableUserIds,
         incomingCall,
         activeCall,
         setActiveCall,

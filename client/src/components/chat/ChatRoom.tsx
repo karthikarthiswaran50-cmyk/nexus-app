@@ -39,7 +39,7 @@ interface ChatRoomProps {
 
 export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewProfile, onNavigateToSubscription }) => {
   const { user } = useAuth();
-  const { socket, onlineUserIds, startCall, latestMessage, typingMap, sendTyping } = useSocket();
+  const { socket, onlineUserIds, reachableUserIds, startCall, latestMessage, typingMap, sendTyping } = useSocket();
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
@@ -61,6 +61,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
   const typingTimeoutRef = useRef<any>(null);
 
   const isOnline = onlineUserIds.has(otherUser.id);
+  const isReachable = reachableUserIds.has(otherUser.id);
   const isPeerTyping = !!typingMap[otherUser.id];
 
   const emojis = ['😀', '🔥', '👍', '❤️', '🚀', '🎉', '👋', '✨', '💻', '🙌', '☕', '💯'];
@@ -322,6 +323,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
             name={otherUser.full_name}
             size="md"
             isOnline={isOnline}
+            isReachable={isReachable}
             showOnlineStatus
             planId={otherUser.plan_id}
           />
@@ -334,8 +336,12 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
               {isPeerTyping ? (
                 <span className="text-brand-400 font-medium animate-pulse">Typing...</span>
               ) : isOnline ? (
-                <span className="text-emerald-400 flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> Active Now
+                <span className="text-emerald-400 flex items-center gap-1 font-semibold">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Active Now
+                </span>
+              ) : isReachable ? (
+                <span className="text-amber-300 flex items-center gap-1 font-semibold">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400" /> Available on Mobile
                 </span>
               ) : (
                 <span>@{otherUser.username} • {otherUser.country || 'Global'}</span>

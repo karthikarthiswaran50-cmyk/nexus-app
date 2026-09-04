@@ -6,12 +6,23 @@ import { saveMessage } from './controllers/chat.js';
 import { recordCallLog } from './controllers/calls.js';
 import { getUserWithPlan } from './controllers/auth.js';
 import { db } from './db.js';
-import { sendCallPushNotification, sendMessagePushNotification } from './services/firebase.js';
+import { sendPushToUser } from './services/webpush.js';
 
 interface SocketUser {
   userId: string;
   socketId: string;
   user: UserWithPlan | null;
+}
+
+interface PendingCall {
+  callerId: string;
+  receiverId: string;
+  caller: UserWithPlan;
+  callType: CallType;
+  sdpOffer: any;
+  createdAt: number;
+  expiresAt: number;
+  timeoutId: NodeJS.Timeout;
 }
 
 export function setupSocket(io: Server) {
@@ -21,6 +32,8 @@ export function setupSocket(io: Server) {
   const socketUsers = new Map<string, string>();
   // Map: active call pairs (to track in-progress calls)
   const activeCalls = new Map<string, { callerId: string; receiverId: string; callType: CallType; startedAt: number }>();
+  // Map: pending call invitations for offline/sleeping devices (receiverId -> PendingCall)
+  const pendingCalls = new Map<string, PendingCall>();
 
   function getSocketsForUser(userId: string): string[] {
     return Array.from(userSockets.get(userId) || []);
@@ -28,7 +41,21 @@ export function setupSocket(io: Server) {
 
   function broadcastOnlineList() {
     const onlineUserIds = Array.from(userSockets.keys());
+    let reachableUserIds: string[] = [];
+    try {
+      const subRows = db.prepare('SELECT DISTINCT user_id FROM push_subscriptions').all() as any[];
+      const settingRows = db.prepare('SELECT user_id FROM user_settings WHERE fcm_token IS NOT NULL').all() as any[];
+      reachableUserIds = Array.from(new Set([
+        ...onlineUserIds,
+        ...subRows.map(r => r.user_id),
+        ...settingRows.map(r => r.user_id),
+      ]));
+    } catch (e) {
+      reachableUserIds = onlineUserIds;
+    }
+
     io.emit('presence:online_list', onlineUserIds);
+    io.emit('presence:reachable_list', reachableUserIds);
   }
 
   io.use((socket, next) => {
@@ -61,20 +88,40 @@ export function setupSocket(io: Server) {
     }
     userSockets.get(userId)!.add(socket.id);
 
-    // Broadcast updated online list
+    // Broadcast updated presence lists
     broadcastOnlineList();
+
+    // Check if this connecting user has a pending incoming call waiting
+    const checkAndDeliverPendingCall = () => {
+      if (pendingCalls.has(userId)) {
+        const pending = pendingCalls.get(userId)!;
+        if (Date.now() < pending.expiresAt) {
+          socket.emit('call:incoming', {
+            caller: pending.caller,
+            callType: pending.callType,
+            sdpOffer: pending.sdpOffer,
+          });
+        } else {
+          clearTimeout(pending.timeoutId);
+          pendingCalls.delete(userId);
+        }
+      }
+    };
+
+    checkAndDeliverPendingCall();
+    socket.on('call:check_pending', checkAndDeliverPendingCall);
 
     // ----------------------------------------------------
     // 1. PRESENCE
     // ----------------------------------------------------
     socket.on('presence:get_online', () => {
-      socket.emit('presence:online_list', Array.from(userSockets.keys()));
+      broadcastOnlineList();
     });
 
     // ----------------------------------------------------
     // 2. REAL-TIME CHAT
     // ----------------------------------------------------
-    socket.on('chat:send_message', (data: {
+    socket.on('chat:send_message', async (data: {
       receiverId: string;
       content: string;
       type?: 'text' | 'image' | 'audio' | 'system' | 'call_log';
@@ -92,7 +139,7 @@ export function setupSocket(io: Server) {
           mediaUrl,
         });
 
-        // Emit to all sockets of receiver
+        // Emit to all active sockets of receiver
         const receiverSocketIds = getSocketsForUser(receiverId);
         receiverSocketIds.forEach((sId) => {
           io.to(sId).emit('chat:new_message', result);
@@ -101,27 +148,36 @@ export function setupSocket(io: Server) {
         // Emit back to sender
         socket.emit('chat:message_sent', result);
 
-        // Also trigger background mobile push notification if receiver has FCM token
-        try {
-          const receiverSettings = db.prepare('SELECT fcm_token FROM user_settings WHERE user_id = ?').get(receiverId) as any;
-          if (receiverSettings?.fcm_token) {
-            const sender = getUserWithPlan(userId);
-            const preview = type === 'text'
-              ? (content || '')
-              : (type as string) === 'audio' || (type as string) === 'voice'
-              ? '🎤 Voice Message'
-              : type === 'image'
-              ? '📷 Photo'
-              : '📎 Attachment';
-            sendMessagePushNotification({
-              fcmToken: receiverSettings.fcm_token,
-              senderName: sender?.full_name || sender?.username || 'Nexus Contact',
-              messagePreview: preview,
-            });
-          }
-        } catch (pushErr) {
-          console.warn('Chat message FCM push error:', pushErr);
-        }
+        // Always dispatch high-priority Web Push / FCM to receiver's mobile device
+        const sender = getUserWithPlan(userId);
+        const preview = type === 'text'
+          ? (content || '')
+          : (type as string) === 'audio' || (type as string) === 'voice'
+          ? '🎤 Voice Message'
+          : type === 'image'
+          ? '📷 Photo'
+          : '📎 Attachment';
+
+        sendPushToUser(
+          receiverId,
+          {
+            notification: {
+              title: `💬 ${sender?.full_name || 'Nexus Contact'}`,
+              body: preview,
+              icon: sender?.avatar_url || '/icon-192.svg',
+              badge: '/icon-192.svg',
+            },
+            data: {
+              type: 'message',
+              conversationId: result.conversationId,
+              senderId: userId,
+              senderName: sender?.full_name || 'Nexus Contact',
+              tag: `nexus-msg-${result.conversationId}`,
+              url: '/',
+            },
+          },
+          false
+        ).catch(() => {});
       } catch (err) {
         console.error('Socket chat:send_message error:', err);
       }
@@ -157,7 +213,7 @@ export function setupSocket(io: Server) {
     // ----------------------------------------------------
     // 3. WEBRTC CALL SIGNALING (AUDIO & VIDEO)
     // ----------------------------------------------------
-    socket.on('call:initiate', (data: {
+    socket.on('call:initiate', async (data: {
       receiverId: string;
       callType: CallType;
       sdpOffer: any;
@@ -185,38 +241,6 @@ export function setupSocket(io: Server) {
         return;
       }
 
-      // Check if receiver is online
-      const receiverSockets = getSocketsForUser(receiverId);
-      if (receiverSockets.length === 0) {
-        // Log missed call
-        recordCallLog({
-          callerId: userId,
-          receiverId,
-          callType,
-          status: 'missed',
-          duration: 0,
-        });
-
-        // Trigger mobile push notification via FCM so recipient's device receives notification
-        try {
-          const receiverSettings = db.prepare('SELECT fcm_token FROM user_settings WHERE user_id = ?').get(receiverId) as any;
-          if (receiverSettings?.fcm_token) {
-            sendCallPushNotification({
-              fcmToken: receiverSettings.fcm_token,
-              callerName: caller.full_name,
-              callerAvatar: caller.avatar_url,
-              callType,
-            });
-          }
-        } catch (e) {}
-
-        socket.emit('call:user_offline', {
-          receiverId,
-          message: `${receiver.full_name} is currently offline. A push notification was sent to their device.`,
-        });
-        return;
-      }
-
       // Check if receiver is already in an active call
       const isReceiverBusy = Array.from(activeCalls.values()).some(
         c => c.callerId === receiverId || c.receiverId === receiverId
@@ -230,7 +254,30 @@ export function setupSocket(io: Server) {
         return;
       }
 
-      // Track call start
+      // 1. Dispatch Instant Web Push / FCM to wake up recipient's phone / lock screen
+      sendPushToUser(
+        receiverId,
+        {
+          notification: {
+            title: `📞 Incoming ${callType === 'video' ? 'Video' : 'Audio'} Call`,
+            body: `${caller.full_name} is calling you on Nexus Royal... Tap to answer!`,
+            icon: caller.avatar_url || '/icon-192.svg',
+            badge: '/icon-192.svg',
+          },
+          data: {
+            type: 'call',
+            callType,
+            callerId: userId,
+            callerName: caller.full_name,
+            callerAvatar: caller.avatar_url || '',
+            tag: 'nexus-incoming-call',
+            url: '/',
+          },
+        },
+        true
+      ).catch(() => {});
+
+      // Track active call
       activeCalls.set(`${userId}-${receiverId}`, {
         callerId: userId,
         receiverId,
@@ -238,27 +285,61 @@ export function setupSocket(io: Server) {
         startedAt: Date.now(),
       });
 
-      // Forward incoming call signal to receiver
-      receiverSockets.forEach((sId) => {
-        io.to(sId).emit('call:incoming', {
+      const receiverSockets = getSocketsForUser(receiverId);
+
+      if (receiverSockets.length > 0) {
+        // Forward incoming call signal directly to active receiver sockets
+        receiverSockets.forEach((sId) => {
+          io.to(sId).emit('call:incoming', {
+            caller,
+            callType,
+            sdpOffer,
+          });
+        });
+        socket.emit('call:ringing', { receiverId, status: 'ringing' });
+      } else {
+        // Recipient is not actively in socket (phone screen locked, background PWA, or data on)
+        // DO NOT ABORT! Put into pending call state with 45s ringing timer (WhatsApp style)
+        if (pendingCalls.has(receiverId)) {
+          clearTimeout(pendingCalls.get(receiverId)!.timeoutId);
+        }
+
+        const timeoutId = setTimeout(() => {
+          if (pendingCalls.has(receiverId)) {
+            pendingCalls.delete(receiverId);
+            activeCalls.delete(`${userId}-${receiverId}`);
+            recordCallLog({
+              callerId: userId,
+              receiverId,
+              callType,
+              status: 'missed',
+              duration: 0,
+            });
+            socket.emit('call:user_offline', {
+              receiverId,
+              message: `${receiver.full_name} is not answering. Missed call recorded.`,
+            });
+          }
+        }, 45000);
+
+        pendingCalls.set(receiverId, {
+          callerId: userId,
+          receiverId,
           caller,
           callType,
           sdpOffer,
+          createdAt: Date.now(),
+          expiresAt: Date.now() + 45000,
+          timeoutId,
         });
-      });
 
-      // Also trigger FCM push notification to wake device/screen if in background or screen locked
-      try {
-        const receiverSettings = db.prepare('SELECT fcm_token FROM user_settings WHERE user_id = ?').get(receiverId) as any;
-        if (receiverSettings?.fcm_token) {
-          sendCallPushNotification({
-            fcmToken: receiverSettings.fcm_token,
-            callerName: caller.full_name,
-            callerAvatar: caller.avatar_url,
-            callType,
-          });
-        }
-      } catch (e) {}
+        // Inform caller device to keep ringing and showing "Ringing mobile..."
+        socket.emit('call:ringing', {
+          receiverId,
+          status: 'ringing',
+          message: `Ringing ${receiver.full_name}'s phone...`,
+        });
+      }
     });
 
     socket.on('call:accept', (data: {
@@ -266,8 +347,14 @@ export function setupSocket(io: Server) {
       sdpAnswer: any;
     }) => {
       const { callerId, sdpAnswer } = data;
-      const callerSockets = getSocketsForUser(callerId);
 
+      // Clear any pending call for this user
+      if (pendingCalls.has(userId)) {
+        clearTimeout(pendingCalls.get(userId)!.timeoutId);
+        pendingCalls.delete(userId);
+      }
+
+      const callerSockets = getSocketsForUser(callerId);
       callerSockets.forEach((sId) => {
         io.to(sId).emit('call:accepted', {
           receiverId: userId,
@@ -282,6 +369,11 @@ export function setupSocket(io: Server) {
     }) => {
       const { callerId, reason = 'declined' } = data;
       activeCalls.delete(`${callerId}-${userId}`);
+
+      if (pendingCalls.has(userId)) {
+        clearTimeout(pendingCalls.get(userId)!.timeoutId);
+        pendingCalls.delete(userId);
+      }
 
       recordCallLog({
         callerId,
@@ -322,9 +414,18 @@ export function setupSocket(io: Server) {
     }) => {
       const { targetUserId, callType = 'video', duration = 0 } = data;
       
-      // Cleanup active call map
+      // Cleanup active call map & pending calls
       activeCalls.delete(`${userId}-${targetUserId}`);
       activeCalls.delete(`${targetUserId}-${userId}`);
+
+      if (pendingCalls.has(targetUserId)) {
+        clearTimeout(pendingCalls.get(targetUserId)!.timeoutId);
+        pendingCalls.delete(targetUserId);
+      }
+      if (pendingCalls.has(userId)) {
+        clearTimeout(pendingCalls.get(userId)!.timeoutId);
+        pendingCalls.delete(userId);
+      }
 
       // Record call log
       recordCallLog({
@@ -385,16 +486,13 @@ export function setupSocket(io: Server) {
       }
       socketUsers.delete(socket.id);
 
-      // Check if this user was in any active calls
+      // Clean up any active call initiated by or involving this user
       for (const [key, call] of activeCalls.entries()) {
         if (call.callerId === userId || call.receiverId === userId) {
           const peerId = call.callerId === userId ? call.receiverId : call.callerId;
           const peerSockets = getSocketsForUser(peerId);
           peerSockets.forEach((sId) => {
-            io.to(sId).emit('call:ended', {
-              fromUserId: userId,
-              duration: Math.round((Date.now() - call.startedAt) / 1000),
-            });
+            io.to(sId).emit('call:ended', { fromUserId: userId, duration: 0 });
           });
           activeCalls.delete(key);
         }

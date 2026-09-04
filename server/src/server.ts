@@ -21,6 +21,7 @@ import * as chatCtrl from './controllers/chat.js';
 import * as callsCtrl from './controllers/calls.js';
 import * as subsCtrl from './controllers/subscriptions.js';
 import * as webrtcCtrl from './controllers/webrtc.js';
+import { getVapidPublicKey, savePushSubscription, sendPushToUser } from './services/webpush.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -177,6 +178,51 @@ app.put('/api/users/settings', requireAuth, usersCtrl.updateSettings);
 app.put('/api/users/profile', requireAuth, usersCtrl.updateProfile);
 app.post('/api/users/fcm-token', requireAuth, usersCtrl.updateFcmToken);
 app.get('/api/users/:id', requireAuth, usersCtrl.getUserByIdOrUsername);
+
+// Push Notification & VAPID Endpoints
+app.get('/api/notifications/vapid-public-key', (_req, res) => {
+  res.json({ publicKey: getVapidPublicKey() });
+});
+
+app.post('/api/notifications/subscribe', requireAuth, (req: any, res) => {
+  const userId = req.user?.userId;
+  const { subscription } = req.body;
+  if (!userId || !subscription) {
+    return res.status(400).json({ error: 'Missing subscription details' });
+  }
+  savePushSubscription(userId, subscription);
+  res.json({ success: true, message: 'Web Push subscription registered' });
+});
+
+app.post('/api/notifications/test', requireAuth, async (req: any, res) => {
+  const userId = req.user?.userId;
+  const { type = 'message' } = req.body;
+  const isCall = type === 'call';
+
+  const sent = await sendPushToUser(
+    userId,
+    {
+      notification: {
+        title: isCall ? '📞 Incoming Call (Test)' : '💬 Nexus Royal Alert (Test)',
+        body: isCall
+          ? 'Nexus Royal is calling your device. Background ringing is active!'
+          : '👑 Push notifications and vibration are working smoothly!',
+        icon: '/icon-192.svg',
+        badge: '/icon-192.svg',
+      },
+      data: {
+        type: isCall ? 'call' : 'message',
+        callType: 'video',
+        callerName: 'Nexus Royal Tester',
+        tag: isCall ? 'nexus-incoming-call' : 'nexus-chat-message',
+        url: '/',
+      },
+    },
+    isCall
+  );
+
+  res.json({ success: true, delivered: sent });
+});
 
 // 3. Chat Routes
 app.get('/api/chat/conversations', requireAuth, chatCtrl.getConversations);

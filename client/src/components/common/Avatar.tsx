@@ -7,6 +7,7 @@ interface AvatarProps {
   name: string;
   size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl' | '2xl';
   isOnline?: boolean;
+  isReachable?: boolean;
   showOnlineStatus?: boolean;
   planId?: SubscriptionPlanId;
   className?: string;
@@ -17,6 +18,7 @@ export const Avatar: React.FC<AvatarProps> = ({
   name,
   size = 'md',
   isOnline = false,
+  isReachable = false,
   showOnlineStatus = false,
   planId,
   className = '',
@@ -88,13 +90,17 @@ export const Avatar: React.FC<AvatarProps> = ({
         </div>
       )}
 
-      {/* Online indicator */}
+      {/* Online / Reachable indicator */}
       {showOnlineStatus && (
         <span
           className={`absolute bottom-0 right-0 ${statusDotSizes[size]} rounded-full ring-dark-950 ${
-            isOnline ? 'bg-emerald-400 shadow-sm shadow-emerald-400/80' : 'bg-dark-600'
+            isOnline
+              ? 'bg-emerald-400 shadow-sm shadow-emerald-400/80 animate-pulse'
+              : isReachable
+              ? 'bg-amber-400 shadow-sm shadow-amber-400/80'
+              : 'bg-dark-600'
           }`}
-          title={isOnline ? 'Online' : 'Offline'}
+          title={isOnline ? 'Active Now' : isReachable ? 'Available on Mobile' : 'Offline'}
         />
       )}
 

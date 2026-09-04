@@ -32,7 +32,7 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
   initialSelectedUser,
 }) => {
   const { user } = useAuth();
-  const { onlineUserIds, latestMessage } = useSocket();
+  const { onlineUserIds, reachableUserIds, latestMessage } = useSocket();
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedUser, setSelectedUser] = useState<User | null>(initialSelectedUser || null);
@@ -155,6 +155,7 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
               if (!other) return null;
 
               const isOnline = onlineUserIds.has(other.id);
+              const isReachable = reachableUserIds.has(other.id);
               const isSelected = selectedUser?.id === other.id;
 
               return (
@@ -173,6 +174,7 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
                     name={other.full_name}
                     size="md"
                     isOnline={isOnline}
+                    isReachable={isReachable}
                     showOnlineStatus
                     planId={other.plan_id}
                   />

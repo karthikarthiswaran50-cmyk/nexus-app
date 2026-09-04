@@ -25,7 +25,7 @@ interface DirectoryViewProps {
 
 export const DirectoryView: React.FC<DirectoryViewProps> = ({ onStartChat, onViewProfile }) => {
   const { user: currentUser } = useAuth();
-  const { startCall, onlineUserIds } = useSocket();
+  const { startCall, onlineUserIds, reachableUserIds } = useSocket();
 
   const [users, setUsers] = useState<User[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -143,6 +143,7 @@ export const DirectoryView: React.FC<DirectoryViewProps> = ({ onStartChat, onVie
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {filteredUsers.map((member) => {
             const isOnline = onlineUserIds.has(member.id);
+            const isReachable = reachableUserIds.has(member.id);
 
             return (
               <div
@@ -158,6 +159,7 @@ export const DirectoryView: React.FC<DirectoryViewProps> = ({ onStartChat, onVie
                         name={member.full_name}
                         size="lg"
                         isOnline={isOnline}
+                        isReachable={isReachable}
                         showOnlineStatus
                         planId={member.plan_id}
                       />
@@ -176,11 +178,25 @@ export const DirectoryView: React.FC<DirectoryViewProps> = ({ onStartChat, onVie
                     {member.bio || 'Verified member on Nexus Royal.'}
                   </p>
 
-                  {/* Status / Location */}
+                  {/* Status / Location / Presence */}
                   <div className="space-y-1.5 mb-6 text-[11px] text-dark-400">
                     <div className="flex items-center gap-1.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_#10b981]" />
-                      <span className="truncate italic text-amber-200/90">{member.status || 'Active'}</span>
+                      {isOnline ? (
+                        <>
+                          <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_#10b981] animate-pulse" />
+                          <span className="text-emerald-400 font-bold">Active Now</span>
+                        </>
+                      ) : isReachable ? (
+                        <>
+                          <span className="w-2 h-2 rounded-full bg-amber-400 shadow-[0_0_8px_#f59e0b]" />
+                          <span className="text-amber-300 font-bold">Available on Mobile</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="w-1.5 h-1.5 rounded-full bg-dark-600" />
+                          <span className="truncate text-dark-400">{member.status || 'Offline'}</span>
+                        </>
+                      )}
                     </div>
                     <div className="flex items-center gap-1.5 text-dark-500">
                       <Globe className="w-3 h-3 text-gold-400" />

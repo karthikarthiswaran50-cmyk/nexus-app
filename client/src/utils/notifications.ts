@@ -1,8 +1,9 @@
 /**
- * Comprehensive System & Web Notification Manager
- * Supports Web Notification API, Service Worker Push/Background notifications,
+ * Comprehensive System, Web Push & Mobile Notification Manager
+ * Supports Web Push (RFC 8292 VAPID), Service Worker Push/Background notifications,
  * and Mobile Haptic Vibration.
  */
+import axios from 'axios';
 
 let activeCallNotification: Notification | null = null;
 
@@ -13,6 +14,56 @@ export const getNotificationPermissionStatus = (): 'granted' | 'denied' | 'defau
   return Notification.permission;
 };
 
+function urlBase64ToUint8Array(base64String: string): Uint8Array {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding)
+    .replace(/-/g, '+')
+    .replace(/_/g, '/');
+
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
+
+/**
+ * Register Web Push Subscription with server for background device wake-up
+ */
+export const subscribeToWebPush = async (): Promise<boolean> => {
+  if (typeof window === 'undefined' || !('serviceWorker' in navigator) || !('PushManager' in window)) {
+    return false;
+  }
+
+  try {
+    const registration = await navigator.serviceWorker.ready;
+    const res = await axios.get('/api/notifications/vapid-public-key');
+    const vapidPublicKey = res.data.publicKey;
+    if (!vapidPublicKey) return false;
+
+    const applicationServerKey = urlBase64ToUint8Array(vapidPublicKey);
+    let subscription = await registration.pushManager.getSubscription();
+    if (!subscription) {
+      subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: applicationServerKey as any,
+      });
+    }
+
+    await axios.post('/api/notifications/subscribe', {
+      subscription: subscription.toJSON(),
+    });
+
+    console.log('📱 Registered Web Push subscription with server!');
+    return true;
+  } catch (err) {
+    console.warn('Web Push subscription registration note:', err);
+    return false;
+  }
+};
+
 export const requestNotificationPermission = async (): Promise<boolean> => {
   if (typeof window === 'undefined' || !('Notification' in window)) {
     return false;
@@ -20,7 +71,12 @@ export const requestNotificationPermission = async (): Promise<boolean> => {
 
   try {
     const result = await Notification.requestPermission();
-    return result === 'granted';
+    if (result === 'granted') {
+      // Automatically register Web Push subscription
+      subscribeToWebPush().catch(() => {});
+      return true;
+    }
+    return false;
   } catch (err) {
     console.warn('Error requesting notification permission:', err);
     return false;
@@ -139,7 +195,7 @@ export const showMessageNotification = (
   }
 };
 
-function showDesktopFallbackNotification(title: string, options: NotificationOptions) {
+function showDesktopFallbackNotification(title: string, options: any) {
   if ('Notification' in window && Notification.permission === 'granted') {
     try {
       const notif = new Notification(title, options);
