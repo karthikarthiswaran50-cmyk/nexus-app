@@ -18,6 +18,7 @@ export const firebaseConfig = {
   messagingSenderId: metaEnv.VITE_FIREBASE_MESSAGING_SENDER_ID || "866191964279",
   appId: metaEnv.VITE_FIREBASE_APP_ID || "1:866191964279:web:5d6d6cd724155869b9ae72",
   measurementId: metaEnv.VITE_FIREBASE_MEASUREMENT_ID || "G-WCXMQ15D9W",
+  vapidKey: metaEnv.VITE_FIREBASE_VAPID_KEY || "BC0_EL60hsA9QpiPR7xwoxy7iK51dviW9NB5WnwHm-1YCP2tTIZEnQELodTM-mEQgDI71GyhwqjuZ173wbYpgYw",
 };
 
 export const isFirebaseConfigured = (): boolean => {
@@ -211,9 +212,10 @@ export async function requestFcmToken(vapidKey?: string): Promise<string | null>
     }
 
     const currentToken = await getToken(messaging, {
-      vapidKey: vapidKey || metaEnv.VITE_FIREBASE_VAPID_KEY,
+      vapidKey: vapidKey || metaEnv.VITE_FIREBASE_VAPID_KEY || (firebaseConfig as any).vapidKey,
       serviceWorkerRegistration: registration,
     });
+
     return currentToken || null;
   } catch (err) {
     console.warn('Error retrieving FCM registration token:', err);
