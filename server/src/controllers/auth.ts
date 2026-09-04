@@ -316,3 +316,64 @@ export async function firebaseLogin(req: Request, res: Response): Promise<void> 
   }
 }
 
+export async function setUsername(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
+    const rawUsername = (req.body.username || '').trim().replace(/^@/, '').toLowerCase();
+    const cleanUsername = sanitizeUsername(rawUsername);
+
+    if (cleanUsername.length < 3 || cleanUsername.length > 25) {
+      res.status(400).json({ error: 'Username must be between 3 and 25 characters.' });
+      return;
+    }
+
+    if (!/^[a-zA-Z0-9_]+$/.test(cleanUsername)) {
+      res.status(400).json({ error: 'Username can only contain letters, numbers, and underscores.' });
+      return;
+    }
+
+    const existing = db.prepare('SELECT id FROM users WHERE lower(username) = ? AND id != ?').get(cleanUsername, userId);
+    if (existing) {
+      res.status(409).json({ error: 'This username is already taken. Please choose another.' });
+      return;
+    }
+
+    db.prepare('UPDATE users SET username = ?, updated_at = datetime(\'now\') WHERE id = ?').run(cleanUsername, userId);
+
+    const user = getUserWithPlan(userId);
+    if (!user) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    persistUserToPg({
+      id: user.id,
+      email: user.email,
+      username: cleanUsername,
+      password_hash: '',
+      full_name: user.full_name,
+      avatar_url: user.avatar_url,
+      bio: user.bio,
+      status: user.status,
+      country: user.country,
+    });
+
+    const token = jwt.sign(
+      { userId: user.id, email: user.email, username: cleanUsername },
+      JWT_SECRET,
+      { expiresIn: '30d' }
+    );
+
+    res.json({ success: true, token, user, message: 'Unique username claimed successfully!' });
+  } catch (error) {
+    console.error('setUsername error:', error);
+    res.status(500).json({ error: 'Failed to claim username.' });
+  }
+}
+
+

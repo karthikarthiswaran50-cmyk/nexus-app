@@ -41,10 +41,12 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ viewUser, onNavigateTo
 
   const [isEditing, setIsEditing] = useState(false);
   const [fullName, setFullName] = useState(currentUser?.full_name || '');
+  const [username, setUsername] = useState(currentUser?.username || '');
   const [bio, setBio] = useState(currentUser?.bio || '');
   const [status, setStatus] = useState(currentUser?.status || '👑 Imperial VIP on Nexus');
   const [country, setCountry] = useState(currentUser?.country || 'Global');
   const [avatarUrl, setAvatarUrl] = useState(currentUser?.avatar_url || '');
+
   
   // Photo modal & upload states
   const [showPhotoModal, setShowPhotoModal] = useState(false);
@@ -187,6 +189,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ viewUser, onNavigateTo
     try {
       await updateProfile({
         full_name: fullName,
+        username,
         bio,
         status,
         country,
@@ -194,6 +197,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ viewUser, onNavigateTo
       });
       setIsEditing(false);
       showToast('Profile passport updated!');
+
 
       trackUserActivity({
         userId: currentUser?.id,
@@ -369,12 +373,10 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ viewUser, onNavigateTo
             </button>
           </div>
 
-          {/* Full Name & Location */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {/* Name & Country Inputs */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
-              <label className="block text-xs font-bold text-dark-300 mb-1.5">
-                Full Name <span className="text-amber-400">*</span>
-              </label>
+              <label className="block text-xs font-bold text-dark-300 mb-1.5">Full Name *</label>
               <input
                 type="text"
                 required
@@ -387,12 +389,28 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ viewUser, onNavigateTo
             </div>
 
             <div>
+              <label className="block text-xs font-bold text-dark-300 mb-1.5">Unique Royal ID *</label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gold-400 font-bold text-xs">@</span>
+                <input
+                  type="text"
+                  required
+                  maxLength={25}
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/\s+/g, '_'))}
+                  placeholder="your_handle"
+                  className="w-full pl-7 pr-3 py-2.5 bg-dark-850 border border-gold-500/20 rounded-xl text-xs text-white placeholder:text-dark-500 focus:outline-none focus:border-gold-400 focus:ring-1 focus:ring-gold-400/50 transition-all font-mono font-semibold"
+                />
+              </div>
+            </div>
+
+            <div>
               <label className="block text-xs font-bold text-dark-300 mb-1.5">Country / Realm</label>
               <input
                 type="text"
                 value={country}
                 onChange={(e) => setCountry(e.target.value)}
-                placeholder="e.g. India, Global, United Kingdom"
+                placeholder="e.g. India, Global"
                 className="w-full px-4 py-2.5 bg-dark-850 border border-gold-500/20 rounded-xl text-xs text-white placeholder:text-dark-500 focus:outline-none focus:border-gold-400 focus:ring-1 focus:ring-gold-400/50 transition-all"
               />
             </div>

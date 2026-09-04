@@ -15,8 +15,10 @@ interface AuthContextType {
   refreshUser: () => Promise<void>;
   updateProfile: (data: Partial<User>) => Promise<void>;
   updateSettings: (data: Partial<UserSettings>) => Promise<void>;
+  claimUsername: (username: string) => Promise<void>;
   loginDemoUser: (username: string) => Promise<void>;
 }
+
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -120,7 +122,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (e) {}
   };
 
+  const claimUsername = async (newUsername: string) => {
+    const res = await axios.post('/api/auth/set-username', { username: newUsername });
+    if (res.data?.token) {
+      localStorage.setItem('nexus_auth_token', res.data.token);
+      setToken(res.data.token);
+      axios.defaults.headers.common['Authorization'] = `Bearer ${res.data.token}`;
+    }
+    if (res.data?.user) {
+      setUser(res.data.user);
+      localStorage.setItem('nexus_saved_username', res.data.user.username);
+    }
+  };
+
   const register = async (data: { email: string; username: string; password: string; full_name: string; avatar_url?: string; bio?: string; country?: string }) => {
+
     const res = await axios.post('/api/auth/register', data);
     const newToken = res.data.token;
     localStorage.setItem('nexus_auth_token', newToken);
@@ -192,9 +208,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         refreshUser,
         updateProfile,
         updateSettings,
+        claimUsername,
         loginDemoUser,
       }}
     >
+
       {children}
     </AuthContext.Provider>
   );

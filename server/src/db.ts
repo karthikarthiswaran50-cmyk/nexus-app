@@ -161,10 +161,10 @@ export function initDatabase() {
   // If PostgreSQL is configured, initialize remote tables and restore all saved users!
   if (pgPool) {
     initPostgresAndRestore();
-  } else {
-    seedDefaultData();
   }
+  purgeDemoData();
 }
+
 
 // ----------------------------------------------------
 // PostgreSQL Persistent Tables & Bidirectional Restore
@@ -298,15 +298,15 @@ async function initPostgresAndRestore() {
 
       console.log('✅ PostgreSQL database restored successfully! User sessions and accounts are intact.');
     } else {
-      console.log('🌱 PostgreSQL is empty. Seeding initial accounts into PostgreSQL and local database...');
-      seedDefaultData();
-      await syncAllToPostgres();
+      console.log('🌱 PostgreSQL is empty. Ready for authentic user registrations.');
+      purgeDemoData();
     }
   } catch (err) {
     console.error('⚠️ PostgreSQL sync error, operating in local fallback mode:', err);
-    seedDefaultData();
+    purgeDemoData();
   }
 }
+
 
 // ----------------------------------------------------
 // Persistent Asynchronous Sync to PostgreSQL
@@ -448,120 +448,55 @@ async function syncAllToPostgres() {
 }
 
 // ----------------------------------------------------
-// Default Seeding
+// Purge Demo & Mock Data Permanently
 // ----------------------------------------------------
-function seedDefaultData() {
-  const existingUsers = db.prepare('SELECT count(*) as count FROM users').get() as { count: number };
-  if (existingUsers && existingUsers.count > 0) {
-    return;
+export function purgeDemoData() {
+  try {
+    const demoIds = ['usr_demo', 'usr_elena', 'usr_marcus', 'usr_sophia', 'usr_p86aahqcmtk12r5k'];
+    const placeholders = demoIds.map(() => '?').join(',');
+
+    // Delete conversations involving demo users
+    db.prepare(`
+      DELETE FROM conversations 
+      WHERE user1_id IN (${placeholders}) OR user2_id IN (${placeholders})
+    `).run(...demoIds, ...demoIds);
+
+    // Delete call logs involving demo users
+    db.prepare(`
+      DELETE FROM call_logs 
+      WHERE caller_id IN (${placeholders}) OR receiver_id IN (${placeholders})
+    `).run(...demoIds, ...demoIds);
+
+    // Delete push subscriptions & settings for demo users
+    db.prepare(`
+      DELETE FROM user_settings 
+      WHERE user_id IN (${placeholders})
+    `).run(...demoIds);
+
+    db.prepare(`
+      DELETE FROM subscriptions 
+      WHERE user_id IN (${placeholders})
+    `).run(...demoIds);
+
+    // Finally delete demo users
+    const result = db.prepare(`
+      DELETE FROM users 
+      WHERE id IN (${placeholders}) OR email LIKE '%@nexus.app'
+    `).run(...demoIds);
+
+    if (result.changes > 0) {
+      console.log(`🧹 Purged ${result.changes} demo / mock user accounts from database.`);
+    }
+
+    // Also purge from PostgreSQL if connected
+    if (pgPool) {
+      pgPool.query(`
+        DELETE FROM users 
+        WHERE id = ANY($1::varchar[]) OR email LIKE '%@nexus.app'
+      `, [demoIds]).catch(() => {});
+    }
+  } catch (err: any) {
+    console.warn('purgeDemoData note:', err.message);
   }
-
-  const salt = bcrypt.genSaltSync(10);
-  const passwordHash = bcrypt.hashSync('password123', salt);
-  const now = new Date().toISOString();
-  const nextMonth = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-  const nextYear = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
-
-  const seedUsers = [
-    {
-      id: 'usr_demo',
-      email: 'demo@nexus.app',
-      username: 'demo_user',
-      full_name: 'Alex Rivera',
-      avatar_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80',
-      bio: 'Digital nomad, creator & technology enthusiast.',
-      status: 'Available for quick calls ☕',
-      country: 'United States',
-      plan: 'pro',
-      period_end: nextMonth,
-    },
-    {
-      id: 'usr_elena',
-      email: 'elena@nexus.app',
-      username: 'elena_ux',
-      full_name: 'Elena Rostova',
-      avatar_url: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&auto=format&fit=crop&q=80',
-      bio: 'Lead Product Designer at Studio Matrix. Specializing in WebRTC and UI systems.',
-      status: 'In design review 🎨',
-      country: 'Sweden',
-      plan: 'pro',
-      period_end: nextMonth,
-    },
-    {
-      id: 'usr_marcus',
-      email: 'marcus@nexus.app',
-      username: 'marcus_dev',
-      full_name: 'Marcus Chen',
-      avatar_url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=80',
-      bio: 'Real-time distributed systems engineer. Audio & Video protocol hacker.',
-      status: 'Coding high performance WebRTC 🚀',
-      country: 'Singapore',
-      plan: 'vip',
-      period_end: nextYear,
-    },
-    {
-      id: 'usr_sophia',
-      email: 'sophia@nexus.app',
-      username: 'sophia_ai',
-      full_name: 'Sophia Taylor',
-      avatar_url: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=200&auto=format&fit=crop&q=80',
-      bio: 'AI researcher and remote team orchestrator. Always excited to connect!',
-      status: 'Exploring generative voice models 🎙️',
-      country: 'Canada',
-      plan: 'free',
-      period_end: nextMonth,
-    },
-  ];
-
-  const insertUser = db.prepare(`
-    INSERT OR REPLACE INTO users (id, email, username, password_hash, full_name, avatar_url, bio, status, country, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-
-  const insertSub = db.prepare(`
-    INSERT OR REPLACE INTO subscriptions (id, user_id, plan_id, status, current_period_end, billing_cycle, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `);
-
-  const insertSettings = db.prepare(`
-    INSERT OR REPLACE INTO user_settings (id, user_id, theme, allow_calls_from, notification_sound, read_receipts, auto_accept_calls)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `);
-
-  for (const u of seedUsers) {
-    insertUser.run(u.id, u.email, u.username, passwordHash, u.full_name, u.avatar_url, u.bio, u.status, u.country, now, now);
-    insertSub.run(`sub_${u.id}`, u.id, u.plan, 'active', u.period_end, 'monthly', now);
-    insertSettings.run(`set_${u.id}`, u.id, 'dark', 'everyone', 1, 1, 0);
-  }
-
-  // Seed sample conversation between Alex (demo) and Elena
-  const insertConv = db.prepare(`
-    INSERT OR REPLACE INTO conversations (id, user1_id, user2_id, last_message_at, created_at)
-    VALUES (?, ?, ?, ?, ?)
-  `);
-  const insertMsg = db.prepare(`
-    INSERT OR REPLACE INTO messages (id, conversation_id, sender_id, receiver_id, content, type, is_read, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-
-  const convId1 = 'conv_demo_elena';
-  insertConv.run(convId1, 'usr_demo', 'usr_elena', now, now);
-
-  insertMsg.run('msg_1', convId1, 'usr_elena', 'usr_demo', 'Hey Alex! Ready to test the new HD video and audio calling features?', 'text', 1, new Date(Date.now() - 3600000).toISOString());
-  insertMsg.run('msg_2', convId1, 'usr_demo', 'usr_elena', 'Hi Elena! Yes, let us start a video call right now to verify the WebRTC connection!', 'text', 1, new Date(Date.now() - 1800000).toISOString());
-  insertMsg.run('msg_3', convId1, 'usr_elena', 'usr_demo', 'Awesome! Feel free to click the video or audio call button at the top right of this chat anytime.', 'text', 0, new Date(Date.now() - 600000).toISOString());
-
-  // Seed conversation between Alex and Marcus
-  const convId2 = 'conv_demo_marcus';
-  insertConv.run(convId2, 'usr_demo', 'usr_marcus', now, now);
-  insertMsg.run('msg_4', convId2, 'usr_marcus', 'usr_demo', 'Welcome to Nexus VIP Tier! Let me know if you need any screen sharing or low-latency audio setups.', 'text', 1, new Date(Date.now() - 86400000).toISOString());
-
-  // Seed sample call logs
-  const insertCallLog = db.prepare(`
-    INSERT OR REPLACE INTO call_logs (id, caller_id, receiver_id, call_type, status, duration, started_at, ended_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-  insertCallLog.run('call_1', 'usr_elena', 'usr_demo', 'video', 'completed', 342, new Date(Date.now() - 7200000).toISOString(), new Date(Date.now() - 7200000 + 342000).toISOString());
-  insertCallLog.run('call_2', 'usr_demo', 'usr_marcus', 'audio', 'completed', 185, new Date(Date.now() - 90000000).toISOString(), new Date(Date.now() - 90000000 + 185000).toISOString());
-  insertCallLog.run('call_3', 'usr_sophia', 'usr_demo', 'video', 'missed', 0, new Date(Date.now() - 120000000).toISOString(), new Date(Date.now() - 120000000).toISOString());
 }
+

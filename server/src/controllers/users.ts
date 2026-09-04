@@ -8,37 +8,48 @@ import { sanitizeText } from '../utils/sanitize.js';
 export async function getUsers(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
     const currentUserId = req.user?.userId;
-    const query = (req.query.q as string || '').trim().toLowerCase();
+    if (!currentUserId) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
 
-    let sql = `
+    const rawQuery = (req.query.q as string || '').trim();
+
+
+    // Instagram style: Only return profiles if user actively searches
+    if (!rawQuery) {
+      res.json({ users: [] });
+      return;
+    }
+
+    const query = rawQuery.replace(/^@/, '').toLowerCase(); // strip leading '@' if user typed @username
+
+    const sql = `
       SELECT u.id, u.email, u.username, u.full_name, u.avatar_url, u.bio, u.status, u.country, u.created_at, u.updated_at,
              COALESCE(s.plan_id, 'free') as plan_id,
              COALESCE(s.status, 'active') as subscription_status,
              s.current_period_end as subscription_expires_at
       FROM users u
       LEFT JOIN subscriptions s ON u.id = s.user_id
+      WHERE u.id != ? AND (lower(u.username) LIKE ? OR lower(u.full_name) LIKE ?)
+      ORDER BY 
+        CASE 
+          WHEN lower(u.username) = ? THEN 1
+          WHEN lower(u.username) LIKE ? THEN 2
+          ELSE 3
+        END,
+        u.created_at DESC
+      LIMIT 25
     `;
 
-    const params: any[] = [];
-    const conditions: string[] = [];
+    const users = (db.prepare(sql).all(
+      currentUserId,
+      `%${query}%`,
+      `%${query}%`,
+      query,
+      `${query}%`
+    ) as unknown) as UserWithPlan[];
 
-    if (currentUserId) {
-      conditions.push('u.id != ?');
-      params.push(currentUserId);
-    }
-
-    if (query) {
-      conditions.push('(lower(u.full_name) LIKE ? OR lower(u.username) LIKE ? OR lower(u.email) LIKE ?)');
-      params.push(`%${query}%`, `%${query}%`, `%${query}%`);
-    }
-
-    if (conditions.length > 0) {
-      sql += ' WHERE ' + conditions.join(' AND ');
-    }
-
-    sql += ' ORDER BY u.created_at DESC LIMIT 50';
-
-    const users = (db.prepare(sql).all(...params) as unknown) as UserWithPlan[];
     res.json({ users });
   } catch (error) {
     console.error('getUsers error:', error);
@@ -46,14 +57,30 @@ export async function getUsers(req: AuthenticatedRequest, res: Response): Promis
   }
 }
 
+export async function checkUsernameAvailable(req: Request, res: Response): Promise<void> {
+  try {
+    const raw = (req.params.username || '').trim().replace(/^@/, '').toLowerCase();
+    const clean = sanitizeText(raw);
+    if (clean.length < 3 || clean.length > 25 || !/^[a-zA-Z0-9_]+$/.test(clean)) {
+      res.json({ available: false, reason: 'Must be 3-25 alphanumeric characters or underscores' });
+      return;
+    }
+
+    const existing = db.prepare('SELECT id FROM users WHERE lower(username) = ?').get(clean);
+    res.json({ available: !existing });
+  } catch (err) {
+    res.status(500).json({ available: false });
+  }
+}
+
 export async function getUserByIdOrUsername(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
-    const { id } = req.params;
+    const rawId = (req.params.id || '').replace(/^@/, '');
     
     // Check by ID or username
-    let user = getUserWithPlan(id);
+    let user = getUserWithPlan(rawId);
     if (!user) {
-      const byUsername = db.prepare('SELECT id FROM users WHERE lower(username) = ?').get(id.toLowerCase()) as unknown as { id: string } | undefined;
+      const byUsername = db.prepare('SELECT id FROM users WHERE lower(username) = ?').get(rawId.toLowerCase()) as unknown as { id: string } | undefined;
       if (byUsername) {
         user = getUserWithPlan(byUsername.id);
       }
@@ -79,12 +106,29 @@ export async function updateProfile(req: AuthenticatedRequest, res: Response): P
       return;
     }
 
-    const { full_name, avatar_url, bio, status, country } = req.body;
+    const { full_name, username, avatar_url, bio, status, country } = req.body;
 
     const current = db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as any;
     if (!current) {
       res.status(404).json({ error: 'User not found.' });
       return;
+    }
+
+    let updatedUsername = current.username;
+    if (username !== undefined) {
+      const cleanUser = String(username).trim().replace(/^@/, '').toLowerCase();
+      if (cleanUser !== current.username.toLowerCase()) {
+        if (cleanUser.length < 3 || cleanUser.length > 25 || !/^[a-zA-Z0-9_]+$/.test(cleanUser)) {
+          res.status(400).json({ error: 'Username must be 3-25 alphanumeric characters or underscores.' });
+          return;
+        }
+        const existing = db.prepare('SELECT id FROM users WHERE lower(username) = ? AND id != ?').get(cleanUser, userId);
+        if (existing) {
+          res.status(409).json({ error: 'This username is already taken. Please choose another.' });
+          return;
+        }
+        updatedUsername = cleanUser;
+      }
     }
 
     const updatedName = full_name !== undefined ? sanitizeText(full_name) : current.full_name;
@@ -95,15 +139,15 @@ export async function updateProfile(req: AuthenticatedRequest, res: Response): P
 
     db.prepare(`
       UPDATE users 
-      SET full_name = ?, avatar_url = ?, bio = ?, status = ?, country = ?, updated_at = datetime('now')
+      SET full_name = ?, username = ?, avatar_url = ?, bio = ?, status = ?, country = ?, updated_at = datetime('now')
       WHERE id = ?
-    `).run(updatedName, updatedAvatar, updatedBio, updatedStatus, updatedCountry, userId);
+    `).run(updatedName, updatedUsername, updatedAvatar, updatedBio, updatedStatus, updatedCountry, userId);
 
     // Persist to PostgreSQL
     persistUserToPg({
       id: userId,
       email: current.email,
-      username: current.username,
+      username: updatedUsername,
       password_hash: current.password_hash,
       full_name: updatedName,
       avatar_url: updatedAvatar,
@@ -111,6 +155,7 @@ export async function updateProfile(req: AuthenticatedRequest, res: Response): P
       status: updatedStatus,
       country: updatedCountry,
     });
+
 
     const user = getUserWithPlan(userId);
     res.json({ user, message: 'Profile updated successfully.' });

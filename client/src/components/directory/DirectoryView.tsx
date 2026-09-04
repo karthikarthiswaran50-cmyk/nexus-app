@@ -30,57 +30,57 @@ export const DirectoryView: React.FC<DirectoryViewProps> = ({ onStartChat, onVie
   const [users, setUsers] = useState<User[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [tierFilter, setTierFilter] = useState<'all' | 'pro' | 'vip'>('all');
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
-  const fetchUsers = async () => {
-    try {
-      const res = await axios.get('/api/users');
-      setUsers(res.data.users);
-    } catch (err) {
-      console.error('Fetch users error:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // Instagram-style: Debounced search by @username or name
   useEffect(() => {
-    fetchUsers();
-  }, []);
+    const q = searchQuery.trim();
+    if (!q) {
+      setUsers([]);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    const timer = setTimeout(async () => {
+      try {
+        const res = await axios.get(`/api/users?q=${encodeURIComponent(q)}`);
+        setUsers(res.data.users || []);
+      } catch (err) {
+        console.error('Search users error:', err);
+        setUsers([]);
+      } finally {
+        setLoading(false);
+      }
+    }, 280);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   const filteredUsers = users.filter((u) => {
     if (u.id === currentUser?.id) return false;
-
-    const matchesSearch =
-      u.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      u.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      u.bio?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      u.country?.toLowerCase().includes(searchQuery.toLowerCase());
-
-    if (!matchesSearch) return false;
-
     if (tierFilter === 'pro' && u.plan_id !== 'pro' && u.plan_id !== 'vip') return false;
     if (tierFilter === 'vip' && u.plan_id !== 'vip') return false;
-
     return true;
   });
 
   return (
-    <div className="max-w-6xl mx-auto p-3.5 sm:p-6 space-y-6">
+    <div className="max-w-5xl mx-auto p-3.5 sm:p-6 space-y-6 font-['Plus_Jakarta_Sans',sans-serif]">
       
-      {/* 👑 Royal Banner / Hero */}
+      {/* 👑 Royal Banner / Search Header */}
       <div className="bg-gradient-to-r from-dark-900 via-amber-950/30 to-dark-900 border border-gold-500/25 p-6 sm:p-8 rounded-3xl shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-6 royal-card">
         <div>
           <div className="flex items-center gap-2 mb-2">
             <span className="p-1.5 rounded-lg bg-gold-500/20 text-gold-400 border border-gold-500/30">
               <Crown className="w-4 h-4 fill-gold-400" />
             </span>
-            <span className="text-xs font-black gold-gradient-text uppercase tracking-widest">Royal Member Realm</span>
+            <span className="text-xs font-black gold-gradient-text uppercase tracking-widest">Instagram-Style Search</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-            Connect & Call with Imperial Members
+            Find Members by @Username
           </h1>
           <p className="text-xs sm:text-sm text-dark-300 mt-1 max-w-xl leading-relaxed">
-            Discover verified creators, founders, and VIPs. Initiate instant 4K WebRTC video calls, voice conversations, or encrypted chats.
+            Search for your friends by their unique handle or name to start an encrypted chat, voice call, or 4K video session.
           </p>
         </div>
 
@@ -93,7 +93,7 @@ export const DirectoryView: React.FC<DirectoryViewProps> = ({ onStartChat, onVie
               tierFilter === 'all' ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-dark-950 shadow-md' : 'text-dark-400 hover:text-white'
             }`}
           >
-            All Members
+            All
           </button>
           <button
             type="button"
@@ -118,28 +118,56 @@ export const DirectoryView: React.FC<DirectoryViewProps> = ({ onStartChat, onVie
         </div>
       </div>
 
-      {/* Search Bar */}
+      {/* Instagram-Style Search Bar */}
       <div className="relative">
-        <Search className="w-4 h-4 text-gold-400 absolute left-4 top-1/2 -translate-y-1/2" />
+        <Search className="w-5 h-5 text-gold-400 absolute left-4 top-1/2 -translate-y-1/2" />
         <input
           type="text"
+          autoFocus
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Search members by name, skill, handle, or country..."
-          className="w-full pl-11 pr-4 py-3 bg-dark-900 border border-gold-500/20 rounded-2xl text-sm text-white placeholder:text-dark-500 focus:outline-none focus:border-gold-400 focus:ring-1 focus:ring-gold-400/50 shadow-sm"
+          placeholder="Search by username or name (@karthi, alex, etc.)..."
+          className="w-full pl-12 pr-10 py-3.5 bg-dark-900 border border-gold-500/30 rounded-2xl text-sm font-semibold text-white placeholder:text-dark-500 focus:outline-none focus:border-gold-400 focus:ring-2 focus:ring-gold-400/20 shadow-lg transition-all"
         />
+        {searchQuery && (
+          <button
+            type="button"
+            onClick={() => setSearchQuery('')}
+            className="absolute right-3.5 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-dark-800 hover:bg-dark-700 text-dark-300 hover:text-white text-xs flex items-center justify-center transition-all"
+          >
+            ✕
+          </button>
+        )}
       </div>
 
-      {/* User Grid */}
+      {/* User Grid / States */}
       {loading ? (
-        <div className="p-16 text-center text-xs text-dark-500">Loading Royal Directory...</div>
+        <div className="p-16 text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-gold-400 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-xs text-dark-400 font-bold">Searching Royal directory...</p>
+        </div>
+      ) : !searchQuery.trim() ? (
+        /* Instagram-Style Empty Landing State */
+        <div className="p-12 sm:p-16 text-center bg-dark-900/60 border border-gold-500/15 rounded-3xl royal-card space-y-4 max-w-lg mx-auto">
+          <div className="w-16 h-16 rounded-3xl bg-gold-500/10 border border-gold-500/25 flex items-center justify-center text-gold-400 mx-auto shadow-xl">
+            <Search className="w-8 h-8 stroke-[2.2]" />
+          </div>
+          <div className="space-y-1.5">
+            <h3 className="text-base font-extrabold text-white">Search Friends by @Username</h3>
+            <p className="text-xs text-dark-300 leading-relaxed">
+              Just like Instagram, profiles are private until searched. Enter any friend's username or name above to start a chat or video call.
+            </p>
+          </div>
+        </div>
       ) : filteredUsers.length === 0 ? (
-        <div className="p-16 text-center bg-dark-900 border border-gold-500/20 rounded-2xl royal-card">
-          <Users className="w-10 h-10 text-dark-600 mx-auto mb-3" />
-          <p className="text-base font-bold text-white">No members found</p>
-          <p className="text-xs text-dark-400 mt-1">Try adjusting your search terms or filters.</p>
+        /* No Results Found */
+        <div className="p-12 sm:p-16 text-center bg-dark-900/60 border border-gold-500/15 rounded-3xl royal-card space-y-3 max-w-lg mx-auto">
+          <Users className="w-12 h-12 text-dark-600 mx-auto" />
+          <p className="text-base font-bold text-white">No members found for "{searchQuery}"</p>
+          <p className="text-xs text-dark-400">Make sure the @username or name is spelled correctly.</p>
         </div>
       ) : (
+
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {filteredUsers.map((member) => {
             const isOnline = onlineUserIds.has(member.id);

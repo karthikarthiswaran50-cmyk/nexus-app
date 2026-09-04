@@ -169,15 +169,18 @@ app.post('/api/auth/register', authLimiter, authCtrl.register);
 app.post('/api/auth/login', authLimiter, authCtrl.login);
 app.post('/api/auth/firebase-login', authLimiter, authCtrl.firebaseLogin);
 app.get('/api/auth/me', requireAuth, authCtrl.getMe);
+app.post('/api/auth/set-username', requireAuth, authCtrl.setUsername);
 app.post('/api/auth/update-password', requireAuth, authCtrl.updatePassword);
 
 // 2. Users & Profile Routes
 app.get('/api/users', requireAuth, apiLimiter, usersCtrl.getUsers);
+app.get('/api/users/check-username/:username', usersCtrl.checkUsernameAvailable);
 app.get('/api/users/settings', requireAuth, usersCtrl.getSettings);
 app.put('/api/users/settings', requireAuth, usersCtrl.updateSettings);
 app.put('/api/users/profile', requireAuth, usersCtrl.updateProfile);
 app.post('/api/users/fcm-token', requireAuth, usersCtrl.updateFcmToken);
 app.get('/api/users/:id', requireAuth, usersCtrl.getUserByIdOrUsername);
+
 
 // Push Notification & VAPID Endpoints
 app.get('/api/notifications/vapid-public-key', (_req, res) => {
