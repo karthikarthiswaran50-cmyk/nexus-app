@@ -12,11 +12,17 @@ import {
   CheckCircle2,
   AlertCircle,
   Crown,
+  BellRing,
+  Smartphone,
+  RefreshCw,
+  Wifi,
+  WifiOff,
 } from 'lucide-react';
 import axios from 'axios';
 import {
   getNotificationPermissionStatus,
   requestNotificationPermission,
+  subscribeToWebPush,
   showCallNotification,
   showMessageNotification,
 } from '../../utils/notifications';
@@ -31,36 +37,88 @@ export const SettingsView: React.FC = () => {
 
   // System push notification state
   const [notifPermission, setNotifPermission] = useState(getNotificationPermissionStatus());
+  const [pushSubCount, setPushSubCount] = useState<number | null>(null);
+  const [activating, setActivating] = useState(false);
   const [testSent, setTestSent] = useState(false);
+  const [testResult, setTestResult] = useState<{ delivered: boolean } | null>(null);
+  const [activateError, setActivateError] = useState<string | null>(null);
 
-  useEffect(() => {
-    setNotifPermission(getNotificationPermissionStatus());
-  }, []);
-
-  const handleEnableSystemNotifications = async () => {
-    const granted = await requestNotificationPermission();
-    setNotifPermission(getNotificationPermissionStatus());
-    if (granted) {
-      try {
-        const token = await requestFcmToken();
-        if (token) {
-          await axios.post('/api/users/fcm-token', { token });
-        }
-      } catch (e) {}
+  // Fetch push subscription count from server
+  const fetchPushSubStatus = async () => {
+    try {
+      const res = await axios.get('/api/notifications/subscriptions');
+      setPushSubCount(res.data.webPushSubscriptions || 0);
+    } catch (e) {
+      setPushSubCount(null);
     }
   };
 
-  const handleTestCallAlert = () => {
-    showCallNotification('Nexus Royal Alert', 'video');
-    setTestSent(true);
-    setTimeout(() => setTestSent(false), 3000);
+  useEffect(() => {
+    setNotifPermission(getNotificationPermissionStatus());
+    fetchPushSubStatus();
+  }, []);
+
+  // STEP 1+2: Request permission → Subscribe push → save to server
+  const handleActivatePush = async () => {
+    setActivating(true);
+    setActivateError(null);
+    try {
+      let perm = Notification.permission;
+      if (perm !== 'granted') {
+        perm = await Notification.requestPermission();
+      }
+      if (perm !== 'granted') {
+        setActivateError('❌ Permission denied in browser. Please allow notifications in your phone browser settings.');
+        setActivating(false);
+        return;
+      }
+      setNotifPermission('granted');
+
+      // Force-register push subscription
+      const ok = await subscribeToWebPush(true);
+      if (!ok) {
+        setActivateError('⚠️ Could not register push subscription. Try again or use a different browser (Chrome recommended).');
+        setActivating(false);
+        return;
+      }
+
+      // Register FCM token too
+      try {
+        const fcmToken = await requestFcmToken();
+        if (fcmToken) {
+          await axios.post('/api/users/fcm-token', { token: fcmToken });
+        }
+      } catch (e) {}
+
+      // Verify push sub was saved
+      await fetchPushSubStatus();
+      setActivateError(null);
+    } catch (err: any) {
+      setActivateError('Error: ' + (err?.message || 'Unknown error'));
+    } finally {
+      setActivating(false);
+    }
   };
 
-  const handleTestMessageAlert = () => {
-    showMessageNotification('Nexus Royal Alert', '👑 Notifications and vibration are working perfectly!');
+  // STEP 3: Send actual push through server (tests end-to-end delivery)
+  const handleTestServerPush = async (type: 'call' | 'message') => {
     setTestSent(true);
-    setTimeout(() => setTestSent(false), 3000);
+    setTestResult(null);
+    try {
+      const res = await axios.post('/api/notifications/test', { type });
+      setTestResult({ delivered: res.data.delivered });
+    } catch (e) {
+      setTestResult({ delivered: false });
+    }
+    setTimeout(() => { setTestSent(false); setTestResult(null); }, 5000);
   };
+
+  // In-app local alert test (to verify browser notification permission)
+  const handleTestLocalAlert = () => {
+    showCallNotification('Nexus Royal Alert', 'video');
+  };
+
+
 
   // Password update form
   const [currentPassword, setCurrentPassword] = useState('');
@@ -275,73 +333,144 @@ export const SettingsView: React.FC = () => {
           </form>
         </div>
 
-        {/* 🔔 System & Device Push Notifications Card */}
+        {/* 🔔 Push Notification Activation Card */}
         <div className="bg-dark-900 border border-gold-500/15 rounded-3xl p-6 space-y-5 shadow-xl royal-card md:col-span-2">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gold-500/15 pb-4">
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-xl bg-gold-500/10 border border-gold-500/30 flex items-center justify-center text-gold-400">
-                <Bell className="w-4 h-4" />
+                <BellRing className="w-4 h-4" />
               </div>
               <div>
-                <h3 className="text-sm font-black text-white">System & Mobile Push Notifications</h3>
-                <p className="text-[11px] text-dark-300">Lock screen ringing, call popups, and instant message vibrations</p>
+                <h3 className="text-sm font-black text-white">Background Push Notifications</h3>
+                <p className="text-[11px] text-dark-300">Get call & message alerts even when app is closed</p>
               </div>
             </div>
 
-            <span className={`self-start sm:self-auto px-3 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${
-              notifPermission === 'granted'
-                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                : notifPermission === 'denied'
-                ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
-                : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-            }`}>
-              {notifPermission === 'granted' ? '✓ Alerts Active & Allowed' : notifPermission === 'denied' ? '⚠️ Blocked in Browser' : 'Action Required'}
-            </span>
-          </div>
-
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <p className="text-xs text-dark-300 leading-relaxed max-w-xl">
-              When notifications are enabled, Nexus rings your device with haptic vibration and displays native incoming call & chat message previews even when your screen is locked or your browser tab is in the background.
-            </p>
-
-            <div className="flex flex-wrap gap-2 items-center">
-              {notifPermission !== 'granted' ? (
-                <button
-                  type="button"
-                  onClick={handleEnableSystemNotifications}
-                  className="px-4 py-2.5 bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-600 hover:from-amber-400 hover:to-yellow-300 text-dark-950 font-black rounded-xl text-xs shadow-lg shadow-gold-500/25 transition-all active:scale-95 flex items-center gap-1.5"
-                >
-                  <Bell className="w-3.5 h-3.5" />
-                  <span>Enable Notifications on this Device</span>
-                </button>
-              ) : (
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={handleTestCallAlert}
-                    className="px-3.5 py-2 bg-dark-850 hover:bg-dark-800 border border-gold-500/30 hover:border-gold-400 text-amber-200 font-bold rounded-xl text-xs transition-all active:scale-95 shadow-sm"
-                  >
-                    📞 Test Call Alert
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleTestMessageAlert}
-                    className="px-3.5 py-2 bg-dark-850 hover:bg-dark-800 border border-gold-500/30 hover:border-gold-400 text-amber-200 font-bold rounded-xl text-xs transition-all active:scale-95 shadow-sm"
-                  >
-                    💬 Test Message Alert
-                  </button>
-                </div>
-              )}
+            {/* Status badges */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className={`px-3 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${
+                notifPermission === 'granted'
+                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                  : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+              }`}>
+                {notifPermission === 'granted' ? '✓ Permission OK' : '✗ No Permission'}
+              </span>
+              <span className={`px-3 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${
+                (pushSubCount ?? 0) > 0
+                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                  : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+              }`}>
+                {pushSubCount === null ? '⏳ Checking...' : (pushSubCount > 0 ? `✓ ${pushSubCount} Device Registered` : '✗ Not Registered')}
+              </span>
             </div>
           </div>
 
-          {testSent && (
-            <div className="p-3 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-semibold flex items-center gap-2 animate-in fade-in">
-              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-              <span>✓ Test notification and vibration dispatched successfully! Check your device notification center.</span>
+          {/* Step guide */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+            <div className={`p-3 rounded-2xl border ${notifPermission === 'granted' ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-gold-500/20 bg-dark-850/60'}`}>
+              <div className="flex items-center gap-2 font-bold text-white mb-1">
+                <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black ${notifPermission === 'granted' ? 'bg-emerald-500 text-white' : 'bg-gold-500 text-dark-950'}`}>1</span>
+                Browser Permission
+              </div>
+              <p className="text-dark-300 leading-relaxed">Allow notifications popup from Chrome/browser.</p>
+              {notifPermission === 'granted' && <p className="text-emerald-400 font-bold mt-1">✓ Granted</p>}
+            </div>
+
+            <div className={`p-3 rounded-2xl border ${(pushSubCount ?? 0) > 0 ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-gold-500/20 bg-dark-850/60'}`}>
+              <div className="flex items-center gap-2 font-bold text-white mb-1">
+                <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black ${(pushSubCount ?? 0) > 0 ? 'bg-emerald-500 text-white' : 'bg-gold-500 text-dark-950'}`}>2</span>
+                Register This Device
+              </div>
+              <p className="text-dark-300 leading-relaxed">Register phone with server for background wake-up.</p>
+              {(pushSubCount ?? 0) > 0 && <p className="text-emerald-400 font-bold mt-1">✓ Registered</p>}
+            </div>
+
+            <div className={`p-3 rounded-2xl border ${testResult?.delivered ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-gold-500/20 bg-dark-850/60'}`}>
+              <div className="flex items-center gap-2 font-bold text-white mb-1">
+                <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black ${testResult?.delivered ? 'bg-emerald-500 text-white' : 'bg-gold-500 text-dark-950'}`}>3</span>
+                Test Push Delivery
+              </div>
+              <p className="text-dark-300 leading-relaxed">Send a real push from server to verify delivery.</p>
+              {testResult?.delivered && <p className="text-emerald-400 font-bold mt-1">✓ Push Delivered!</p>}
+              {testResult && !testResult.delivered && <p className="text-rose-400 font-bold mt-1">✗ Push failed</p>}
+            </div>
+          </div>
+
+          {/* Error message */}
+          {activateError && (
+            <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>{activateError}</span>
+            </div>
+          )}
+
+          {/* Action buttons */}
+          <div className="flex flex-wrap gap-2">
+            {/* Step 1+2: Activate push */}
+            <button
+              type="button"
+              onClick={handleActivatePush}
+              disabled={activating}
+              className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-600 hover:from-amber-400 hover:to-yellow-300 text-dark-950 font-black rounded-xl text-xs shadow-lg shadow-gold-500/25 transition-all active:scale-95 disabled:opacity-60"
+            >
+              {activating ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Smartphone className="w-3.5 h-3.5" />}
+              {activating ? 'Activating...' : (pushSubCount ?? 0) > 0 ? '🔄 Re-Register This Device' : '🔔 Activate Push Alerts'}
+            </button>
+
+            {/* Step 3: Server push test (only if registered) */}
+            {(pushSubCount ?? 0) > 0 && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => handleTestServerPush('call')}
+                  disabled={testSent}
+                  className="flex items-center gap-1.5 px-3.5 py-2 bg-dark-850 hover:bg-dark-800 border border-gold-500/30 hover:border-gold-400 text-amber-200 font-bold rounded-xl text-xs transition-all active:scale-95 disabled:opacity-60"
+                >
+                  📞 Test Call Push
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleTestServerPush('message')}
+                  disabled={testSent}
+                  className="flex items-center gap-1.5 px-3.5 py-2 bg-dark-850 hover:bg-dark-800 border border-gold-500/30 hover:border-gold-400 text-amber-200 font-bold rounded-xl text-xs transition-all active:scale-95 disabled:opacity-60"
+                >
+                  💬 Test Msg Push
+                </button>
+                <button
+                  type="button"
+                  onClick={handleTestLocalAlert}
+                  className="flex items-center gap-1.5 px-3.5 py-2 bg-dark-850 hover:bg-dark-800 border border-gold-500/30 hover:border-gold-400 text-amber-200 font-bold rounded-xl text-xs transition-all active:scale-95"
+                >
+                  🔔 In-App Test
+                </button>
+              </>
+            )}
+
+            {/* Refresh status */}
+            <button
+              type="button"
+              onClick={fetchPushSubStatus}
+              className="flex items-center gap-1.5 px-3 py-2 bg-dark-850 hover:bg-dark-800 border border-dark-700 text-dark-300 hover:text-white font-bold rounded-xl text-xs transition-all"
+            >
+              <RefreshCw className="w-3 h-3" />
+              Check Status
+            </button>
+          </div>
+
+          {/* Instruction note */}
+          {(pushSubCount ?? 0) === 0 && notifPermission !== 'denied' && (
+            <div className="p-3 rounded-xl bg-amber-500/8 border border-amber-500/20 text-amber-200 text-xs leading-relaxed">
+              <strong>📱 Important:</strong> You must tap <strong>"🔔 Activate Push Alerts"</strong> on <strong>each phone/device</strong> that should receive background notifications. Do this on both your phone and the other person's phone.
+            </div>
+          )}
+
+          {notifPermission === 'denied' && (
+            <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs leading-relaxed">
+              <strong>⚠️ Blocked:</strong> Open Chrome Settings → Site Settings → Notifications → Find this site → Allow. Then come back and click Activate.
             </div>
           )}
         </div>
+
       </div>
 
     </div>
