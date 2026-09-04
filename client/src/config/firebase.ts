@@ -205,8 +205,14 @@ export async function requestFcmToken(vapidKey?: string): Promise<string | null>
       return null;
     }
 
+    let registration: ServiceWorkerRegistration | undefined;
+    if ('serviceWorker' in navigator) {
+      registration = await navigator.serviceWorker.ready;
+    }
+
     const currentToken = await getToken(messaging, {
       vapidKey: vapidKey || metaEnv.VITE_FIREBASE_VAPID_KEY,
+      serviceWorkerRegistration: registration,
     });
     return currentToken || null;
   } catch (err) {

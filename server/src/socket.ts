@@ -100,6 +100,28 @@ export function setupSocket(io: Server) {
 
         // Emit back to sender
         socket.emit('chat:message_sent', result);
+
+        // Also trigger background mobile push notification if receiver has FCM token
+        try {
+          const receiverSettings = db.prepare('SELECT fcm_token FROM user_settings WHERE user_id = ?').get(receiverId) as any;
+          if (receiverSettings?.fcm_token) {
+            const sender = getUserWithPlan(userId);
+            const preview = type === 'text'
+              ? (content || '')
+              : (type as string) === 'audio' || (type as string) === 'voice'
+              ? '🎤 Voice Message'
+              : type === 'image'
+              ? '📷 Photo'
+              : '📎 Attachment';
+            sendMessagePushNotification({
+              fcmToken: receiverSettings.fcm_token,
+              senderName: sender?.full_name || sender?.username || 'Nexus Contact',
+              messagePreview: preview,
+            });
+          }
+        } catch (pushErr) {
+          console.warn('Chat message FCM push error:', pushErr);
+        }
       } catch (err) {
         console.error('Socket chat:send_message error:', err);
       }
@@ -224,6 +246,19 @@ export function setupSocket(io: Server) {
           sdpOffer,
         });
       });
+
+      // Also trigger FCM push notification to wake device/screen if in background or screen locked
+      try {
+        const receiverSettings = db.prepare('SELECT fcm_token FROM user_settings WHERE user_id = ?').get(receiverId) as any;
+        if (receiverSettings?.fcm_token) {
+          sendCallPushNotification({
+            fcmToken: receiverSettings.fcm_token,
+            callerName: caller.full_name,
+            callerAvatar: caller.avatar_url,
+            callType,
+          });
+        }
+      } catch (e) {}
     });
 
     socket.on('call:accept', (data: {

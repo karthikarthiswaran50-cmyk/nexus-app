@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import {
   Settings as SettingsIcon,
@@ -14,6 +14,13 @@ import {
   Crown,
 } from 'lucide-react';
 import axios from 'axios';
+import {
+  getNotificationPermissionStatus,
+  requestNotificationPermission,
+  showCallNotification,
+  showMessageNotification,
+} from '../../utils/notifications';
+import { requestFcmToken } from '../../config/firebase';
 
 export const SettingsView: React.FC = () => {
   const { settings, updateSettings, logout } = useAuth();
@@ -21,6 +28,39 @@ export const SettingsView: React.FC = () => {
   const [allowCallsFrom, setAllowCallsFrom] = useState(settings?.allow_calls_from || 'everyone');
   const [notificationSound, setNotificationSound] = useState(settings?.notification_sound ?? true);
   const [readReceipts, setReadReceipts] = useState(settings?.read_receipts ?? true);
+
+  // System push notification state
+  const [notifPermission, setNotifPermission] = useState(getNotificationPermissionStatus());
+  const [testSent, setTestSent] = useState(false);
+
+  useEffect(() => {
+    setNotifPermission(getNotificationPermissionStatus());
+  }, []);
+
+  const handleEnableSystemNotifications = async () => {
+    const granted = await requestNotificationPermission();
+    setNotifPermission(getNotificationPermissionStatus());
+    if (granted) {
+      try {
+        const token = await requestFcmToken();
+        if (token) {
+          await axios.post('/api/users/fcm-token', { token });
+        }
+      } catch (e) {}
+    }
+  };
+
+  const handleTestCallAlert = () => {
+    showCallNotification('Nexus Royal Alert', 'video');
+    setTestSent(true);
+    setTimeout(() => setTestSent(false), 3000);
+  };
+
+  const handleTestMessageAlert = () => {
+    showMessageNotification('Nexus Royal Alert', '👑 Notifications and vibration are working perfectly!');
+    setTestSent(true);
+    setTimeout(() => setTestSent(false), 3000);
+  };
 
   // Password update form
   const [currentPassword, setCurrentPassword] = useState('');
@@ -233,6 +273,74 @@ export const SettingsView: React.FC = () => {
               {updatingPw ? 'Updating...' : 'Update Password'}
             </button>
           </form>
+        </div>
+
+        {/* 🔔 System & Device Push Notifications Card */}
+        <div className="bg-dark-900 border border-gold-500/15 rounded-3xl p-6 space-y-5 shadow-xl royal-card md:col-span-2">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gold-500/15 pb-4">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-gold-500/10 border border-gold-500/30 flex items-center justify-center text-gold-400">
+                <Bell className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="text-sm font-black text-white">System & Mobile Push Notifications</h3>
+                <p className="text-[11px] text-dark-300">Lock screen ringing, call popups, and instant message vibrations</p>
+              </div>
+            </div>
+
+            <span className={`self-start sm:self-auto px-3 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${
+              notifPermission === 'granted'
+                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                : notifPermission === 'denied'
+                ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+            }`}>
+              {notifPermission === 'granted' ? '✓ Alerts Active & Allowed' : notifPermission === 'denied' ? '⚠️ Blocked in Browser' : 'Action Required'}
+            </span>
+          </div>
+
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <p className="text-xs text-dark-300 leading-relaxed max-w-xl">
+              When notifications are enabled, Nexus rings your device with haptic vibration and displays native incoming call & chat message previews even when your screen is locked or your browser tab is in the background.
+            </p>
+
+            <div className="flex flex-wrap gap-2 items-center">
+              {notifPermission !== 'granted' ? (
+                <button
+                  type="button"
+                  onClick={handleEnableSystemNotifications}
+                  className="px-4 py-2.5 bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-600 hover:from-amber-400 hover:to-yellow-300 text-dark-950 font-black rounded-xl text-xs shadow-lg shadow-gold-500/25 transition-all active:scale-95 flex items-center gap-1.5"
+                >
+                  <Bell className="w-3.5 h-3.5" />
+                  <span>Enable Notifications on this Device</span>
+                </button>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={handleTestCallAlert}
+                    className="px-3.5 py-2 bg-dark-850 hover:bg-dark-800 border border-gold-500/30 hover:border-gold-400 text-amber-200 font-bold rounded-xl text-xs transition-all active:scale-95 shadow-sm"
+                  >
+                    📞 Test Call Alert
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleTestMessageAlert}
+                    className="px-3.5 py-2 bg-dark-850 hover:bg-dark-800 border border-gold-500/30 hover:border-gold-400 text-amber-200 font-bold rounded-xl text-xs transition-all active:scale-95 shadow-sm"
+                  >
+                    💬 Test Message Alert
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {testSent && (
+            <div className="p-3 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-semibold flex items-center gap-2 animate-in fade-in">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>✓ Test notification and vibration dispatched successfully! Check your device notification center.</span>
+            </div>
+          )}
         </div>
       </div>
 

@@ -78,6 +78,7 @@ export interface Message {
   media_url?: string;
   is_read: boolean;
   created_at: string;
+  sender?: UserWithPlan;
 }
 
 export type CallType = 'audio' | 'video';

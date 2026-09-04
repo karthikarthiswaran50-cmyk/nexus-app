@@ -5,6 +5,7 @@ import { useAuth } from './AuthContext';
 import { User, CallType, Message, ActiveCallSession } from '../types';
 import { soundEffects } from '../utils/soundEffects';
 import { requestFcmToken, trackUserActivity } from '../config/firebase';
+import { showCallNotification, closeCallNotification, showMessageNotification } from '../utils/notifications';
 
 interface IncomingCallData {
   caller: User;
@@ -92,9 +93,16 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       if (settings?.notification_sound !== false) {
         soundEffects.playIncomingCallTone();
       }
+      // Trigger Web/System Notification & Mobile Haptic Vibration
+      showCallNotification(
+        data.caller.full_name || data.caller.username || 'Nexus Royal Contact',
+        data.callType,
+        data.caller.avatar_url
+      );
     });
 
     newSocket.on('call:rejected', (data: { receiverId: string; reason?: string }) => {
+      closeCallNotification();
       soundEffects.stopOutgoingRing();
       soundEffects.playCallEndedTone();
       setCallBannerMessage(`Call declined: ${data.reason || 'User busy'}`);
@@ -103,6 +111,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     });
 
     newSocket.on('call:busy', (data: { message: string }) => {
+      closeCallNotification();
       soundEffects.stopOutgoingRing();
       soundEffects.playCallEndedTone();
       setCallBannerMessage(data.message || 'User is on another call');
@@ -111,6 +120,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     });
 
     newSocket.on('call:user_offline', (data: { message: string }) => {
+      closeCallNotification();
       soundEffects.stopOutgoingRing();
       soundEffects.playCallEndedTone();
       setCallBannerMessage(data.message || 'User is currently offline');
@@ -119,6 +129,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     });
 
     newSocket.on('call:ended', () => {
+      closeCallNotification();
       soundEffects.stopOutgoingRing();
       soundEffects.stopIncomingCallTone();
       soundEffects.playCallEndedTone();
@@ -131,6 +142,16 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setLatestMessage(data.message);
       if (settings?.notification_sound !== false) {
         soundEffects.playMessageSound();
+      }
+      // If message is from another user, trigger system notification & mobile vibration
+      if (data.message.sender_id !== user?.id) {
+        const senderName = data.message.sender?.full_name || data.message.sender?.username || 'Nexus Contact';
+        const textPreview = data.message.type === 'audio'
+          ? '🎤 Voice Message'
+          : data.message.type === 'image'
+          ? '📷 Photo'
+          : data.message.content || 'Sent an attachment';
+        showMessageNotification(senderName, textPreview, data.message.sender?.avatar_url, data.conversationId);
       }
     });
 
@@ -175,6 +196,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const acceptIncomingCall = useCallback(() => {
     if (!incomingCall) return;
+    closeCallNotification();
     soundEffects.stopIncomingCallTone();
     soundEffects.playConnectedTone();
 
@@ -202,6 +224,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, [incomingCall, user]);
 
   const rejectIncomingCall = useCallback(() => {
+    closeCallNotification();
     if (!incomingCall || !socket) return;
     soundEffects.stopIncomingCallTone();
     socket.emit('call:reject', {
@@ -212,6 +235,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, [incomingCall, socket]);
 
   const endActiveCall = useCallback(() => {
+    closeCallNotification();
     soundEffects.stopOutgoingRing();
     soundEffects.stopIncomingCallTone();
     soundEffects.playCallEndedTone();
@@ -236,6 +260,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, [activeCall, socket, user]);
 
   const clearIncomingCall = () => {
+    closeCallNotification();
     soundEffects.stopIncomingCallTone();
     setIncomingCall(null);
   };

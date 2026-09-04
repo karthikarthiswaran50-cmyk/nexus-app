@@ -68,6 +68,7 @@ export interface Message {
   media_url?: string;
   is_read: boolean;
   created_at: string;
+  sender?: User;
 }
 
 export interface Conversation {

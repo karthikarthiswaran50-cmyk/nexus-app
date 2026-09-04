@@ -159,6 +159,7 @@ export function saveMessage(params: {
     media_url: mediaUrl,
     is_read: false,
     created_at: now,
+    sender: getUserWithPlan(senderId) || undefined,
   };
 
   return { message, conversationId: conv.id };

@@ -26,13 +26,18 @@ import {
   CheckCircle2,
   ShieldCheck,
   Gem,
+  Bell,
+  BellRing,
 } from 'lucide-react';
+import axios from 'axios';
+import { getNotificationPermissionStatus, requestNotificationPermission } from '../../utils/notifications';
+import { requestFcmToken } from '../../config/firebase';
 
 export type NavTab = 'chats' | 'calls' | 'directory' | 'subscription' | 'profile' | 'settings';
 
 export const AppLayout: React.FC = () => {
   const { user } = useAuth();
-  const { isConnected, callBannerMessage } = useSocket();
+  const { isConnected, callBannerMessage, latestMessage } = useSocket();
 
   const [currentTab, setCurrentTab] = useState<NavTab>('chats');
   const [selectedUserForChat, setSelectedUserForChat] = useState<User | null>(null);
@@ -41,9 +46,57 @@ export const AppLayout: React.FC = () => {
   const [showInstallModal, setShowInstallModal] = useState(false);
   const [isStandalone, setIsStandalone] = useState(false);
   
+  // Notification states
+  const [notifPermission, setNotifPermission] = useState<'granted' | 'denied' | 'default' | 'unsupported'>('default');
+  const [dismissNotifBanner, setDismissNotifBanner] = useState(false);
+  const [inAppMessageToast, setInAppMessageToast] = useState<{ senderName: string; preview: string; sender?: User } | null>(null);
+
   // PWA Install prompt state
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [canInstall, setCanInstall] = useState(false);
+
+  useEffect(() => {
+    setNotifPermission(getNotificationPermissionStatus());
+  }, []);
+
+  const handleEnableNotifications = async () => {
+    const granted = await requestNotificationPermission();
+    if (granted) {
+      setNotifPermission('granted');
+      try {
+        const fcmToken = await requestFcmToken();
+        if (fcmToken) {
+          await axios.post('/api/users/fcm-token', { token: fcmToken });
+        }
+      } catch (e) {}
+    } else {
+      setNotifPermission(getNotificationPermissionStatus());
+    }
+  };
+
+  // Listen to incoming messages for in-app floating banner
+  useEffect(() => {
+    if (!latestMessage || latestMessage.sender_id === user?.id) return;
+    if (currentTab === 'chats' && selectedUserForChat?.id === latestMessage.sender_id) return;
+
+    const senderName = latestMessage.sender?.full_name || latestMessage.sender?.username || 'Nexus Contact';
+    const preview = latestMessage.type === 'audio'
+      ? '🎤 Voice Message'
+      : latestMessage.type === 'image'
+      ? '📷 Photo'
+      : latestMessage.content || 'Sent an attachment';
+
+    setInAppMessageToast({
+      senderName,
+      preview,
+      sender: latestMessage.sender,
+    });
+
+    const timer = setTimeout(() => {
+      setInAppMessageToast(null);
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [latestMessage, currentTab, selectedUserForChat?.id, user?.id]);
 
   useEffect(() => {
     // Check if running as installed standalone PWA
@@ -108,6 +161,46 @@ export const AppLayout: React.FC = () => {
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 px-5 py-2.5 rounded-2xl bg-dark-900/95 border border-gold-500/40 text-amber-200 text-xs font-semibold shadow-2xl shadow-gold-500/20 backdrop-blur-xl flex items-center gap-2 animate-in fade-in">
           <Crown className="w-4 h-4 text-gold-400 animate-pulse" />
           <span>{callBannerMessage}</span>
+        </div>
+      )}
+
+      {/* 💬 Floating In-App Chat Toast */}
+      {inAppMessageToast && (
+        <div
+          onClick={() => {
+            if (inAppMessageToast.sender) {
+              handleStartChatWithUser(inAppMessageToast.sender);
+            } else {
+              setCurrentTab('chats');
+            }
+            setInAppMessageToast(null);
+          }}
+          className="fixed top-16 right-3 sm:right-6 z-50 max-w-sm w-[calc(100vw-1.5rem)] bg-dark-900/95 border border-gold-500/40 rounded-2xl p-3 sm:p-3.5 shadow-2xl shadow-black/90 backdrop-blur-2xl flex items-center gap-3 cursor-pointer hover:border-gold-400 transition-all animate-in slide-in-from-top-3"
+        >
+          <div className="w-10 h-10 rounded-full bg-gold-500/10 border border-gold-500/30 flex items-center justify-center shrink-0 text-gold-400 overflow-hidden">
+            {inAppMessageToast.sender?.avatar_url ? (
+              <img src={inAppMessageToast.sender.avatar_url} alt="" className="w-full h-full object-cover" />
+            ) : (
+              <MessageSquare className="w-5 h-5 text-gold-400" />
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between gap-1">
+              <p className="text-xs font-bold text-white truncate">{inAppMessageToast.senderName}</p>
+              <span className="text-[10px] text-gold-400 font-semibold shrink-0">Just now</span>
+            </div>
+            <p className="text-xs text-dark-300 truncate mt-0.5">{inAppMessageToast.preview}</p>
+          </div>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setInAppMessageToast(null);
+            }}
+            className="p-1 text-dark-400 hover:text-white shrink-0"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
         </div>
       )}
 
@@ -226,6 +319,33 @@ export const AppLayout: React.FC = () => {
           </button>
         </div>
       </header>
+
+      {/* 🔔 1-Click Permission Activation Ribbon */}
+      {notifPermission === 'default' && !dismissNotifBanner && (
+        <div className="bg-gradient-to-r from-amber-500/15 via-yellow-500/10 to-amber-500/15 border-b border-gold-500/25 px-3.5 sm:px-6 py-2 flex items-center justify-between gap-2.5 text-xs text-amber-200 z-30 shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <BellRing className="w-4 h-4 text-gold-400 animate-bounce shrink-0" />
+            <span className="truncate text-xs font-medium">Enable notifications to get live incoming call alerts & message previews.</span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={handleEnableNotifications}
+              className="px-3 py-1 bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 text-dark-950 font-black rounded-lg text-[11px] shadow-sm transition-all active:scale-95"
+            >
+              Allow Alerts
+            </button>
+            <button
+              type="button"
+              onClick={() => setDismissNotifBanner(true)}
+              className="p-1 text-dark-400 hover:text-white rounded-md transition-colors"
+              title="Dismiss"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Mobile Drawer Menu (Royal) */}
       {mobileMenuOpen && (
