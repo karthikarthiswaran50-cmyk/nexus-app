@@ -18,9 +18,19 @@ export function getIceServers(): RTCIceServerConfig[] {
         'stun:global.stun.twilio.com:3478',
       ],
     },
+    {
+      urls: [
+        'turn:global.relay.metered.ca:80',
+        'turn:global.relay.metered.ca:80?transport=tcp',
+        'turn:global.relay.metered.ca:443',
+        'turns:global.relay.metered.ca:443?transport=tcp',
+      ],
+      username: 'openrelayproject',
+      credential: 'openrelayproject',
+    },
   ];
 
-  // 1. Check for custom configured TURN Server
+  // Check for custom configured TURN Server
   const turnUrl = process.env.TURN_URL;
   const turnUsername = process.env.TURN_USERNAME;
   const turnCredential = process.env.TURN_CREDENTIAL;

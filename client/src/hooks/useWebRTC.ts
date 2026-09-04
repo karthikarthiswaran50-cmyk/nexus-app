@@ -9,6 +9,19 @@ const ICE_SERVERS: RTCConfiguration = {
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
     { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' },
+    { urls: 'stun:stun4.l.google.com:19302' },
+    { urls: 'stun:global.stun.twilio.com:3478' },
+    {
+      urls: [
+        'turn:global.relay.metered.ca:80',
+        'turn:global.relay.metered.ca:80?transport=tcp',
+        'turn:global.relay.metered.ca:443',
+        'turns:global.relay.metered.ca:443?transport=tcp',
+      ],
+      username: 'openrelayproject',
+      credential: 'openrelayproject',
+    },
   ],
 };
 
@@ -26,11 +39,14 @@ export function useWebRTC(session: ActiveCallSession | null) {
   const [peerScreenSharing, setPeerScreenSharing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
+
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
+  const pendingIceCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
   const timerRef = useRef<any>(null);
 
   // 1. Timer logic
@@ -53,11 +69,49 @@ export function useWebRTC(session: ActiveCallSession | null) {
     };
   }, [callStatus]);
 
-  // 2. Initialize WebRTC connection
+  // 2. Queueing helper for ICE candidates
+  const addOrQueueCandidate = useCallback(async (candidate: RTCIceCandidateInit) => {
+    const pc = peerConnectionRef.current;
+    if (pc && pc.remoteDescription && pc.remoteDescription.type) {
+      try {
+        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+      } catch (e) {
+        console.warn('Error adding ICE candidate:', e);
+      }
+    } else {
+      pendingIceCandidatesRef.current.push(candidate);
+    }
+  }, []);
+
+  const processPendingIceCandidates = useCallback(async () => {
+    const pc = peerConnectionRef.current;
+    if (!pc || !pc.remoteDescription) return;
+    while (pendingIceCandidatesRef.current.length > 0) {
+      const candidate = pendingIceCandidatesRef.current.shift();
+      if (candidate) {
+        try {
+          await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        } catch (e) {
+          console.warn('Error adding queued ICE candidate:', e);
+        }
+      }
+    }
+  }, []);
+
+  // 3. Bind remoteStream to remoteVideoRef element whenever ready
+  useEffect(() => {
+    if (remoteVideoRef.current && remoteStream) {
+      remoteVideoRef.current.srcObject = remoteStream;
+      remoteVideoRef.current.play().catch(err => console.warn('Remote video play error:', err));
+    }
+  }, [remoteStream, remoteVideoRef.current, peerCameraOff]);
+
+  // 4. Initialize WebRTC connection
   useEffect(() => {
     if (!session || !socket || !user) return;
 
     let isCleanedUp = false;
+    pendingIceCandidatesRef.current = [];
 
     async function initWebRTC() {
       try {
@@ -72,7 +126,6 @@ export function useWebRTC(session: ActiveCallSession | null) {
           });
         } catch (mediaErr) {
           console.warn('Media devices error, fallback to audio only:', mediaErr);
-          // Fallback to audio only
           stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
           setIsCameraOff(true);
         }
@@ -101,7 +154,7 @@ export function useWebRTC(session: ActiveCallSession | null) {
           console.warn('Using default STUN fallback:', e);
         }
 
-        // Create PeerConnection with dynamic STUN/TURN
+        // Create PeerConnection with STUN/TURN
         const pc = new RTCPeerConnection(rtcConfig);
         peerConnectionRef.current = pc;
 
@@ -112,11 +165,28 @@ export function useWebRTC(session: ActiveCallSession | null) {
 
         // Remote track handler
         pc.ontrack = (event) => {
+          console.log('WebRTC ontrack event:', event.track.kind, event.streams);
+          let streamToSet: MediaStream;
           if (event.streams && event.streams[0]) {
-            if (remoteVideoRef.current) {
-              remoteVideoRef.current.srcObject = event.streams[0];
-            }
+            streamToSet = event.streams[0];
+          } else {
+            streamToSet = new MediaStream([event.track]);
           }
+
+          setRemoteStream(streamToSet);
+
+          if (event.track.kind === 'video') {
+            setPeerCameraOff(false);
+          }
+
+          event.track.onunmute = () => {
+            if (event.track.kind === 'video') setPeerCameraOff(false);
+            if (event.track.kind === 'audio') setPeerMicMuted(false);
+          };
+          event.track.onmute = () => {
+            if (event.track.kind === 'video') setPeerCameraOff(true);
+            if (event.track.kind === 'audio') setPeerMicMuted(true);
+          };
         };
 
         // ICE candidate handler
@@ -131,6 +201,7 @@ export function useWebRTC(session: ActiveCallSession | null) {
 
         // Connection state
         pc.onconnectionstatechange = () => {
+          console.log('PeerConnection state:', pc.connectionState);
           if (pc.connectionState === 'connected') {
             soundEffects.stopOutgoingRing();
             soundEffects.playConnectedTone();
@@ -158,6 +229,8 @@ export function useWebRTC(session: ActiveCallSession | null) {
         else if (session!.role === 'receiver' && session!.sdpOffer) {
           setCallStatus('connecting');
           await pc.setRemoteDescription(new RTCSessionDescription(session!.sdpOffer));
+          await processPendingIceCandidates();
+
           const answer = await pc.createAnswer();
           await pc.setLocalDescription(answer);
 
@@ -182,16 +255,13 @@ export function useWebRTC(session: ActiveCallSession | null) {
       setCallStatus('connecting');
       if (peerConnectionRef.current) {
         await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(data.sdpAnswer));
+        await processPendingIceCandidates();
       }
     };
 
     const handleIceCandidate = async (data: { fromUserId: string; candidate: any }) => {
-      if (peerConnectionRef.current && data.candidate) {
-        try {
-          await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(data.candidate));
-        } catch (e) {
-          console.warn('Error adding ICE candidate:', e);
-        }
+      if (data.candidate) {
+        await addOrQueueCandidate(data.candidate);
       }
     };
 
@@ -237,9 +307,9 @@ export function useWebRTC(session: ActiveCallSession | null) {
         peerConnectionRef.current = null;
       }
     };
-  }, [session?.peerUser.id, session?.role, socket]);
+  }, [session?.peerUser.id, session?.role, socket, addOrQueueCandidate, processPendingIceCandidates]);
 
-  // 3. Toggle Microphone
+  // 5. Toggle Microphone
   const toggleMicrophone = useCallback(() => {
     if (localStreamRef.current) {
       const audioTrack = localStreamRef.current.getAudioTracks()[0];
@@ -259,7 +329,7 @@ export function useWebRTC(session: ActiveCallSession | null) {
     }
   }, [socket, session]);
 
-  // 4. Toggle Camera
+  // 6. Toggle Camera
   const toggleCamera = useCallback(async () => {
     if (localStreamRef.current) {
       let videoTrack = localStreamRef.current.getVideoTracks()[0];
@@ -309,7 +379,7 @@ export function useWebRTC(session: ActiveCallSession | null) {
     }
   }, [socket, session]);
 
-  // 5. Toggle Screen Sharing
+  // 7. Toggle Screen Sharing
   const toggleScreenShare = useCallback(async () => {
     if (!peerConnectionRef.current || !session) return;
 
