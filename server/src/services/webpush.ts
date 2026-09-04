@@ -172,6 +172,8 @@ export async function sendPushToUser(
 
   // 1. Channel 1: RFC 8292 Standard Web Push (Chrome, Firefox, Safari iOS 16.4+, Edge)
   const subscriptions = getPushSubscriptionsForUser(userId);
+  console.log(`📤 Sending push to user ${userId}: ${subscriptions.length} subscription(s), isCall=${isCall}`);
+
   if (subscriptions.length > 0) {
     const stringified = JSON.stringify(payload);
     const options: RequestOptions = {
@@ -183,17 +185,21 @@ export async function sendPushToUser(
       try {
         await webpush.sendNotification(sub as any, stringified, options);
         anyDelivered = true;
+        console.log(`✅ Web Push delivered to ${sub.endpoint.slice(0, 60)}...`);
       } catch (err: any) {
         if (err.statusCode === 404 || err.statusCode === 410) {
           // Subscription expired or revoked by user
           removePushSubscriptionByEndpoint(sub.endpoint);
+          console.log(`🗑️ Removed expired push subscription: ${sub.endpoint.slice(0, 60)}...`);
         } else {
-          console.warn('Web push delivery failed for endpoint:', err.message);
+          console.warn('❌ Web push delivery failed:', err.statusCode, err.message);
         }
       }
     });
 
     await Promise.allSettled(promises);
+  } else {
+    console.log(`⚠️ No push subscriptions found for user ${userId} — push not sent`);
   }
 
   // 2. Channel 2: Firebase FCM Fallback (if configured)

@@ -191,8 +191,10 @@ app.post('/api/notifications/subscribe', requireAuth, (req: any, res) => {
     return res.status(400).json({ error: 'Missing subscription details' });
   }
   savePushSubscription(userId, subscription);
+  console.log(`✅ Push subscription saved for user ${userId}: ${subscription.endpoint?.slice(0, 60)}...`);
   res.json({ success: true, message: 'Web Push subscription registered' });
 });
+
 
 app.post('/api/notifications/test', requireAuth, async (req: any, res) => {
   const userId = req.user?.userId;
@@ -222,6 +224,28 @@ app.post('/api/notifications/test', requireAuth, async (req: any, res) => {
   );
 
   res.json({ success: true, delivered: sent });
+});
+
+// Debug: List push subscriptions for current user (dev only)
+app.get('/api/notifications/subscriptions', requireAuth, (req: any, res) => {
+  const userId = req.user?.userId;
+  try {
+    const { db } = require('./db.js');
+    const subs = db.prepare('SELECT id, endpoint, created_at FROM push_subscriptions WHERE user_id = ?').all(userId);
+    const settings = db.prepare('SELECT fcm_token FROM user_settings WHERE user_id = ?').get(userId) as any;
+    res.json({
+      userId,
+      webPushSubscriptions: subs.length,
+      hasFcmToken: !!settings?.fcm_token,
+      subscriptions: subs.map((s: any) => ({
+        id: s.id,
+        endpointPrefix: s.endpoint?.slice(0, 60) + '...',
+        createdAt: s.created_at,
+      })),
+    });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // 3. Chat Routes

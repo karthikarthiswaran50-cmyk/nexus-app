@@ -5,7 +5,8 @@ import { useAuth } from './AuthContext';
 import { User, CallType, Message, ActiveCallSession } from '../types';
 import { soundEffects } from '../utils/soundEffects';
 import { requestFcmToken, trackUserActivity } from '../config/firebase';
-import { showCallNotification, closeCallNotification, showMessageNotification, subscribeToWebPush } from '../utils/notifications';
+import { showCallNotification, closeCallNotification, showMessageNotification, subscribeToWebPush, autoRegisterPushIfGranted } from '../utils/notifications';
+
 
 interface IncomingCallData {
   caller: User;
@@ -68,9 +69,9 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       newSocket.emit('presence:get_online');
       newSocket.emit('call:check_pending');
 
-      // Auto-register Web Push & FCM if permission is granted
+      // Auto-register Web Push & FCM if permission is granted (runs every connect)
+      autoRegisterPushIfGranted();
       if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
-        subscribeToWebPush().catch(() => {});
         requestFcmToken().then((fcmToken) => {
           if (fcmToken) {
             axios.post('/api/users/fcm-token', { token: fcmToken }).catch(() => {});
@@ -82,6 +83,18 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     newSocket.on('disconnect', () => {
       setIsConnected(false);
     });
+
+    // 🔔 When service worker receives push (phone wakes from background),
+    // reconnect socket and check for any pending calls
+    const swMessageHandler = (event: MessageEvent) => {
+      if (event.data?.type === 'PUSH_RECEIVED') {
+        if (!newSocket.connected) {
+          newSocket.connect();
+        }
+        newSocket.emit('call:check_pending');
+      }
+    };
+    navigator.serviceWorker?.addEventListener('message', swMessageHandler);
 
     newSocket.on('presence:online_list', (userIds: string[]) => {
       setOnlineUserIds(new Set(userIds));
@@ -183,8 +196,10 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       newSocket.disconnect();
       soundEffects.stopOutgoingRing();
       soundEffects.stopIncomingCallTone();
+      navigator.serviceWorker?.removeEventListener('message', swMessageHandler);
     };
   }, [token, user?.id]);
+
 
   const startCall = useCallback((peerUser: User, callType: CallType) => {
     if (!socket || !user) return;

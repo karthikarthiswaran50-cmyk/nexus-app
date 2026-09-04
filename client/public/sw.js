@@ -1,5 +1,5 @@
-// Nexus Royal PWA & Notification Service Worker v4
-const CACHE_NAME = 'nexus-cache-v4';
+// Nexus Royal PWA & Notification Service Worker v5
+const CACHE_NAME = 'nexus-cache-v5';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
@@ -13,73 +13,89 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Pass-through fetch event (ensures PWA installability without blocking network loads)
-self.addEventListener('fetch', () => {
-  return;
-});
-
-// 🔔 High-Priority Background Push Notification Handler (FCM & Web Push)
-self.addEventListener('push', (event) => {
-  if (!event.data) return;
-
-  try {
-    let payload = {};
-    try {
-      payload = event.data.json();
-    } catch (e) {
-      payload = { notification: { title: 'Nexus Notification', body: event.data.text() } };
-    }
-
-    const title = payload.notification?.title || payload.data?.title || '👑 Nexus Royal';
-    const body = payload.notification?.body || payload.data?.body || 'You have a new update on Nexus.';
-    const callType = payload.data?.callType || payload.data?.type;
-    const isCall = callType === 'audio' || callType === 'video' || payload.data?.tag === 'nexus-incoming-call';
-
-    const options = {
-      body,
-      icon: payload.notification?.icon || payload.data?.callerAvatar || '/icon-192.svg',
-      badge: '/icon-192.svg',
-      // Dynamic vibration: longer pulses for calls, short double pulse for messages
-      vibrate: isCall ? [500, 250, 500, 250, 500] : [150, 80, 150],
-      tag: payload.data?.tag || (isCall ? 'nexus-incoming-call' : 'nexus-chat-message'),
-      renotify: true,
-      requireInteraction: isCall,
-      data: {
-        url: payload.data?.url || '/',
-        callType: payload.data?.callType,
-        conversationId: payload.data?.conversationId,
-        timestamp: Date.now(),
-      },
-    };
-
-    event.waitUntil(self.registration.showNotification(title, options));
-  } catch (err) {
-    console.error('Service Worker Push Error:', err);
+// Pass-through fetch (ensures PWA installability, do not cache API calls)
+self.addEventListener('fetch', (event) => {
+  const url = new URL(event.request.url);
+  // Only cache same-origin non-API static assets
+  if (url.origin === self.location.origin && !url.pathname.startsWith('/api/') && !url.pathname.startsWith('/socket.io/')) {
+    event.respondWith(
+      caches.match(event.request).then((cached) => cached || fetch(event.request))
+    );
   }
 });
 
-// 👆 Notification Click / Tap Handler (Focus existing tab or open new window)
+// ============================================================
+// 🔔 BACKGROUND PUSH NOTIFICATION HANDLER
+// Fires when server sends Web Push (receiver phone is locked / app is in background)
+// ============================================================
+self.addEventListener('push', (event) => {
+  if (!event.data) return;
+
+  let payload = {};
+  try {
+    payload = event.data.json();
+  } catch (e) {
+    payload = { notification: { title: '👑 Nexus Royal', body: event.data.text() } };
+  }
+
+  const notification = payload.notification || {};
+  const data = payload.data || {};
+
+  const title = notification.title || data.title || '👑 Nexus Royal';
+  const body = notification.body || data.body || 'You have a new notification on Nexus Royal.';
+  const tag = data.tag || notification.tag || 'nexus-notification';
+  const isCall = tag === 'nexus-incoming-call' || data.type === 'call';
+
+  const options = {
+    body,
+    icon: notification.icon || data.callerAvatar || '/icon-192.svg',
+    badge: '/icon-192.svg',
+    vibrate: isCall ? [600, 200, 600, 200, 600, 200, 600] : [200, 100, 200],
+    tag,
+    renotify: true,
+    requireInteraction: isCall, // Call notifications stay visible until tapped
+    silent: false,
+    data: {
+      url: data.url || '/',
+      type: data.type,
+      callType: data.callType,
+      conversationId: data.conversationId,
+      timestamp: Date.now(),
+    },
+  };
+
+  // Keep service worker alive until notification is shown
+  event.waitUntil(
+    self.registration.showNotification(title, options).then(() => {
+      // Also wake up any open clients so they can reconnect socket
+      return clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+        windowClients.forEach((client) => {
+          client.postMessage({ type: 'PUSH_RECEIVED', payload });
+        });
+      });
+    })
+  );
+});
+
+// ============================================================
+// 👆 NOTIFICATION CLICK / TAP HANDLER
+// ============================================================
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const targetUrl = event.notification.data?.url || '/';
+  const notifData = event.notification.data || {};
+  const targetUrl = notifData.url || '/';
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
-      // 1. If an existing window is already open, focus it
+      // Focus existing open tab first
       for (const client of windowClients) {
         if (client.url.includes(self.location.origin) && 'focus' in client) {
           client.focus();
-          if ('postMessage' in client) {
-            client.postMessage({
-              type: 'NOTIFICATION_CLICKED',
-              data: event.notification.data,
-            });
-          }
+          client.postMessage({ type: 'NOTIFICATION_CLICKED', data: notifData });
           return;
         }
       }
-
-      // 2. Otherwise open a new window
+      // Open new tab if no existing tab found
       if (clients.openWindow) {
         return clients.openWindow(targetUrl);
       }
@@ -87,11 +103,19 @@ self.addEventListener('notificationclick', (event) => {
   );
 });
 
-// Listen for messages from client windows (e.g. to close notifications)
+// ============================================================
+// 💬 MESSAGES FROM CLIENT (close call notification, etc.)
+// ============================================================
 self.addEventListener('message', (event) => {
-  if (event.data && event.data.action === 'closeCallNotification') {
+  if (!event.data) return;
+
+  if (event.data.action === 'closeCallNotification') {
     self.registration.getNotifications({ tag: 'nexus-incoming-call' }).then((notifications) => {
       notifications.forEach((n) => n.close());
     });
+  }
+
+  if (event.data.action === 'SKIP_WAITING') {
+    self.skipWaiting();
   }
 });
