@@ -18,6 +18,8 @@ tools/git/
 .env.test.local
 .env.production.local
 server/.env
+*service-account*.json
+
 
 # Local SSL certs
 certs/
