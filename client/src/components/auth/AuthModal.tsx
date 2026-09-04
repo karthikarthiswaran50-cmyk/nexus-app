@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { Sparkles, Video, MessageSquare, Shield, ArrowRight, UserCheck, Lock, Mail, User as UserIcon } from 'lucide-react';
+import { Sparkles, Video, MessageSquare, Shield, ArrowRight, UserCheck, Lock, Mail, User as UserIcon, Crown } from 'lucide-react';
 import { Avatar } from '../common/Avatar';
 
 export const AuthModal: React.FC = () => {
@@ -100,65 +100,70 @@ export const AuthModal: React.FC = () => {
     try {
       await loginDemoUser(usr);
     } catch (err: any) {
-      setError('Demo login failed');
+      setError('Failed to login with demo account');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-dark-950/80 backdrop-blur-md overflow-y-auto">
-      <div className="relative w-full max-w-4xl bg-dark-900 border border-dark-800 rounded-2xl shadow-2xl overflow-hidden grid grid-cols-1 lg:grid-cols-12 my-8">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-dark-950/85 backdrop-blur-2xl animate-in fade-in duration-300 font-['Plus_Jakarta_Sans',sans-serif]">
+      <div className="relative w-full max-w-4xl bg-dark-900 border border-gold-500/25 rounded-3xl overflow-hidden shadow-2xl grid grid-cols-1 lg:grid-cols-12 royal-card">
         
-        {/* Left Side: Brand presentation */}
-        <div className="lg:col-span-5 p-8 bg-gradient-to-br from-brand-950 via-dark-900 to-dark-950 border-b lg:border-b-0 lg:border-r border-dark-800 flex flex-col justify-between">
-          <div>
-            <div className="flex items-center gap-2.5 mb-6">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-600 to-accent-violet flex items-center justify-center shadow-lg shadow-brand-500/20">
-                <Video className="w-5 h-5 text-white" />
+        {/* Left Side: Royal Branding & Hero */}
+        <div className="lg:col-span-5 p-8 bg-gradient-to-br from-amber-950/40 via-dark-950 to-dark-900 border-b lg:border-b-0 lg:border-r border-gold-500/20 flex flex-col justify-between relative overflow-hidden">
+          
+          <div className="relative z-10">
+            {/* Logo */}
+            <div className="flex items-center gap-2.5 mb-8">
+              <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-amber-500 via-yellow-400 to-amber-600 flex items-center justify-center text-dark-950 shadow-xl shadow-gold-500/30">
+                <Crown className="w-5 h-5 fill-dark-950" />
               </div>
               <div>
-                <h1 className="text-xl font-bold tracking-tight text-white flex items-center gap-1.5">
-                  Nexus <span className="text-[10px] px-1.5 py-0.5 rounded bg-brand-500/20 text-brand-400 border border-brand-500/30">PRO</span>
+                <h1 className="text-xl font-black tracking-tight text-white flex items-center gap-1.5">
+                  <span className="gold-gradient-text">NEXUS</span>
+                  <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-gold-500/20 text-gold-300 border border-gold-500/30">
+                    ROYAL
+                  </span>
                 </h1>
-                <p className="text-xs text-dark-400">Connect, Call & Collaborate</p>
+                <p className="text-[11px] text-dark-400">Imperial Real-Time Platform</p>
               </div>
             </div>
 
-            <h2 className="text-2xl font-bold text-white mb-3">
-              Ultra HD Video, Audio & Real-time Messaging
+            <h2 className="text-2xl sm:text-3xl font-black text-white mb-3 tracking-tight">
+              Ultra-HD Video, Audio & Royal Messaging
             </h2>
-            <p className="text-sm text-dark-300 leading-relaxed mb-6">
-              Experience seamless peer-to-peer encrypted calls, screen sharing, custom subscriber profiles, and rich messaging.
+            <p className="text-xs sm:text-sm text-dark-300 leading-relaxed mb-6">
+              Experience seamless encrypted WebRTC calling, screen sharing, custom VIP passports, and instant voice notes.
             </p>
 
             <div className="space-y-3 mb-8">
               <div className="flex items-center gap-3 text-xs text-dark-200">
-                <div className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                <div className="p-1.5 rounded-xl bg-gold-500/15 text-gold-400 border border-gold-500/30">
                   <Video className="w-4 h-4" />
                 </div>
-                <span>1-on-1 HD Video & Screen Sharing</span>
+                <span className="font-bold">1-on-1 4K WebRTC Video & Screen Share</span>
               </div>
               <div className="flex items-center gap-3 text-xs text-dark-200">
-                <div className="p-1.5 rounded-lg bg-brand-500/10 text-brand-400 border border-brand-500/20">
+                <div className="p-1.5 rounded-xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
                   <MessageSquare className="w-4 h-4" />
                 </div>
-                <span>Real-Time Instant Chat & Status</span>
+                <span className="font-bold">WhatsApp Voice Notes & Live Status</span>
               </div>
               <div className="flex items-center gap-3 text-xs text-dark-200">
-                <div className="p-1.5 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                  <Sparkles className="w-4 h-4" />
+                <div className="p-1.5 rounded-xl bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                  <Crown className="w-4 h-4 fill-amber-300" />
                 </div>
-                <span>Pro & VIP Subscription Tiers</span>
+                <span className="font-bold">24K Gold VIP Privileges</span>
               </div>
             </div>
           </div>
 
           {/* Quick 1-Click Demo Login Bar */}
-          <div className="pt-4 border-t border-dark-800/80">
-            <p className="text-xs font-semibold text-dark-400 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
-              <UserCheck className="w-3.5 h-3.5 text-brand-400" />
-              Quick 1-Click Demo Accounts:
+          <div className="pt-4 border-t border-gold-500/15 relative z-10">
+            <p className="text-[11px] font-bold text-gold-300 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
+              <UserCheck className="w-3.5 h-3.5 text-gold-400" />
+              <span>Instant 1-Click Demo Access:</span>
             </p>
             <div className="grid grid-cols-2 gap-2">
               {demoAccounts.map((demo) => (
@@ -167,12 +172,12 @@ export const AuthModal: React.FC = () => {
                   type="button"
                   onClick={() => handleQuickDemoLogin(demo.username)}
                   disabled={loading}
-                  className="flex items-center gap-2 p-2 rounded-xl bg-dark-800/60 hover:bg-brand-600/20 border border-dark-700/60 hover:border-brand-500/40 transition-all text-left group"
+                  className="flex items-center gap-2 p-2 rounded-xl bg-dark-850 hover:bg-gold-500/15 border border-gold-500/15 hover:border-gold-400/40 transition-all text-left group shadow-xs active:scale-95"
                 >
                   <Avatar src={demo.avatar} name={demo.name} size="xs" planId={demo.tier} />
                   <div className="min-w-0">
-                    <p className="text-xs font-medium text-dark-200 group-hover:text-white truncate">{demo.name}</p>
-                    <p className="text-[10px] text-dark-400 uppercase">{demo.tier}</p>
+                    <p className="text-xs font-bold text-dark-200 group-hover:text-amber-200 truncate">{demo.name}</p>
+                    <p className="text-[9px] text-gold-400 uppercase font-bold">{demo.tier}</p>
                   </div>
                 </button>
               ))}
@@ -181,14 +186,14 @@ export const AuthModal: React.FC = () => {
         </div>
 
         {/* Right Side: Login / Register Form */}
-        <div className="lg:col-span-7 p-8 flex flex-col justify-center">
-          <div className="flex items-center justify-between mb-6 pb-2 border-b border-dark-800">
+        <div className="lg:col-span-7 p-6 sm:p-8 flex flex-col justify-center">
+          <div className="flex items-center justify-between mb-6 pb-2 border-b border-gold-500/15">
             <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => { setIsRegister(false); setError(null); }}
-                className={`text-sm font-semibold pb-2 border-b-2 transition-all ${
-                  !isRegister ? 'border-brand-500 text-white' : 'border-transparent text-dark-400 hover:text-dark-200'
+                className={`text-sm font-black pb-2 border-b-2 transition-all ${
+                  !isRegister ? 'border-gold-400 text-amber-200' : 'border-transparent text-dark-400 hover:text-dark-200'
                 }`}
               >
                 Sign In
@@ -196,18 +201,18 @@ export const AuthModal: React.FC = () => {
               <button
                 type="button"
                 onClick={() => { setIsRegister(true); setError(null); }}
-                className={`text-sm font-semibold pb-2 border-b-2 transition-all ${
-                  isRegister ? 'border-brand-500 text-white' : 'border-transparent text-dark-400 hover:text-dark-200'
+                className={`text-sm font-black pb-2 border-b-2 transition-all ${
+                  isRegister ? 'border-gold-400 text-amber-200' : 'border-transparent text-dark-400 hover:text-dark-200'
                 }`}
               >
                 Create Account
               </button>
             </div>
-            <span className="text-xs text-dark-400">Secure & Encrypted</span>
+            <span className="text-[11px] font-mono text-gold-400/80">256-Bit Vault</span>
           </div>
 
           {error && (
-            <div className="mb-5 p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
+            <div className="mb-5 p-3.5 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
               <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" />
               <span>{error}</span>
             </div>
@@ -218,7 +223,7 @@ export const AuthModal: React.FC = () => {
             type="button"
             onClick={handleGoogleSignIn}
             disabled={loading}
-            className="w-full py-2.5 px-4 mb-4 rounded-xl bg-white hover:bg-slate-100 text-slate-800 font-semibold text-xs shadow-md flex items-center justify-center gap-2.5 transition-all active:scale-[0.98] disabled:opacity-50 border border-slate-200"
+            className="w-full py-3 px-4 mb-4 rounded-xl bg-white hover:bg-slate-100 text-slate-900 font-bold text-xs shadow-md flex items-center justify-center gap-2.5 transition-all active:scale-[0.98] disabled:opacity-50 border border-slate-200"
           >
             <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
               <path
@@ -242,43 +247,43 @@ export const AuthModal: React.FC = () => {
           </button>
 
           <div className="relative flex py-1 items-center mb-4">
-            <div className="flex-grow border-t border-dark-800"></div>
+            <div className="flex-grow border-t border-gold-500/15"></div>
             <span className="flex-shrink mx-3 text-dark-500 text-[10px] uppercase font-bold tracking-wider">or with credentials</span>
-            <div className="flex-grow border-t border-dark-800"></div>
+            <div className="flex-grow border-t border-gold-500/15"></div>
           </div>
 
           {!isRegister ? (
             /* Login Form */
             <form onSubmit={handleLoginSubmit} className="space-y-4">
               <div>
-                <label className="block text-xs font-medium text-dark-300 mb-1.5">Email or Username</label>
+                <label className="block text-xs font-bold text-dark-300 mb-1.5">Email or Handle</label>
                 <div className="relative">
-                  <Mail className="w-4 h-4 text-dark-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <Mail className="w-4 h-4 text-gold-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                   <input
                     type="text"
                     required
                     value={loginInput}
                     onChange={(e) => setLoginInput(e.target.value)}
                     placeholder="e.g. demo@nexus.app or demo_user"
-                    className="w-full pl-10 pr-4 py-2.5 bg-dark-800 border border-dark-700 rounded-xl text-sm text-white placeholder:text-dark-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition-all"
+                    className="w-full pl-10 pr-4 py-2.5 bg-dark-850 border border-gold-500/20 rounded-xl text-xs sm:text-sm text-white placeholder:text-dark-500 focus:outline-none focus:border-gold-400 transition-all shadow-inner"
                   />
                 </div>
               </div>
 
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className="block text-xs font-medium text-dark-300">Password</label>
-                  <span className="text-[11px] text-dark-400">Demo password: <code className="text-brand-400">password123</code></span>
+                  <label className="block text-xs font-bold text-dark-300">Password</label>
+                  <span className="text-[11px] text-dark-400">Demo: <code className="text-amber-300">password123</code></span>
                 </div>
                 <div className="relative">
-                  <Lock className="w-4 h-4 text-dark-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <Lock className="w-4 h-4 text-gold-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                   <input
                     type="password"
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="Enter your password"
-                    className="w-full pl-10 pr-4 py-2.5 bg-dark-800 border border-dark-700 rounded-xl text-sm text-white placeholder:text-dark-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition-all"
+                    className="w-full pl-10 pr-4 py-2.5 bg-dark-850 border border-gold-500/20 rounded-xl text-xs sm:text-sm text-white placeholder:text-dark-500 focus:outline-none focus:border-gold-400 transition-all shadow-inner"
                   />
                 </div>
               </div>
@@ -289,7 +294,7 @@ export const AuthModal: React.FC = () => {
                     type="checkbox"
                     checked={rememberMe}
                     onChange={(e) => setRememberMe(e.target.checked)}
-                    className="w-4 h-4 rounded border-dark-700 bg-dark-800 text-brand-500 focus:ring-0 focus:ring-offset-0"
+                    className="w-4 h-4 rounded border-dark-700 bg-dark-850 text-gold-500 focus:ring-0 focus:ring-offset-0"
                   />
                   <span className="text-dark-300 text-xs">Remember my username</span>
                 </label>
@@ -298,10 +303,10 @@ export const AuthModal: React.FC = () => {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full mt-2 py-3 px-4 rounded-xl bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400 text-white font-semibold text-sm shadow-lg shadow-brand-500/25 flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+                className="w-full mt-2 py-3 px-4 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-600 hover:from-amber-400 hover:to-yellow-300 text-dark-950 font-black text-xs sm:text-sm shadow-xl shadow-gold-500/30 flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50"
               >
-                {loading ? 'Authenticating...' : 'Sign In to Nexus'}
-                <ArrowRight className="w-4 h-4" />
+                {loading ? 'Authenticating...' : 'Enter Nexus Royal'}
+                <ArrowRight className="w-4 h-4 stroke-[2.5]" />
               </button>
             </form>
           ) : (
@@ -309,43 +314,43 @@ export const AuthModal: React.FC = () => {
             <form onSubmit={handleRegisterSubmit} className="space-y-3.5">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-dark-300 mb-1">Full Name *</label>
+                  <label className="block text-xs font-bold text-dark-300 mb-1">Full Name *</label>
                   <input
                     type="text"
                     required
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
                     placeholder="John Doe"
-                    className="w-full px-3.5 py-2 bg-dark-800 border border-dark-700 rounded-xl text-sm text-white placeholder:text-dark-500 focus:outline-none focus:border-brand-500"
+                    className="w-full px-3.5 py-2 bg-dark-850 border border-gold-500/20 rounded-xl text-xs sm:text-sm text-white placeholder:text-dark-500 focus:outline-none focus:border-gold-400"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-dark-300 mb-1">Username *</label>
+                  <label className="block text-xs font-bold text-dark-300 mb-1">Username *</label>
                   <input
                     type="text"
                     required
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
                     placeholder="johndoe"
-                    className="w-full px-3.5 py-2 bg-dark-800 border border-dark-700 rounded-xl text-sm text-white placeholder:text-dark-500 focus:outline-none focus:border-brand-500"
+                    className="w-full px-3.5 py-2 bg-dark-850 border border-gold-500/20 rounded-xl text-xs sm:text-sm text-white placeholder:text-dark-500 focus:outline-none focus:border-gold-400"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-dark-300 mb-1">Email Address *</label>
+                <label className="block text-xs font-bold text-dark-300 mb-1">Email Address *</label>
                 <input
                   type="email"
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="john@example.com"
-                  className="w-full px-3.5 py-2 bg-dark-800 border border-dark-700 rounded-xl text-sm text-white placeholder:text-dark-500 focus:outline-none focus:border-brand-500"
+                  className="w-full px-3.5 py-2 bg-dark-850 border border-gold-500/20 rounded-xl text-xs sm:text-sm text-white placeholder:text-dark-500 focus:outline-none focus:border-gold-400"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-dark-300 mb-1">Password *</label>
+                <label className="block text-xs font-bold text-dark-300 mb-1">Password *</label>
                 <input
                   type="password"
                   required
@@ -353,12 +358,12 @@ export const AuthModal: React.FC = () => {
                   value={regPassword}
                   onChange={(e) => setRegPassword(e.target.value)}
                   placeholder="At least 6 characters"
-                  className="w-full px-3.5 py-2 bg-dark-800 border border-dark-700 rounded-xl text-sm text-white placeholder:text-dark-500 focus:outline-none focus:border-brand-500"
+                  className="w-full px-3.5 py-2 bg-dark-850 border border-gold-500/20 rounded-xl text-xs sm:text-sm text-white placeholder:text-dark-500 focus:outline-none focus:border-gold-400"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-dark-300 mb-1.5">Choose Avatar</label>
+                <label className="block text-xs font-bold text-dark-300 mb-1.5">Choose Avatar</label>
                 <div className="flex items-center gap-2 overflow-x-auto pb-1">
                   {avatarOptions.map((av, idx) => (
                     <button
@@ -366,7 +371,7 @@ export const AuthModal: React.FC = () => {
                       type="button"
                       onClick={() => setSelectedAvatar(av)}
                       className={`relative rounded-full p-0.5 transition-all ${
-                        selectedAvatar === av ? 'ring-2 ring-brand-500 scale-105' : 'opacity-60 hover:opacity-100'
+                        selectedAvatar === av ? 'ring-2 ring-gold-400 scale-105' : 'opacity-60 hover:opacity-100'
                       }`}
                     >
                       <img src={av} alt="avatar option" className="w-8 h-8 rounded-full object-cover" />
@@ -378,10 +383,10 @@ export const AuthModal: React.FC = () => {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full mt-2 py-3 px-4 rounded-xl bg-gradient-to-r from-brand-600 to-accent-violet hover:from-brand-500 hover:to-violet-500 text-white font-semibold text-sm shadow-lg shadow-brand-500/25 flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+                className="w-full mt-2 py-3 px-4 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-600 hover:from-amber-400 hover:to-yellow-300 text-dark-950 font-black text-xs sm:text-sm shadow-xl shadow-gold-500/30 flex items-center justify-center gap-2 transition-all disabled:opacity-50 active:scale-95"
               >
-                {loading ? 'Creating account...' : 'Create Free Account'}
-                <ArrowRight className="w-4 h-4" />
+                {loading ? 'Creating account...' : 'Create Royal Account'}
+                <ArrowRight className="w-4 h-4 stroke-[2.5]" />
               </button>
             </form>
           )}

@@ -380,27 +380,27 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
         </div>
       </div>
 
-      {/* Messages Thread Container */}
-      <div className="flex-1 p-4 sm:p-6 overflow-y-auto space-y-4 bg-gradient-to-b from-dark-950 via-dark-900/30 to-dark-950">
+      {/* Messages Thread Container (Royal Watermark Canvas) */}
+      <div className="flex-1 p-4 sm:p-6 overflow-y-auto space-y-4 royal-watermark bg-dark-950">
         {loading ? (
           <div className="h-full flex items-center justify-center">
-            <div className="w-8 h-8 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
+            <div className="w-8 h-8 border-2 border-gold-400 border-t-transparent rounded-full animate-spin" />
           </div>
         ) : messages.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center p-8">
             <Avatar src={otherUser.avatar_url} name={otherUser.full_name} size="xl" planId={otherUser.plan_id} />
-            <h3 className="text-lg font-bold text-white mt-4">{otherUser.full_name}</h3>
-            <p className="text-xs text-dark-400 max-w-xs mt-1">{otherUser.bio || 'Say hello and start connecting!'}</p>
+            <h3 className="text-lg font-extrabold text-white mt-4">{otherUser.full_name}</h3>
+            <p className="text-xs text-dark-400 max-w-xs mt-1">{otherUser.bio || 'Say hello and start a Royal conversation!'}</p>
             <div className="flex items-center gap-3 mt-4">
               <button
                 onClick={() => handleStartCall('video')}
-                className="px-4 py-2 rounded-xl bg-brand-600/20 border border-brand-500/40 text-brand-300 hover:bg-brand-600 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-all"
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500/20 to-yellow-500/20 border border-gold-400/40 text-amber-300 hover:bg-gold-500 hover:text-dark-950 text-xs font-bold flex items-center gap-1.5 transition-all shadow-md shadow-gold-500/10"
               >
-                <Video className="w-3.5 h-3.5" /> Start Video Call
+                <Video className="w-3.5 h-3.5" /> Start Royal Video Call
               </button>
               <button
                 onClick={() => handleStartCall('audio')}
-                className="px-4 py-2 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-all"
+                className="px-4 py-2 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500 hover:text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-md shadow-emerald-500/10"
               >
                 <Phone className="w-3.5 h-3.5" /> Start Audio Call
               </button>
@@ -416,17 +416,17 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
                 className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} group animate-in fade-in duration-150`}
               >
                 <div
-                  className={`relative max-w-[85%] sm:max-w-[70%] rounded-2xl p-3.5 text-sm shadow-md transition-all ${
+                  className={`relative max-w-[85%] sm:max-w-[70%] rounded-2xl p-3.5 text-sm shadow-xl transition-all ${
                     isMe
-                      ? 'bg-gradient-to-r from-brand-600 to-indigo-600 text-white rounded-br-xs'
-                      : 'bg-dark-900 border border-dark-800 text-dark-100 rounded-bl-xs'
+                      ? 'bg-gradient-to-r from-indigo-700 via-indigo-600 to-brand-600 text-white rounded-br-xs border border-indigo-400/30 shadow-indigo-950/60'
+                      : 'royal-card bg-dark-900/90 text-dark-100 rounded-bl-xs border border-gold-500/20'
                   }`}
                 >
                   {/* Voice Note Player or Image Attachment */}
                   {msg.type === 'audio' && msg.media_url ? (
                     <VoicePlayer audioUrl={msg.media_url} isMe={isMe} />
                   ) : msg.type === 'image' && msg.media_url ? (
-                    <div className="mb-2 rounded-xl overflow-hidden max-h-72 bg-dark-950">
+                    <div className="mb-2 rounded-xl overflow-hidden max-h-72 bg-dark-950 border border-white/10">
                       <img
                         src={msg.media_url}
                         alt="attachment"
@@ -448,9 +448,9 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
                     <span>{formatTime(msg.created_at)}</span>
                     {isMe && (
                       msg.is_read ? (
-                        <CheckCheck className="w-3 h-3 text-cyan-300" />
+                        <CheckCheck className="w-3.5 h-3.5 text-amber-300 stroke-[2.5]" />
                       ) : (
-                        <Check className="w-3 h-3 text-indigo-300" />
+                        <Check className="w-3.5 h-3.5 text-indigo-200 stroke-[2]" />
                       )
                     )}
                   </div>
@@ -541,7 +541,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
         </div>
       ) : (
         /* Standard Composer Input */
-        <form onSubmit={handleSendMessage} className="p-3.5 bg-dark-900/90 border-t border-dark-800 backdrop-blur-md flex items-center gap-2.5 shrink-0">
+        <form onSubmit={handleSendMessage} className="p-3.5 bg-dark-900/95 border-t border-gold-500/15 backdrop-blur-2xl flex items-center gap-2.5 shrink-0 shadow-2xl">
           
           {/* Hidden File Input */}
           <input
@@ -557,7 +557,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
             type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}
-            className="p-2.5 rounded-xl bg-dark-800 hover:bg-dark-700 text-dark-400 hover:text-white border border-dark-700 transition-all"
+            className="p-2.5 rounded-xl bg-dark-850 hover:bg-dark-800 text-dark-400 hover:text-amber-200 border border-gold-500/15 transition-all shadow-xs"
             title="Upload image or file"
           >
             <Paperclip className="w-4 h-4" />
@@ -568,7 +568,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
             type="button"
             onClick={() => setShowEmojis(!showEmojis)}
             className={`p-2.5 rounded-xl border transition-all ${
-              showEmojis ? 'bg-brand-600 text-white border-brand-500' : 'bg-dark-800 hover:bg-dark-700 text-dark-400 hover:text-white border-dark-700'
+              showEmojis ? 'bg-gold-500 text-dark-950 border-gold-400 font-bold shadow-md shadow-gold-500/20' : 'bg-dark-850 hover:bg-dark-800 text-dark-400 hover:text-amber-200 border-gold-500/15'
             }`}
             title="Insert Emoji"
           >
@@ -581,7 +581,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
             value={inputText}
             onChange={handleInputChange}
             placeholder={`Message ${otherUser.full_name}...`}
-            className="flex-1 bg-dark-800 border border-dark-700 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-dark-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition-all"
+            className="flex-1 bg-dark-850 border border-gold-500/15 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-dark-500 focus:outline-none focus:border-gold-400/80 focus:ring-1 focus:ring-gold-400/50 transition-all shadow-inner"
           />
 
           {/* Send Button or WhatsApp Mic Button */}
@@ -589,16 +589,16 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
             <button
               type="submit"
               disabled={uploading}
-              className="p-2.5 px-4 rounded-xl bg-gradient-to-r from-brand-600 to-indigo-600 hover:from-brand-500 hover:to-indigo-500 text-white shadow-lg shadow-brand-500/25 flex items-center justify-center transition-all"
+              className="p-2.5 px-4 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-600 hover:from-amber-400 hover:to-yellow-300 text-dark-950 font-black shadow-lg shadow-gold-500/25 flex items-center justify-center transition-all active:scale-95"
             >
-              <Send className="w-4 h-4" />
+              <Send className="w-4 h-4 text-dark-950 stroke-[2.5]" />
             </button>
           ) : (
             <button
               type="button"
               onClick={startRecording}
               disabled={uploading}
-              className="p-2.5 px-3.5 rounded-xl bg-dark-800 hover:bg-brand-600 text-brand-400 hover:text-white border border-dark-700 hover:border-brand-500 shadow-md flex items-center justify-center transition-all active:scale-95 group"
+              className="p-2.5 px-3.5 rounded-xl bg-dark-850 hover:bg-gradient-to-tr hover:from-amber-500 hover:to-yellow-400 text-gold-400 hover:text-dark-950 border border-gold-500/20 hover:border-gold-400 shadow-md flex items-center justify-center transition-all active:scale-95 group"
               title="Record Voice Message (WhatsApp Style)"
             >
               <Mic className="w-4 h-4 group-hover:scale-110 transition-all" />

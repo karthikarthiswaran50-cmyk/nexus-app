@@ -14,6 +14,7 @@ import {
   Sparkles,
   Users,
   Compass,
+  Crown,
 } from 'lucide-react';
 import axios from 'axios';
 
@@ -43,7 +44,7 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
       const res = await axios.get('/api/chat/conversations');
       setConversations(res.data.conversations);
       
-      // If no initial user selected and conversations exist, default to first or keep empty
+      // If no initial user selected and conversations exist, default to first on desktop
       if (!selectedUser && !initialSelectedUser && res.data.conversations.length > 0 && window.innerWidth >= 1024) {
         setSelectedUser(res.data.conversations[0].other_user || null);
       }
@@ -93,41 +94,41 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
   };
 
   return (
-    <div className="h-[calc(100dvh-4rem)] md:h-[calc(100dvh-5rem)] grid grid-cols-1 lg:grid-cols-12 gap-0 lg:gap-4 p-0 sm:p-4 lg:p-6 overflow-hidden max-w-7xl mx-auto w-full">
+    <div className="h-[calc(100dvh-3.5rem)] sm:h-[calc(100dvh-4rem)] md:h-[calc(100dvh-5rem)] grid grid-cols-1 lg:grid-cols-12 gap-0 lg:gap-4 p-0 sm:p-4 lg:p-6 overflow-hidden max-w-7xl mx-auto w-full font-['Plus_Jakarta_Sans',sans-serif]">
       
-      {/* Left Sidebar: Conversations list */}
+      {/* 👑 Left Sidebar: Conversations list (Royal Obsidian Glass) */}
       <div
-        className={`lg:col-span-4 h-full flex flex-col bg-dark-900 border-0 sm:border border-dark-800 rounded-none sm:rounded-2xl overflow-hidden shadow-xl ${
+        className={`lg:col-span-4 h-full flex flex-col bg-dark-900 border-0 sm:border border-gold-500/20 rounded-none sm:rounded-3xl overflow-hidden shadow-2xl royal-card ${
           selectedUser ? 'hidden lg:flex' : 'flex'
         }`}
       >
         {/* Header */}
-        <div className="p-3.5 sm:p-4 border-b border-dark-800 bg-dark-900/90 backdrop-blur-md">
+        <div className="p-3.5 sm:p-4 border-b border-gold-500/15 bg-dark-900/95 backdrop-blur-2xl">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
-              <MessageSquare className="w-5 h-5 text-brand-400" />
-              Messages
+            <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
+              <Crown className="w-5 h-5 text-gold-400 fill-gold-400" />
+              <span className="gold-gradient-text">Royal Messages</span>
             </h2>
             <button
               type="button"
               onClick={onNavigateToDirectory}
-              className="p-2 rounded-xl bg-brand-600/20 hover:bg-brand-600 text-brand-400 hover:text-white border border-brand-500/30 transition-all text-xs font-semibold flex items-center gap-1.5"
-              title="Start New Chat"
+              className="p-2 px-3 rounded-xl bg-gold-500/15 hover:bg-gold-500/25 text-amber-200 border border-gold-500/30 transition-all text-xs font-bold flex items-center gap-1.5 shadow-sm active:scale-95"
+              title="Start New Royal Chat"
             >
-              <Plus className="w-4 h-4" />
+              <Plus className="w-4 h-4 text-gold-400 stroke-[2.5]" />
               <span>New Chat</span>
             </button>
           </div>
 
           {/* Search bar */}
           <div className="relative">
-            <Search className="w-4 h-4 text-dark-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <Search className="w-4 h-4 text-gold-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search chats or username..."
-              className="w-full pl-9 pr-4 py-2 bg-dark-800 border border-dark-700/80 rounded-xl text-xs text-white placeholder:text-dark-500 focus:outline-none focus:border-brand-500 transition-all"
+              placeholder="Search chats or @handle..."
+              className="w-full pl-9 pr-4 py-2 bg-dark-850 border border-gold-500/15 rounded-xl text-xs text-white placeholder:text-dark-500 focus:outline-none focus:border-gold-400 focus:ring-1 focus:ring-gold-400/50 transition-all shadow-inner"
             />
           </div>
         </div>
@@ -137,15 +138,15 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
           {loading ? (
             <div className="p-8 text-center text-xs text-dark-500">Loading chats...</div>
           ) : filteredConversations.length === 0 ? (
-            <div className="p-8 text-center">
-              <Users className="w-8 h-8 text-dark-600 mx-auto mb-2" />
-              <p className="text-xs text-dark-400 mb-3">No conversations found</p>
+            <div className="p-8 text-center space-y-3">
+              <Users className="w-8 h-8 text-dark-600 mx-auto" />
+              <p className="text-xs text-dark-400">No active conversations found</p>
               <button
                 type="button"
                 onClick={onNavigateToDirectory}
-                className="px-3 py-1.5 rounded-lg bg-brand-600 text-white text-xs font-medium hover:bg-brand-500 transition-all"
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-400 text-dark-950 text-xs font-black shadow-lg shadow-gold-500/20 hover:scale-105 transition-all"
               >
-                Browse Members Directory
+                Browse Royal Directory
               </button>
             </div>
           ) : (
@@ -161,10 +162,10 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
                   key={conv.id}
                   type="button"
                   onClick={() => setSelectedUser(other)}
-                  className={`w-full p-3 rounded-xl flex items-center gap-3 text-left transition-all group ${
+                  className={`w-full p-3 rounded-2xl flex items-center gap-3 text-left transition-all group ${
                     isSelected
-                      ? 'bg-brand-600/20 border border-brand-500/40 shadow-inner'
-                      : 'hover:bg-dark-800/80 border border-transparent'
+                      ? 'bg-gradient-to-r from-amber-500/20 via-yellow-500/15 to-transparent border border-gold-400/40 shadow-inner'
+                      : 'hover:bg-dark-850/80 border border-transparent'
                   }`}
                 >
                   <Avatar
@@ -177,17 +178,23 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
                   />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-0.5">
-                      <p className="text-sm font-semibold text-white truncate">{other.full_name}</p>
-                      <span className="text-[10px] text-dark-400 shrink-0">
+                      <p className="text-sm font-extrabold text-white truncate group-hover:text-amber-200 transition-colors">
+                        {other.full_name}
+                      </p>
+                      <span className="text-[10px] text-dark-400 shrink-0 font-mono">
                         {formatLastMessageTime(conv.last_message?.created_at || conv.last_message_at)}
                       </span>
                     </div>
                     <div className="flex items-center justify-between">
                       <p className="text-xs text-dark-400 truncate">
-                        {conv.last_message ? conv.last_message.content : 'Started a conversation'}
+                        {conv.last_message ? (
+                          conv.last_message.type === 'audio' ? '🎤 Voice Note' : conv.last_message.content
+                        ) : (
+                          'Connected on Nexus'
+                        )}
                       </p>
                       {conv.unread_count && conv.unread_count > 0 ? (
-                        <span className="shrink-0 ml-2 px-1.5 py-0.5 rounded-full bg-brand-500 text-white text-[10px] font-bold">
+                        <span className="shrink-0 ml-2 px-2 py-0.5 rounded-full bg-gradient-to-tr from-amber-500 to-yellow-400 text-dark-950 text-[10px] font-black shadow-md shadow-gold-500/30">
                           {conv.unread_count}
                         </span>
                       ) : null}
@@ -200,7 +207,7 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
         </div>
       </div>
 
-      {/* Right Main Chat View */}
+      {/* 👑 Right Main Chat View (Full Royal Screen) */}
       <div className={`lg:col-span-8 h-full ${selectedUser ? 'block' : 'hidden lg:block'}`}>
         {selectedUser ? (
           <div className="h-full flex flex-col">
@@ -215,46 +222,28 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
           </div>
         ) : (
           /* Empty / Welcome State Hero */
-          <div className="h-full flex flex-col items-center justify-center p-8 bg-dark-900 border border-dark-800 rounded-2xl text-center shadow-xl">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-brand-600 to-accent-violet flex items-center justify-center text-white shadow-xl shadow-brand-500/20 mb-6 animate-pulse-subtle">
-              <Video className="w-8 h-8" />
+          <div className="h-full flex flex-col items-center justify-center p-8 bg-dark-900 border border-gold-500/20 rounded-3xl text-center shadow-2xl royal-card">
+            <div className="w-16 h-16 rounded-3xl bg-gradient-to-tr from-amber-500 via-yellow-400 to-amber-600 flex items-center justify-center text-dark-950 shadow-xl shadow-gold-500/30 mb-6 animate-pulse-subtle">
+              <Crown className="w-8 h-8 fill-dark-950" />
             </div>
-
-            <h2 className="text-2xl font-bold text-white mb-2">
-              Welcome to Nexus Platform
-            </h2>
-            <p className="text-sm text-dark-400 max-w-md mb-8 leading-relaxed">
-              Select a conversation from the sidebar or find members in the directory to start real-time messaging, audio calls, and HD video calls.
+            <h3 className="text-2xl font-black text-white mb-2">
+              Welcome to <span className="gold-gradient-text">Nexus Royal</span>
+            </h3>
+            <p className="text-xs sm:text-sm text-dark-300 max-w-md mx-auto mb-6 leading-relaxed">
+              Select a member from the sidebar or browse the Royal Directory to start ultra-fast messaging and 4K WebRTC video calls.
             </p>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-lg w-full">
-              <button
-                type="button"
-                onClick={onNavigateToDirectory}
-                className="p-4 rounded-xl bg-dark-800 hover:bg-dark-700 border border-dark-700 hover:border-brand-500/40 text-left transition-all group"
-              >
-                <div className="flex items-center gap-3 mb-1.5">
-                  <Compass className="w-5 h-5 text-brand-400 group-hover:scale-110 transition-transform" />
-                  <h4 className="text-sm font-semibold text-white">Find Members</h4>
-                </div>
-                <p className="text-xs text-dark-400">Discover active creators, developers & team members.</p>
-              </button>
-
-              <button
-                type="button"
-                onClick={onNavigateToSubscription}
-                className="p-4 rounded-xl bg-dark-800 hover:bg-dark-700 border border-dark-700 hover:border-amber-500/40 text-left transition-all group"
-              >
-                <div className="flex items-center gap-3 mb-1.5">
-                  <Sparkles className="w-5 h-5 text-amber-400 group-hover:scale-110 transition-transform" />
-                  <h4 className="text-sm font-semibold text-white">Unlock Pro Tier</h4>
-                </div>
-                <p className="text-xs text-dark-400">Get unlimited HD video calling, screen sharing, & badges.</p>
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={onNavigateToDirectory}
+              className="px-6 py-3 rounded-2xl bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-600 hover:from-amber-400 hover:to-yellow-300 text-dark-950 font-black text-xs shadow-xl shadow-gold-500/25 flex items-center gap-2 transition-all hover:scale-105 active:scale-95"
+            >
+              <Compass className="w-4 h-4 stroke-[2.5]" />
+              <span>Explore Royal Community</span>
+            </button>
           </div>
         )}
       </div>
+
     </div>
   );
 };

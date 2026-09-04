@@ -1,5 +1,5 @@
 import React from 'react';
-import { Crown, Sparkles, Shield } from 'lucide-react';
+import { Crown, Sparkles, Shield, Gem } from 'lucide-react';
 import { SubscriptionPlanId } from '../../types';
 
 interface PlanBadgeProps {
@@ -16,9 +16,9 @@ export const PlanBadge: React.FC<PlanBadgeProps> = ({
   className = '',
 }) => {
   const sizeClasses = {
-    sm: 'text-[10px] px-1.5 py-0.5 gap-1',
+    sm: 'text-[10px] px-2 py-0.5 gap-1',
     md: 'text-xs px-2.5 py-1 gap-1.5',
-    lg: 'text-sm px-3 py-1.5 gap-2 font-semibold',
+    lg: 'text-sm px-3.5 py-1.5 gap-2 font-bold',
   };
 
   const iconSizes = {
@@ -30,10 +30,10 @@ export const PlanBadge: React.FC<PlanBadgeProps> = ({
   if (planId === 'vip') {
     return (
       <span
-        className={`inline-flex items-center font-medium rounded-full bg-gradient-to-r from-amber-500/20 via-yellow-500/20 to-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm shadow-amber-500/10 ${sizeClasses[size]} ${className}`}
+        className={`inline-flex items-center font-extrabold rounded-full bg-gradient-to-r from-amber-500/25 via-yellow-400/20 to-amber-600/25 text-amber-200 border border-amber-400/50 shadow-md shadow-amber-500/20 tracking-wider ${sizeClasses[size]} ${className}`}
       >
-        {showIcon && <Crown className={`${iconSizes[size]} text-amber-400 fill-amber-400`} />}
-        VIP
+        {showIcon && <Crown className={`${iconSizes[size]} text-amber-300 fill-amber-400 animate-pulse-subtle`} />}
+        <span>IMPERIAL VIP</span>
       </span>
     );
   }
@@ -41,20 +41,20 @@ export const PlanBadge: React.FC<PlanBadgeProps> = ({
   if (planId === 'pro') {
     return (
       <span
-        className={`inline-flex items-center font-medium rounded-full bg-gradient-to-r from-brand-500/20 via-indigo-500/20 to-accent-violet/20 text-indigo-300 border border-brand-500/40 shadow-sm shadow-brand-500/10 ${sizeClasses[size]} ${className}`}
+        className={`inline-flex items-center font-bold rounded-full bg-gradient-to-r from-brand-500/25 via-indigo-400/20 to-accent-violet/25 text-brand-200 border border-brand-400/50 shadow-md shadow-brand-500/20 tracking-wide ${sizeClasses[size]} ${className}`}
       >
-        {showIcon && <Sparkles className={`${iconSizes[size]} text-brand-400`} />}
-        PRO
+        {showIcon && <Sparkles className={`${iconSizes[size]} text-brand-300`} />}
+        <span>PRO</span>
       </span>
     );
   }
 
   return (
     <span
-      className={`inline-flex items-center font-medium rounded-full bg-dark-800 text-dark-400 border border-dark-700 ${sizeClasses[size]} ${className}`}
+      className={`inline-flex items-center font-semibold rounded-full bg-dark-850 text-dark-300 border border-dark-700/80 shadow-xs ${sizeClasses[size]} ${className}`}
     >
       {showIcon && <Shield className={`${iconSizes[size]} text-dark-400`} />}
-      Starter
+      <span>Starter</span>
     </span>
   );
 };

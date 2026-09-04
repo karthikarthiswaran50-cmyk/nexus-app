@@ -14,6 +14,7 @@ import {
   Crown,
   Globe,
   Check,
+  Gem,
 } from 'lucide-react';
 import axios from 'axios';
 
@@ -64,32 +65,32 @@ export const DirectoryView: React.FC<DirectoryViewProps> = ({ onStartChat, onVie
   });
 
   return (
-    <div className="max-w-6xl mx-auto p-4 sm:p-6 space-y-6">
+    <div className="max-w-6xl mx-auto p-3.5 sm:p-6 space-y-6">
       
-      {/* Top Banner / Hero */}
-      <div className="bg-gradient-to-r from-dark-900 via-brand-950/40 to-dark-900 border border-dark-800 p-6 sm:p-8 rounded-3xl shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+      {/* 👑 Royal Banner / Hero */}
+      <div className="bg-gradient-to-r from-dark-900 via-amber-950/30 to-dark-900 border border-gold-500/25 p-6 sm:p-8 rounded-3xl shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-6 royal-card">
         <div>
           <div className="flex items-center gap-2 mb-2">
-            <span className="p-1.5 rounded-lg bg-brand-500/20 text-brand-400 border border-brand-500/30">
-              <Users className="w-4 h-4" />
+            <span className="p-1.5 rounded-lg bg-gold-500/20 text-gold-400 border border-gold-500/30">
+              <Crown className="w-4 h-4 fill-gold-400" />
             </span>
-            <span className="text-xs font-semibold text-brand-400 uppercase tracking-wider">Member Network</span>
+            <span className="text-xs font-black gold-gradient-text uppercase tracking-widest">Royal Member Realm</span>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
-            Connect & Call with Members
+          <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+            Connect & Call with Imperial Members
           </h1>
-          <p className="text-xs sm:text-sm text-dark-300 mt-1 max-w-xl">
-            Explore active creators, developers, designers and team members. Initiate instant 1-on-1 audio/video calls or real-time messaging.
+          <p className="text-xs sm:text-sm text-dark-300 mt-1 max-w-xl leading-relaxed">
+            Discover verified creators, founders, and VIPs. Initiate instant 4K WebRTC video calls, voice conversations, or encrypted chats.
           </p>
         </div>
 
         {/* Filter Badges */}
-        <div className="flex items-center gap-2 bg-dark-900/90 p-1.5 rounded-2xl border border-dark-700/80 shadow-inner">
+        <div className="flex items-center gap-2 bg-dark-950/90 p-1.5 rounded-2xl border border-gold-500/20 shadow-inner">
           <button
             type="button"
             onClick={() => setTierFilter('all')}
-            className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-              tierFilter === 'all' ? 'bg-brand-600 text-white shadow-md' : 'text-dark-400 hover:text-white'
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
+              tierFilter === 'all' ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-dark-950 shadow-md' : 'text-dark-400 hover:text-white'
             }`}
           >
             All Members
@@ -97,43 +98,43 @@ export const DirectoryView: React.FC<DirectoryViewProps> = ({ onStartChat, onVie
           <button
             type="button"
             onClick={() => setTierFilter('pro')}
-            className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 ${
-              tierFilter === 'pro' ? 'bg-indigo-600 text-white shadow-md' : 'text-dark-400 hover:text-white'
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+              tierFilter === 'pro' ? 'bg-brand-600 text-white shadow-md' : 'text-dark-400 hover:text-white'
             }`}
           >
-            <Sparkles className="w-3 h-3 text-brand-300" />
-            Pro
+            <Sparkles className="w-3 h-3" />
+            <span>Pro</span>
           </button>
           <button
             type="button"
             onClick={() => setTierFilter('vip')}
-            className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 ${
-              tierFilter === 'vip' ? 'bg-amber-600 text-white shadow-md' : 'text-dark-400 hover:text-white'
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+              tierFilter === 'vip' ? 'bg-gradient-to-r from-amber-600 to-yellow-500 text-dark-950 shadow-md' : 'text-dark-400 hover:text-white'
             }`}
           >
-            <Crown className="w-3 h-3 text-amber-300" />
-            VIP
+            <Crown className="w-3 h-3 fill-current" />
+            <span>VIP</span>
           </button>
         </div>
       </div>
 
       {/* Search Bar */}
       <div className="relative">
-        <Search className="w-4 h-4 text-dark-400 absolute left-4 top-1/2 -translate-y-1/2" />
+        <Search className="w-4 h-4 text-gold-400 absolute left-4 top-1/2 -translate-y-1/2" />
         <input
           type="text"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Search by name, skill, username, or country..."
-          className="w-full pl-11 pr-4 py-3 bg-dark-900 border border-dark-800 rounded-2xl text-sm text-white placeholder:text-dark-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 shadow-sm"
+          placeholder="Search members by name, skill, handle, or country..."
+          className="w-full pl-11 pr-4 py-3 bg-dark-900 border border-gold-500/20 rounded-2xl text-sm text-white placeholder:text-dark-500 focus:outline-none focus:border-gold-400 focus:ring-1 focus:ring-gold-400/50 shadow-sm"
         />
       </div>
 
       {/* User Grid */}
       {loading ? (
-        <div className="p-16 text-center text-xs text-dark-500">Loading directory...</div>
+        <div className="p-16 text-center text-xs text-dark-500">Loading Royal Directory...</div>
       ) : filteredUsers.length === 0 ? (
-        <div className="p-16 text-center bg-dark-900 border border-dark-800 rounded-2xl">
+        <div className="p-16 text-center bg-dark-900 border border-gold-500/20 rounded-2xl royal-card">
           <Users className="w-10 h-10 text-dark-600 mx-auto mb-3" />
           <p className="text-base font-bold text-white">No members found</p>
           <p className="text-xs text-dark-400 mt-1">Try adjusting your search terms or filters.</p>
@@ -146,7 +147,7 @@ export const DirectoryView: React.FC<DirectoryViewProps> = ({ onStartChat, onVie
             return (
               <div
                 key={member.id}
-                className="bg-dark-900 border border-dark-800/90 rounded-2xl p-5 shadow-lg hover:border-dark-700 hover:shadow-2xl transition-all flex flex-col justify-between group"
+                className="bg-dark-900 border border-gold-500/20 rounded-2xl p-5 shadow-lg hover:border-gold-400/50 hover:shadow-2xl hover:scale-[1.01] transition-all flex flex-col justify-between group royal-card"
               >
                 <div>
                   {/* Card Header */}
@@ -161,10 +162,10 @@ export const DirectoryView: React.FC<DirectoryViewProps> = ({ onStartChat, onVie
                         planId={member.plan_id}
                       />
                       <div>
-                        <h3 className="text-base font-bold text-white group-hover:text-brand-400 transition-colors">
+                        <h3 className="text-base font-extrabold text-white group-hover:text-amber-300 transition-colors">
                           {member.full_name}
                         </h3>
-                        <p className="text-xs text-dark-400">@{member.username}</p>
+                        <p className="text-xs text-dark-400 font-mono">@{member.username}</p>
                       </div>
                     </div>
                     <PlanBadge planId={member.plan_id} size="sm" />
@@ -172,28 +173,28 @@ export const DirectoryView: React.FC<DirectoryViewProps> = ({ onStartChat, onVie
 
                   {/* Bio */}
                   <p className="text-xs text-dark-300 line-clamp-2 leading-relaxed mb-4">
-                    {member.bio || 'Member on Nexus Platform.'}
+                    {member.bio || 'Verified member on Nexus Royal.'}
                   </p>
 
                   {/* Status / Location */}
                   <div className="space-y-1.5 mb-6 text-[11px] text-dark-400">
                     <div className="flex items-center gap-1.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-brand-400" />
-                      <span className="truncate italic">{member.status || 'Active'}</span>
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_#10b981]" />
+                      <span className="truncate italic text-amber-200/90">{member.status || 'Active'}</span>
                     </div>
                     <div className="flex items-center gap-1.5 text-dark-500">
-                      <Globe className="w-3 h-3" />
+                      <Globe className="w-3 h-3 text-gold-400" />
                       <span>{member.country || 'Global'}</span>
                     </div>
                   </div>
                 </div>
 
                 {/* Bottom Action Controls */}
-                <div className="pt-3 border-t border-dark-800/80 grid grid-cols-3 gap-2">
+                <div className="pt-3 border-t border-gold-500/15 grid grid-cols-3 gap-2">
                   <button
                     type="button"
                     onClick={() => onStartChat(member)}
-                    className="py-2 px-2 rounded-xl bg-dark-800 hover:bg-brand-600/20 text-dark-300 hover:text-brand-300 border border-dark-700/80 hover:border-brand-500/30 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all"
+                    className="py-2 px-2 rounded-xl bg-dark-850 hover:bg-gold-500/15 text-dark-300 hover:text-amber-200 border border-gold-500/15 text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-xs"
                     title="Send Direct Message"
                   >
                     <MessageSquare className="w-3.5 h-3.5" />
@@ -203,20 +204,20 @@ export const DirectoryView: React.FC<DirectoryViewProps> = ({ onStartChat, onVie
                   <button
                     type="button"
                     onClick={() => startCall(member, 'audio')}
-                    className="py-2 px-2 rounded-xl bg-dark-800 hover:bg-emerald-500/20 text-dark-300 hover:text-emerald-300 border border-dark-700/80 hover:border-emerald-500/30 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all"
-                    title="Start Audio Call"
+                    className="py-2 px-2 rounded-xl bg-dark-850 hover:bg-emerald-500/15 text-dark-300 hover:text-emerald-300 border border-gold-500/15 text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-xs"
+                    title="Audio Call"
                   >
-                    <Phone className="w-3.5 h-3.5" />
-                    <span>Audio</span>
+                    <Phone className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Call</span>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => startCall(member, 'video')}
-                    className="py-2 px-2 rounded-xl bg-dark-800 hover:bg-brand-500/20 text-dark-300 hover:text-brand-300 border border-dark-700/80 hover:border-brand-500/30 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all"
-                    title="Start Video Call"
+                    className="py-2 px-2 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-600 hover:from-amber-400 hover:to-yellow-300 text-dark-950 text-xs font-black flex items-center justify-center gap-1.5 transition-all shadow-md shadow-gold-500/20 active:scale-95"
+                    title="4K Video Call"
                   >
-                    <Video className="w-3.5 h-3.5" />
+                    <Video className="w-3.5 h-3.5 stroke-[2.5]" />
                     <span>Video</span>
                   </button>
                 </div>
@@ -225,6 +226,7 @@ export const DirectoryView: React.FC<DirectoryViewProps> = ({ onStartChat, onVie
           })}
         </div>
       )}
+
     </div>
   );
 };

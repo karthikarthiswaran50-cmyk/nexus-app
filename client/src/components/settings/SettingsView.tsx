@@ -11,6 +11,7 @@ import {
   LogOut,
   CheckCircle2,
   AlertCircle,
+  Crown,
 } from 'lucide-react';
 import axios from 'axios';
 
@@ -79,22 +80,22 @@ export const SettingsView: React.FC = () => {
   };
 
   return (
-    <div className="max-w-4xl mx-auto p-4 sm:p-6 space-y-6">
+    <div className="max-w-4xl mx-auto p-3.5 sm:p-6 space-y-6 font-['Plus_Jakarta_Sans',sans-serif]">
       
-      {/* Header */}
-      <div className="bg-dark-900 border border-dark-800 p-6 rounded-3xl shadow-xl flex items-center justify-between">
+      {/* 👑 Royal Settings Header */}
+      <div className="bg-dark-900 border border-gold-500/20 p-6 rounded-3xl shadow-xl flex items-center justify-between royal-card">
         <div>
-          <h2 className="text-xl font-bold text-white flex items-center gap-2">
-            <SettingsIcon className="w-5 h-5 text-brand-400" />
-            Account & App Settings
+          <h2 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2">
+            <Crown className="w-5 h-5 text-gold-400 fill-gold-400" />
+            <span className="gold-gradient-text">Royal Security & Preferences</span>
           </h2>
-          <p className="text-xs text-dark-400 mt-1">Configure your privacy, notifications, and security preferences.</p>
+          <p className="text-xs text-dark-300 mt-1">Configure your privacy, call permissions, and quantum encryption settings.</p>
         </div>
 
         <button
           type="button"
           onClick={logout}
-          className="px-4 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-white border border-rose-500/30 text-xs font-semibold flex items-center gap-1.5 transition-all"
+          className="px-4 py-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-white border border-rose-500/30 text-xs font-black flex items-center gap-1.5 transition-all active:scale-95 shadow-xs"
         >
           <LogOut className="w-3.5 h-3.5" />
           <span>Log Out</span>
@@ -102,158 +103,139 @@ export const SettingsView: React.FC = () => {
       </div>
 
       {settingsSuccess && (
-        <div className="p-4 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs flex items-center gap-2">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+        <div className="p-3.5 px-5 rounded-2xl bg-dark-900/95 border border-gold-500/40 text-amber-200 text-xs font-bold flex items-center gap-2 shadow-2xl backdrop-blur-xl animate-in fade-in">
+          <CheckCircle2 className="w-4 h-4 text-gold-400" />
           <span>Preferences updated successfully!</span>
         </div>
       )}
 
-      {/* 1. Privacy & Calling Permissions */}
-      <div className="bg-dark-900 border border-dark-800 rounded-3xl p-6 sm:p-8 space-y-6 shadow-xl">
-        <h3 className="text-base font-bold text-white flex items-center gap-2">
-          <Shield className="w-4 h-4 text-emerald-400" />
-          Privacy & Call Permissions
-        </h3>
+      {/* Preferences Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        
+        {/* Privacy & Calling Permissions */}
+        <div className="bg-dark-900 border border-gold-500/15 rounded-3xl p-6 space-y-5 shadow-xl royal-card">
+          <h3 className="text-sm font-black text-white flex items-center gap-2 border-b border-gold-500/15 pb-3">
+            <Shield className="w-4 h-4 text-gold-400" />
+            <span>Calling Privacy Controls</span>
+          </h3>
 
-        <div className="space-y-4">
-          <div>
-            <label className="block text-xs font-medium text-dark-300 mb-2">Who can call you?</label>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {[
-                { id: 'everyone', label: 'Everyone', desc: 'Any registered member' },
-                { id: 'contacts', label: 'Contacts Only', desc: 'Users with chat history' },
-                { id: 'subscribers', label: 'Subscribers Only', desc: 'Paid Pro & VIP members' },
-              ].map((opt) => (
-                <button
-                  key={opt.id}
-                  type="button"
-                  onClick={() => setAllowCallsFrom(opt.id as any)}
-                  className={`p-3.5 rounded-2xl text-left border transition-all ${
-                    allowCallsFrom === opt.id
-                      ? 'bg-brand-600/20 border-brand-500 text-white shadow-inner'
-                      : 'bg-dark-800/80 border-dark-700/80 text-dark-300 hover:border-dark-600'
-                  }`}
-                >
-                  <p className="text-xs font-bold">{opt.label}</p>
-                  <p className="text-[10px] text-dark-400 mt-0.5">{opt.desc}</p>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="pt-4 border-t border-dark-800 flex items-center justify-between">
+          <div className="space-y-4">
             <div>
-              <p className="text-xs font-semibold text-white">Read Receipts</p>
-              <p className="text-[11px] text-dark-400">Show blue checkmarks when messages are seen</p>
+              <label className="block text-xs font-bold text-dark-300 mb-2">Who can call you?</label>
+              <select
+                value={allowCallsFrom}
+                onChange={(e) => setAllowCallsFrom(e.target.value as any)}
+                className="w-full px-4 py-2.5 bg-dark-850 border border-gold-500/20 rounded-xl text-xs text-white focus:outline-none focus:border-gold-400"
+              >
+                <option value="everyone">Everyone (Open Realm)</option>
+                <option value="contacts">Contacts / Active Chats Only</option>
+                <option value="subscribers">Subscribers Only</option>
+              </select>
             </div>
-            <input
-              type="checkbox"
-              checked={readReceipts}
-              onChange={(e) => setReadReceipts(e.target.checked)}
-              className="w-4 h-4 rounded text-brand-600 focus:ring-brand-500 bg-dark-800 border-dark-700"
-            />
-          </div>
 
-          <div className="pt-4 border-t border-dark-800 flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold text-white flex items-center gap-1.5">
-                <Bell className="w-3.5 h-3.5 text-brand-400" />
-                Notification Sounds & Ringtones
-              </p>
-              <p className="text-[11px] text-dark-400">Play synthesized Web Audio chimes for calls and messages</p>
+            <div className="flex items-center justify-between pt-2">
+              <div>
+                <p className="text-xs font-bold text-white">Incoming Call & Message Sounds</p>
+                <p className="text-[11px] text-dark-400">Play audio ringtones on calls</p>
+              </div>
+              <input
+                type="checkbox"
+                checked={notificationSound}
+                onChange={(e) => setNotificationSound(e.target.checked)}
+                className="w-4 h-4 accent-gold-500 rounded cursor-pointer"
+              />
             </div>
-            <input
-              type="checkbox"
-              checked={notificationSound}
-              onChange={(e) => setNotificationSound(e.target.checked)}
-              className="w-4 h-4 rounded text-brand-600 focus:ring-brand-500 bg-dark-800 border-dark-700"
-            />
+
+            <div className="flex items-center justify-between pt-2">
+              <div>
+                <p className="text-xs font-bold text-white">Read Receipts (Blue Ticks)</p>
+                <p className="text-[11px] text-dark-400">Let senders see when you read messages</p>
+              </div>
+              <input
+                type="checkbox"
+                checked={readReceipts}
+                onChange={(e) => setReadReceipts(e.target.checked)}
+                className="w-4 h-4 accent-gold-500 rounded cursor-pointer"
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={handleSavePreferences}
+              disabled={savingSettings}
+              className="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-600 hover:from-amber-400 hover:to-yellow-300 text-dark-950 font-black text-xs shadow-lg shadow-gold-500/25 transition-all active:scale-95"
+            >
+              {savingSettings ? 'Saving...' : 'Save Privacy Preferences'}
+            </button>
           </div>
         </div>
 
-        <div className="flex justify-end pt-2">
-          <button
-            type="button"
-            onClick={handleSavePreferences}
-            disabled={savingSettings}
-            className="px-5 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs shadow-lg shadow-brand-500/20 transition-all"
-          >
-            {savingSettings ? 'Saving...' : 'Save Preferences'}
-          </button>
+        {/* Change Password Card */}
+        <div className="bg-dark-900 border border-gold-500/15 rounded-3xl p-6 space-y-5 shadow-xl royal-card">
+          <h3 className="text-sm font-black text-white flex items-center gap-2 border-b border-gold-500/15 pb-3">
+            <Lock className="w-4 h-4 text-gold-400" />
+            <span>Update Vault Password</span>
+          </h3>
+
+          {pwError && (
+            <div className="p-2.5 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+              <span>{pwError}</span>
+            </div>
+          )}
+
+          {pwSuccess && (
+            <div className="p-2.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>{pwSuccess}</span>
+            </div>
+          )}
+
+          <form onSubmit={handlePasswordChange} className="space-y-3">
+            <div>
+              <label className="block text-xs font-bold text-dark-300 mb-1">Current Password</label>
+              <input
+                type="password"
+                required
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                className="w-full px-3.5 py-2 bg-dark-850 border border-gold-500/20 rounded-xl text-xs text-white focus:outline-none focus:border-gold-400"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-dark-300 mb-1">New Password</label>
+              <input
+                type="password"
+                required
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className="w-full px-3.5 py-2 bg-dark-850 border border-gold-500/20 rounded-xl text-xs text-white focus:outline-none focus:border-gold-400"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-dark-300 mb-1">Confirm New Password</label>
+              <input
+                type="password"
+                required
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className="w-full px-3.5 py-2 bg-dark-850 border border-gold-500/20 rounded-xl text-xs text-white focus:outline-none focus:border-gold-400"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={updatingPw}
+              className="w-full py-2.5 rounded-xl bg-dark-850 hover:bg-dark-800 text-amber-200 border border-gold-500/30 hover:border-gold-400 font-bold text-xs transition-all active:scale-95"
+            >
+              {updatingPw ? 'Updating...' : 'Update Password'}
+            </button>
+          </form>
         </div>
       </div>
 
-      {/* 2. Security & Password Change */}
-      <form onSubmit={handlePasswordChange} className="bg-dark-900 border border-dark-800 rounded-3xl p-6 sm:p-8 space-y-4 shadow-xl">
-        <h3 className="text-base font-bold text-white flex items-center gap-2">
-          <Lock className="w-4 h-4 text-brand-400" />
-          Security & Password
-        </h3>
-
-        {pwError && (
-          <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 text-rose-400" />
-            <span>{pwError}</span>
-          </div>
-        )}
-
-        {pwSuccess && (
-          <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-            <span>{pwSuccess}</span>
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-xs font-medium text-dark-300 mb-1">Current Password</label>
-            <input
-              type="password"
-              required
-              value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
-              placeholder="••••••••"
-              className="w-full px-3.5 py-2 bg-dark-800 border border-dark-700 rounded-xl text-xs text-white"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-dark-300 mb-1">New Password</label>
-            <input
-              type="password"
-              required
-              minLength={6}
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              placeholder="At least 6 chars"
-              className="w-full px-3.5 py-2 bg-dark-800 border border-dark-700 rounded-xl text-xs text-white"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-dark-300 mb-1">Confirm New Password</label>
-            <input
-              type="password"
-              required
-              minLength={6}
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              placeholder="Repeat password"
-              className="w-full px-3.5 py-2 bg-dark-800 border border-dark-700 rounded-xl text-xs text-white"
-            />
-          </div>
-        </div>
-
-        <div className="flex justify-end pt-2">
-          <button
-            type="submit"
-            disabled={updatingPw}
-            className="px-5 py-2 rounded-xl bg-dark-800 hover:bg-dark-700 border border-dark-700 text-white font-semibold text-xs transition-all"
-          >
-            {updatingPw ? 'Updating...' : 'Update Password'}
-          </button>
-        </div>
-      </form>
     </div>
   );
 };

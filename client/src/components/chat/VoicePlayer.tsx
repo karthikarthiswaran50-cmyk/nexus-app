@@ -84,17 +84,17 @@ export const VoicePlayer: React.FC<VoicePlayerProps> = ({ audioUrl, isMe = false
   const waveformHeights = [35, 60, 45, 90, 75, 40, 65, 80, 100, 70, 50, 85, 95, 60, 40, 75, 50, 65];
 
   return (
-    <div className="flex items-center gap-3 py-1 px-1 min-w-[210px] sm:min-w-[250px] max-w-full select-none">
+    <div className="flex items-center gap-3 py-1.5 px-1 min-w-[220px] sm:min-w-[260px] max-w-full select-none">
       <audio ref={audioRef} src={audioUrl} preload="metadata" />
 
-      {/* WhatsApp Play/Pause Button */}
+      {/* Royal 24K Gold & Emerald Play/Pause Button */}
       <button
         type="button"
         onClick={togglePlay}
-        className={`w-9 h-9 rounded-full shrink-0 flex items-center justify-center transition-all shadow-md active:scale-95 ${
+        className={`w-9 h-9 rounded-full shrink-0 flex items-center justify-center transition-all shadow-lg active:scale-95 ${
           isMe
-            ? 'bg-white text-brand-600 hover:bg-white/90'
-            : 'bg-brand-500 text-white hover:bg-brand-400'
+            ? 'bg-gradient-to-tr from-amber-400 via-yellow-300 to-amber-500 text-dark-950 shadow-gold-500/30 hover:scale-105'
+            : 'bg-gradient-to-tr from-emerald-500 to-teal-400 text-white shadow-emerald-500/30 hover:scale-105'
         }`}
       >
         {isPlaying ? (
@@ -122,11 +122,11 @@ export const VoicePlayer: React.FC<VoicePlayerProps> = ({ audioUrl, isMe = false
                 className={`w-[3px] rounded-full transition-all duration-100 ${
                   isPlayed
                     ? isMe
-                      ? 'bg-white'
-                      : 'bg-brand-400'
+                      ? 'bg-gradient-to-t from-amber-300 to-yellow-100 shadow-[0_0_6px_#fde047]'
+                      : 'bg-emerald-400 shadow-[0_0_6px_#34d399]'
                     : isMe
-                    ? 'bg-white/40'
-                    : 'bg-dark-600 group-hover:bg-dark-500'
+                    ? 'bg-white/30'
+                    : 'bg-dark-700 group-hover:bg-dark-600'
                 }`}
               />
             );
@@ -135,7 +135,7 @@ export const VoicePlayer: React.FC<VoicePlayerProps> = ({ audioUrl, isMe = false
 
         {/* Time and Mic indicator */}
         <div className="flex items-center justify-between text-[11px] leading-none font-mono">
-          <span className={isMe ? 'text-white/80' : 'text-dark-400'}>
+          <span className={isMe ? 'text-amber-100 font-bold' : 'text-dark-300'}>
             {isPlaying || currentTime > 0 ? formatTime(currentTime) : formatTime(duration)}
           </span>
 
@@ -143,15 +143,15 @@ export const VoicePlayer: React.FC<VoicePlayerProps> = ({ audioUrl, isMe = false
             <button
               type="button"
               onClick={toggleSpeed}
-              className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-all ${
+              className={`px-1.5 py-0.5 rounded text-[10px] font-extrabold transition-all ${
                 isMe
-                  ? 'bg-white/20 text-white hover:bg-white/30'
+                  ? 'bg-amber-400/20 text-amber-200 border border-amber-400/30'
                   : 'bg-dark-800 text-dark-300 hover:text-white border border-dark-700'
               }`}
             >
               {playbackRate}x
             </button>
-            <Mic className={`w-3 h-3 ${isMe ? 'text-white/60' : 'text-brand-400'}`} />
+            <Mic className={`w-3.5 h-3.5 ${isMe ? 'text-amber-300' : 'text-emerald-400'}`} />
           </div>
         </div>
       </div>

@@ -14,6 +14,7 @@ import {
   Search,
   CheckCircle2,
   XCircle,
+  Crown,
 } from 'lucide-react';
 import axios from 'axios';
 
@@ -80,147 +81,151 @@ export const CallsView: React.FC<CallsViewProps> = ({ onStartChat, onViewProfile
   });
 
   return (
-    <div className="max-w-4xl mx-auto p-4 sm:p-6 space-y-6">
+    <div className="max-w-4xl mx-auto p-3.5 sm:p-6 space-y-6">
       
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-dark-900 border border-dark-800 p-6 rounded-2xl shadow-xl">
+      {/* 👑 Royal Calls Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-dark-900 border border-gold-500/20 p-6 rounded-3xl shadow-xl royal-card">
         <div>
-          <h2 className="text-xl font-bold text-white flex items-center gap-2">
-            <Phone className="w-5 h-5 text-emerald-400" />
-            Call History
+          <h2 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2">
+            <Crown className="w-5 h-5 text-gold-400 fill-gold-400" />
+            <span className="gold-gradient-text">Royal Call Logs</span>
           </h2>
-          <p className="text-xs text-dark-400 mt-1">Review all your past high-definition audio and video calls.</p>
+          <p className="text-xs text-dark-300 mt-1">Review all your past 4K WebRTC video calls and encrypted voice sessions.</p>
         </div>
 
         {/* Filter Switcher */}
-        <div className="flex items-center gap-2 bg-dark-800 p-1 rounded-xl border border-dark-700/80">
+        <div className="flex items-center gap-2 bg-dark-950 p-1.5 rounded-2xl border border-gold-500/20 shadow-inner">
           <button
             type="button"
             onClick={() => setFilter('all')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-              filter === 'all' ? 'bg-brand-600 text-white shadow-sm' : 'text-dark-400 hover:text-white'
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
+              filter === 'all' ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-dark-950 shadow-md' : 'text-dark-400 hover:text-white'
             }`}
           >
-            All Calls ({callLogs.length})
+            All Calls
           </button>
           <button
             type="button"
             onClick={() => setFilter('missed')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-              filter === 'missed' ? 'bg-rose-600 text-white shadow-sm' : 'text-dark-400 hover:text-white'
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
+              filter === 'missed' ? 'bg-rose-500 text-white shadow-md' : 'text-dark-400 hover:text-white'
             }`}
           >
-            Missed / Declined
+            Missed
           </button>
         </div>
       </div>
 
-      {/* Search Filter */}
+      {/* Search Bar */}
       <div className="relative">
-        <Search className="w-4 h-4 text-dark-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+        <Search className="w-4 h-4 text-gold-400 absolute left-4 top-1/2 -translate-y-1/2" />
         <input
           type="text"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Search by contact name..."
-          className="w-full pl-10 pr-4 py-2.5 bg-dark-900 border border-dark-800 rounded-xl text-xs text-white placeholder:text-dark-500 focus:outline-none focus:border-brand-500"
+          placeholder="Search call logs by contact name..."
+          className="w-full pl-11 pr-4 py-2.5 bg-dark-900 border border-gold-500/20 rounded-2xl text-xs sm:text-sm text-white placeholder:text-dark-500 focus:outline-none focus:border-gold-400 focus:ring-1 focus:ring-gold-400/50"
         />
       </div>
 
-      {/* Call Logs List */}
-      <div className="bg-dark-900 border border-dark-800 rounded-2xl overflow-hidden shadow-xl divide-y divide-dark-800/60">
+      {/* Call List */}
+      <div className="bg-dark-900 border border-gold-500/20 rounded-3xl overflow-hidden shadow-xl royal-card">
         {loading ? (
           <div className="p-12 text-center text-xs text-dark-500">Loading call history...</div>
         ) : filteredLogs.length === 0 ? (
-          <div className="p-12 text-center">
-            <Phone className="w-8 h-8 text-dark-600 mx-auto mb-2" />
-            <p className="text-sm font-semibold text-dark-300">No calls in this view</p>
-            <p className="text-xs text-dark-500 mt-1">Start an audio or video call with any contact from messages or directory.</p>
+          <div className="p-12 text-center text-dark-400 space-y-2">
+            <Phone className="w-8 h-8 mx-auto text-dark-600" />
+            <p className="text-sm font-bold text-white">No call history recorded yet</p>
+            <p className="text-xs text-dark-500">Make an audio or video call to a member to get started.</p>
           </div>
         ) : (
-          filteredLogs.map((log) => {
-            const isCaller = log.caller_id === user?.id;
-            const peer = isCaller ? log.receiver : log.caller;
-            if (!peer) return null;
+          <div className="divide-y divide-dark-800/60">
+            {filteredLogs.map((log) => {
+              const isCaller = log.caller_id === user?.id;
+              const peer = isCaller ? log.receiver : log.caller;
+              if (!peer) return null;
 
-            const isMissed = log.status === 'missed' || log.status === 'rejected';
-            const isOnline = onlineUserIds.has(peer.id);
+              const isMissed = log.status === 'missed' || log.status === 'rejected';
+              const isOnline = onlineUserIds.has(peer.id);
 
-            return (
-              <div
-                key={log.id}
-                className="p-4 sm:p-5 flex items-center justify-between gap-4 hover:bg-dark-800/40 transition-colors"
-              >
-                <div className="flex items-center gap-3.5 min-w-0">
-                  <Avatar
-                    src={peer.avatar_url}
-                    name={peer.full_name}
-                    size="md"
-                    isOnline={isOnline}
-                    showOnlineStatus
-                    planId={peer.plan_id}
-                  />
+              return (
+                <div
+                  key={log.id}
+                  className="p-4 sm:p-5 flex items-center justify-between gap-4 hover:bg-dark-850/60 transition-colors group"
+                >
+                  <div className="flex items-center gap-3.5">
+                    <Avatar
+                      src={peer.avatar_url}
+                      name={peer.full_name}
+                      size="md"
+                      isOnline={isOnline}
+                      showOnlineStatus
+                      planId={peer.plan_id}
+                    />
 
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-bold text-white truncate">{peer.full_name}</p>
-                      <PlanBadge planId={peer.plan_id} size="sm" />
-                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-sm font-extrabold text-white group-hover:text-amber-200 transition-colors">
+                          {peer.full_name}
+                        </h4>
+                        <PlanBadge planId={peer.plan_id} size="sm" />
+                      </div>
 
-                    <div className="flex items-center gap-2 mt-1 text-xs">
-                      {/* Call Status Icon */}
-                      {isCaller ? (
-                        <span className="text-brand-400 flex items-center gap-1">
-                          <PhoneOutgoing className="w-3 h-3" /> Outgoing {log.call_type}
-                        </span>
-                      ) : isMissed ? (
-                        <span className="text-rose-400 flex items-center gap-1 font-medium">
-                          <PhoneMissed className="w-3 h-3" /> Missed {log.call_type}
-                        </span>
-                      ) : (
-                        <span className="text-emerald-400 flex items-center gap-1">
-                          <PhoneIncoming className="w-3 h-3" /> Incoming {log.call_type}
-                        </span>
-                      )}
+                      <div className="flex items-center gap-2 mt-1 text-xs text-dark-400">
+                        {isMissed ? (
+                          <span className="flex items-center gap-1 text-rose-400 font-bold">
+                            <PhoneMissed className="w-3.5 h-3.5" /> Missed
+                          </span>
+                        ) : isCaller ? (
+                          <span className="flex items-center gap-1 text-emerald-400 font-medium">
+                            <PhoneOutgoing className="w-3.5 h-3.5" /> Outgoing
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1 text-cyan-400 font-medium">
+                            <PhoneIncoming className="w-3.5 h-3.5" /> Incoming
+                          </span>
+                        )}
 
-                      <span className="text-dark-600">•</span>
-                      <span className="text-dark-400">{formatDate(log.started_at)}</span>
+                        <span>•</span>
+                        <span className="text-[11px] font-mono text-dark-400">{formatDate(log.started_at)}</span>
 
-                      {log.duration > 0 && (
-                        <>
-                          <span className="text-dark-600">•</span>
-                          <span className="text-dark-300 font-mono text-[11px]">{formatDuration(log.duration)}</span>
-                        </>
-                      )}
+                        {log.duration > 0 && (
+                          <>
+                            <span>•</span>
+                            <span className="text-[11px] font-mono text-amber-200/80">{formatDuration(log.duration)}</span>
+                          </>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                {/* Call Back Actions */}
-                <div className="flex items-center gap-2 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => startCall(peer, 'audio')}
-                    className="p-2.5 rounded-xl bg-dark-800 hover:bg-emerald-500/20 text-dark-300 hover:text-emerald-400 border border-dark-700/80 hover:border-emerald-500/40 transition-all shadow-sm"
-                    title={`Call ${peer.full_name}`}
-                  >
-                    <Phone className="w-4 h-4" />
-                  </button>
+                  {/* Direct Call Actions */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => startCall(peer, 'audio')}
+                      className="p-2.5 rounded-xl bg-dark-850 hover:bg-emerald-500/15 text-dark-300 hover:text-emerald-300 border border-gold-500/15 transition-all shadow-xs"
+                      title="Direct Audio Call"
+                    >
+                      <Phone className="w-4 h-4 text-emerald-400" />
+                    </button>
 
-                  <button
-                    type="button"
-                    onClick={() => startCall(peer, 'video')}
-                    className="p-2.5 rounded-xl bg-dark-800 hover:bg-brand-500/20 text-dark-300 hover:text-brand-400 border border-dark-700/80 hover:border-brand-500/40 transition-all shadow-sm"
-                    title={`Video call ${peer.full_name}`}
-                  >
-                    <Video className="w-4 h-4" />
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => startCall(peer, 'video')}
+                      className="p-2.5 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-600 text-dark-950 shadow-md shadow-gold-500/20 hover:scale-105 transition-all active:scale-95"
+                      title="4K Video Call"
+                    >
+                      <Video className="w-4 h-4 stroke-[2.5]" />
+                    </button>
+                  </div>
                 </div>
-              </div>
-            );
-          })
+              );
+            })}
+          </div>
         )}
       </div>
+
     </div>
   );
 };
