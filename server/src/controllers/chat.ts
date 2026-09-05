@@ -83,12 +83,48 @@ export async function getMessages(req: AuthenticatedRequest, res: Response): Pro
       WHERE conversation_id = ? AND receiver_id = ? AND is_read = 0
     `).run(conv.id, userId);
 
-    const messages = (db.prepare(`
+    const rawMessages = (db.prepare(`
       SELECT * FROM messages
       WHERE conversation_id = ?
       ORDER BY created_at ASC
       LIMIT 200
-    `).all(conv.id) as unknown) as Message[];
+    `).all(conv.id) as unknown) as any[];
+
+    // Parse reactions, deleted_for_users, and filter deleted for current user
+    const messages: Message[] = rawMessages
+      .filter((m) => {
+        let deletedUsers: string[] = [];
+        try {
+          deletedUsers = m.deleted_for_users ? JSON.parse(m.deleted_for_users) : [];
+        } catch (e) {}
+        return !deletedUsers.includes(userId);
+      })
+      .map((m) => {
+        let reactions = {};
+        try {
+          reactions = m.reactions ? JSON.parse(m.reactions) : {};
+        } catch (e) {}
+
+        const isDeletedForAll = !!m.is_deleted_for_all;
+
+        return {
+          id: m.id,
+          conversation_id: m.conversation_id,
+          sender_id: m.sender_id,
+          receiver_id: m.receiver_id,
+          content: isDeletedForAll ? '🚫 This message was deleted' : m.content,
+          type: isDeletedForAll ? 'system' : m.type,
+          media_url: isDeletedForAll ? undefined : m.media_url,
+          is_read: !!m.is_read,
+          reactions,
+          reply_to_id: m.reply_to_id,
+          reply_to_content: m.reply_to_content,
+          reply_to_sender: m.reply_to_sender,
+          is_deleted_for_all: isDeletedForAll,
+          created_at: m.created_at,
+          sender: getUserWithPlan(m.sender_id) || undefined,
+        };
+      });
 
     res.json({ messages, conversationId: conv.id });
   } catch (error) {
@@ -103,8 +139,11 @@ export function saveMessage(params: {
   content: string;
   type?: 'text' | 'image' | 'audio' | 'system' | 'call_log';
   mediaUrl?: string;
+  replyToId?: string;
+  replyToContent?: string;
+  replyToSender?: string;
 }): { message: Message; conversationId: string } {
-  const { senderId, receiverId, content, type = 'text', mediaUrl } = params;
+  const { senderId, receiverId, content, type = 'text', mediaUrl, replyToId, replyToContent, replyToSender } = params;
 
   // Find or create conversation
   let conv = db.prepare(`
@@ -133,9 +172,21 @@ export function saveMessage(params: {
   const cleanContent = type === 'text' ? sanitizeText(content) : content;
 
   db.prepare(`
-    INSERT INTO messages (id, conversation_id, sender_id, receiver_id, content, type, media_url, is_read, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)
-  `).run(msgId, conv.id, senderId, receiverId, cleanContent, type, mediaUrl || null, now);
+    INSERT INTO messages (id, conversation_id, sender_id, receiver_id, content, type, media_url, is_read, reactions, reply_to_id, reply_to_content, reply_to_sender, is_deleted_for_all, deleted_for_users, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 0, '{}', ?, ?, ?, 0, '[]', ?)
+  `).run(
+    msgId,
+    conv.id,
+    senderId,
+    receiverId,
+    cleanContent,
+    type,
+    mediaUrl || null,
+    replyToId || null,
+    replyToContent || null,
+    replyToSender || null,
+    now
+  );
 
   // Asynchronously persist to PostgreSQL
   persistMessageToPg({
@@ -158,6 +209,11 @@ export function saveMessage(params: {
     type,
     media_url: mediaUrl,
     is_read: false,
+    reactions: {},
+    reply_to_id: replyToId,
+    reply_to_content: replyToContent,
+    reply_to_sender: replyToSender,
+    is_deleted_for_all: false,
     created_at: now,
     sender: getUserWithPlan(senderId) || undefined,
   };
@@ -165,10 +221,91 @@ export function saveMessage(params: {
   return { message, conversationId: conv.id };
 }
 
+export function toggleReaction(messageId: string, userId: string, emoji: string): { messageId: string; reactions: Record<string, string[]>; conversationId: string } | null {
+  const msg = db.prepare('SELECT id, conversation_id, reactions FROM messages WHERE id = ?').get(messageId) as any;
+  if (!msg) return null;
+
+  let reactions: Record<string, string[]> = {};
+  try {
+    reactions = msg.reactions ? JSON.parse(msg.reactions) : {};
+  } catch (e) {
+    reactions = {};
+  }
+
+  // If user already reacted with this emoji, toggle it off
+  if (reactions[emoji] && reactions[emoji].includes(userId)) {
+    reactions[emoji] = reactions[emoji].filter((uid: string) => uid !== userId);
+    if (reactions[emoji].length === 0) {
+      delete reactions[emoji];
+    }
+  } else {
+    // Remove previous reaction by this user if any (optional, single-reaction per user like WhatsApp)
+    Object.keys(reactions).forEach((em) => {
+      reactions[em] = reactions[em].filter((uid: string) => uid !== userId);
+      if (reactions[em].length === 0) {
+        delete reactions[em];
+      }
+    });
+
+    if (!reactions[emoji]) reactions[emoji] = [];
+    reactions[emoji].push(userId);
+  }
+
+  const updatedJson = JSON.stringify(reactions);
+  db.prepare('UPDATE messages SET reactions = ? WHERE id = ?').run(updatedJson, messageId);
+
+  return { messageId, reactions, conversationId: msg.conversation_id };
+}
+
+export function deleteMessage(messageId: string, userId: string, deleteType: 'for_everyone' | 'for_me'): { messageId: string; isDeletedForAll: boolean; deletedForUsers: string[]; conversationId: string } | null {
+  const msg = db.prepare('SELECT * FROM messages WHERE id = ?').get(messageId) as any;
+  if (!msg) return null;
+
+  if (deleteType === 'for_everyone') {
+    // Only sender can delete for everyone
+    if (msg.sender_id !== userId) return null;
+
+    db.prepare(`
+      UPDATE messages
+      SET is_deleted_for_all = 1,
+          content = '🚫 This message was deleted',
+          media_url = NULL
+      WHERE id = ?
+    `).run(messageId);
+
+    return {
+      messageId,
+      isDeletedForAll: true,
+      deletedForUsers: [],
+      conversationId: msg.conversation_id,
+    };
+  } else {
+    // Delete for me
+    let deletedUsers: string[] = [];
+    try {
+      deletedUsers = msg.deleted_for_users ? JSON.parse(msg.deleted_for_users) : [];
+    } catch (e) {
+      deletedUsers = [];
+    }
+
+    if (!deletedUsers.includes(userId)) {
+      deletedUsers.push(userId);
+      db.prepare('UPDATE messages SET deleted_for_users = ? WHERE id = ?').run(JSON.stringify(deletedUsers), messageId);
+    }
+
+    return {
+      messageId,
+      isDeletedForAll: false,
+      deletedForUsers: deletedUsers,
+      conversationId: msg.conversation_id,
+    };
+  }
+}
+
 export async function sendMessageHttp(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
     const senderId = req.user?.userId;
-    const { receiverId, content, type = 'text', mediaUrl } = req.body;
+    const { receiverId, content, type = 'text', mediaUrl, replyToId, replyToContent, replyToSender } = req.body;
 
     if (!senderId || !receiverId || (!content && !mediaUrl)) {
       res.status(400).json({ error: 'Missing required message content or receiver.' });
@@ -181,6 +318,9 @@ export async function sendMessageHttp(req: AuthenticatedRequest, res: Response):
       content: content || '',
       type,
       mediaUrl,
+      replyToId,
+      replyToContent,
+      replyToSender,
     });
 
     res.status(201).json(result);

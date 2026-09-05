@@ -14,6 +14,7 @@ export interface User {
   bio: string;
   status: string;
   country: string;
+  last_seen?: string;
   created_at: string;
   updated_at: string;
 }
@@ -68,6 +69,10 @@ export interface Conversation {
 
 export type MessageType = 'text' | 'image' | 'audio' | 'system' | 'call_log';
 
+export interface MessageReaction {
+  [emoji: string]: string[]; // emoji -> array of userIds
+}
+
 export interface Message {
   id: string;
   conversation_id: string;
@@ -77,6 +82,12 @@ export interface Message {
   type: MessageType;
   media_url?: string;
   is_read: boolean;
+  reactions?: MessageReaction;
+  reply_to_id?: string;
+  reply_to_content?: string;
+  reply_to_sender?: string;
+  is_deleted_for_all?: boolean;
+  deleted_for_users?: string[];
   created_at: string;
   sender?: UserWithPlan;
 }

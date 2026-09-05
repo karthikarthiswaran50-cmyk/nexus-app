@@ -2,7 +2,7 @@ import { Server, Socket } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import { JWT_SECRET } from './middleware/auth.js';
 import { AuthPayload, CallType, UserWithPlan } from './types.js';
-import { saveMessage } from './controllers/chat.js';
+import { saveMessage, toggleReaction, deleteMessage } from './controllers/chat.js';
 import { recordCallLog } from './controllers/calls.js';
 import { getUserWithPlan } from './controllers/auth.js';
 import { db } from './db.js';
@@ -126,9 +126,12 @@ export function setupSocket(io: Server) {
       content: string;
       type?: 'text' | 'image' | 'audio' | 'system' | 'call_log';
       mediaUrl?: string;
+      replyToId?: string;
+      replyToContent?: string;
+      replyToSender?: string;
     }) => {
       try {
-        const { receiverId, content, type = 'text', mediaUrl } = data;
+        const { receiverId, content, type = 'text', mediaUrl, replyToId, replyToContent, replyToSender } = data;
         if (!receiverId || (!content && !mediaUrl)) return;
 
         const result = saveMessage({
@@ -137,6 +140,9 @@ export function setupSocket(io: Server) {
           content: content || '',
           type,
           mediaUrl,
+          replyToId,
+          replyToContent,
+          replyToSender,
         });
 
         // Emit to all active sockets of receiver
@@ -180,6 +186,57 @@ export function setupSocket(io: Server) {
         ).catch(() => {});
       } catch (err) {
         console.error('Socket chat:send_message error:', err);
+      }
+    });
+
+    // Message Emoji Reaction Handler
+    socket.on('chat:reaction', (data: { messageId: string; emoji: string; receiverId: string }) => {
+      try {
+        const res = toggleReaction(data.messageId, userId, data.emoji);
+        if (res) {
+          const payload = {
+            messageId: res.messageId,
+            reactions: res.reactions,
+            conversationId: res.conversationId,
+            userId,
+          };
+
+          // Broadcast to sender and receiver
+          socket.emit('chat:reaction_updated', payload);
+          const receiverSocketIds = getSocketsForUser(data.receiverId);
+          receiverSocketIds.forEach((sId) => {
+            io.to(sId).emit('chat:reaction_updated', payload);
+          });
+        }
+      } catch (err) {
+        console.error('Socket chat:reaction error:', err);
+      }
+    });
+
+    // Delete Message Handler (for_everyone | for_me)
+    socket.on('chat:delete_message', (data: { messageId: string; deleteType: 'for_everyone' | 'for_me'; receiverId: string }) => {
+      try {
+        const res = deleteMessage(data.messageId, userId, data.deleteType);
+        if (res) {
+          const payload = {
+            messageId: res.messageId,
+            deleteType: data.deleteType,
+            isDeletedForAll: res.isDeletedForAll,
+            deletedForUsers: res.deletedForUsers,
+            deletedBy: userId,
+            conversationId: res.conversationId,
+          };
+
+          socket.emit('chat:message_deleted', payload);
+          if (data.deleteType === 'for_everyone') {
+            const receiverSocketIds = getSocketsForUser(data.receiverId);
+            receiverSocketIds.forEach((sId) => {
+              io.to(sId).emit('chat:message_deleted', payload);
+            });
+          }
+        }
+      } catch (err) {
+        console.error('Socket chat:delete_message error:', err);
       }
     });
 
@@ -496,6 +553,15 @@ export function setupSocket(io: Server) {
           });
           activeCalls.delete(key);
         }
+      }
+
+      // If user has no active sockets remaining, record last_seen in database & broadcast
+      if (!userSockets.has(userId)) {
+        const now = new Date().toISOString();
+        try {
+          db.prepare('UPDATE users SET last_seen = ? WHERE id = ?').run(now, userId);
+          io.emit('presence:last_seen', { userId, lastSeen: now });
+        } catch (e) {}
       }
 
       broadcastOnlineList();

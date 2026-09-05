@@ -158,6 +158,15 @@ export function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_call_logs_users ON call_logs(caller_id, receiver_id);
   `);
 
+  // Migrations for new features: reactions, reply_to, delete, and last_seen
+  try { db.exec(`ALTER TABLE messages ADD COLUMN reactions TEXT DEFAULT '{}';`); } catch (e) {}
+  try { db.exec(`ALTER TABLE messages ADD COLUMN reply_to_id TEXT;`); } catch (e) {}
+  try { db.exec(`ALTER TABLE messages ADD COLUMN reply_to_content TEXT;`); } catch (e) {}
+  try { db.exec(`ALTER TABLE messages ADD COLUMN reply_to_sender TEXT;`); } catch (e) {}
+  try { db.exec(`ALTER TABLE messages ADD COLUMN is_deleted_for_all INTEGER DEFAULT 0;`); } catch (e) {}
+  try { db.exec(`ALTER TABLE messages ADD COLUMN deleted_for_users TEXT DEFAULT '[]';`); } catch (e) {}
+  try { db.exec(`ALTER TABLE users ADD COLUMN last_seen TEXT DEFAULT (datetime('now'));`); } catch (e) {}
+
   // If PostgreSQL is configured, initialize remote tables and restore all saved users!
   if (pgPool) {
     initPostgresAndRestore();

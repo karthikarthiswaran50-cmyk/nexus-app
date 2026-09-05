@@ -19,6 +19,7 @@ interface SocketContextType {
   isConnected: boolean;
   onlineUserIds: Set<string>;
   reachableUserIds: Set<string>;
+  lastSeenMap: Record<string, string>; // userId -> ISO timestamp
   incomingCall: IncomingCallData | null;
   activeCall: ActiveCallSession | null;
   setActiveCall: (session: ActiveCallSession | null) => void;
@@ -28,6 +29,10 @@ interface SocketContextType {
   endActiveCall: () => void;
   clearIncomingCall: () => void;
   latestMessage: Message | null;
+  reactionUpdate: { messageId: string; reactions: Record<string, string[]>; conversationId: string } | null;
+  deletedMessage: { messageId: string; isDeletedForAll: boolean; deletedForUsers: string[]; conversationId: string } | null;
+  sendReaction: (messageId: string, emoji: string, receiverId: string) => void;
+  deleteMessage: (messageId: string, deleteType: 'for_everyone' | 'for_me', receiverId: string) => void;
   typingMap: Record<string, boolean>; // userId -> isTyping
   sendTyping: (receiverId: string, isTyping: boolean) => void;
   callBannerMessage: string | null;
@@ -46,6 +51,10 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [latestMessage, setLatestMessage] = useState<Message | null>(null);
   const [typingMap, setTypingMap] = useState<Record<string, boolean>>({});
   const [callBannerMessage, setCallBannerMessage] = useState<string | null>(null);
+
+  const [reactionUpdate, setReactionUpdate] = useState<{ messageId: string; reactions: Record<string, string[]>; conversationId: string } | null>(null);
+  const [deletedMessage, setDeletedMessage] = useState<{ messageId: string; isDeletedForAll: boolean; deletedForUsers: string[]; conversationId: string } | null>(null);
+  const [lastSeenMap, setLastSeenMap] = useState<Record<string, string>>({});
 
   const activeCallRef = useRef<ActiveCallSession | null>(null);
   activeCallRef.current = activeCall;
@@ -190,6 +199,18 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setTypingMap(prev => ({ ...prev, [data.senderId]: data.isTyping }));
     });
 
+    newSocket.on('chat:reaction_updated', (data: { messageId: string; reactions: Record<string, string[]>; conversationId: string }) => {
+      setReactionUpdate(data);
+    });
+
+    newSocket.on('chat:message_deleted', (data: { messageId: string; isDeletedForAll: boolean; deletedForUsers: string[]; conversationId: string }) => {
+      setDeletedMessage(data);
+    });
+
+    newSocket.on('presence:last_seen', (data: { userId: string; lastSeen: string }) => {
+      setLastSeenMap(prev => ({ ...prev, [data.userId]: data.lastSeen }));
+    });
+
     setSocket(newSocket);
 
     return () => {
@@ -300,6 +321,18 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   }, [socket]);
 
+  const sendReaction = useCallback((messageId: string, emoji: string, receiverId: string) => {
+    if (socket) {
+      socket.emit('chat:reaction', { messageId, emoji, receiverId });
+    }
+  }, [socket]);
+
+  const deleteMessage = useCallback((messageId: string, deleteType: 'for_everyone' | 'for_me', receiverId: string) => {
+    if (socket) {
+      socket.emit('chat:delete_message', { messageId, deleteType, receiverId });
+    }
+  }, [socket]);
+
   return (
     <SocketContext.Provider
       value={{
@@ -307,6 +340,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         isConnected,
         onlineUserIds,
         reachableUserIds,
+        lastSeenMap,
         incomingCall,
         activeCall,
         setActiveCall,
@@ -316,6 +350,10 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         endActiveCall,
         clearIncomingCall,
         latestMessage,
+        reactionUpdate,
+        deletedMessage,
+        sendReaction,
+        deleteMessage,
         typingMap,
         sendTyping,
         callBannerMessage,
