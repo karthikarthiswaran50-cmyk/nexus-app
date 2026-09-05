@@ -178,8 +178,10 @@ app.get('/api/users/check-username/:username', usersCtrl.checkUsernameAvailable)
 app.get('/api/users/settings', requireAuth, usersCtrl.getSettings);
 app.put('/api/users/settings', requireAuth, usersCtrl.updateSettings);
 app.put('/api/users/profile', requireAuth, usersCtrl.updateProfile);
+app.post('/api/users/avatar', requireAuth, upload.single('avatar'), usersCtrl.uploadAvatar);
 app.post('/api/users/fcm-token', requireAuth, usersCtrl.updateFcmToken);
 app.get('/api/users/:id', requireAuth, usersCtrl.getUserByIdOrUsername);
+
 
 
 // Push Notification & VAPID Endpoints

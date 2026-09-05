@@ -1,9 +1,16 @@
 import { Request, Response } from 'express';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { db, persistUserToPg, persistSettingsToPg } from '../db.js';
 import { AuthenticatedRequest } from '../middleware/auth.js';
 import { getUserWithPlan } from './auth.js';
 import { UserWithPlan, UserSettings } from '../types.js';
 import { sanitizeText } from '../utils/sanitize.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 
 export async function getUsers(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
@@ -132,7 +139,7 @@ export async function updateProfile(req: AuthenticatedRequest, res: Response): P
     }
 
     const updatedName = full_name !== undefined ? sanitizeText(full_name) : current.full_name;
-    const updatedAvatar = avatar_url !== undefined ? String(avatar_url).substring(0, 500) : current.avatar_url;
+    const updatedAvatar = avatar_url !== undefined ? String(avatar_url) : current.avatar_url;
     const updatedBio = bio !== undefined ? sanitizeText(bio) : current.bio;
     const updatedStatus = status !== undefined ? sanitizeText(status) : current.status;
     const updatedCountry = country !== undefined ? sanitizeText(country) : current.country;
@@ -156,7 +163,6 @@ export async function updateProfile(req: AuthenticatedRequest, res: Response): P
       country: updatedCountry,
     });
 
-
     const user = getUserWithPlan(userId);
     res.json({ user, message: 'Profile updated successfully.' });
   } catch (error) {
@@ -164,6 +170,70 @@ export async function updateProfile(req: AuthenticatedRequest, res: Response): P
     res.status(500).json({ error: 'Failed to update profile.' });
   }
 }
+
+export async function uploadAvatar(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
+    let finalAvatarUrl = '';
+
+    // 1. If file was uploaded via multipart (multer)
+    if (req.file) {
+      finalAvatarUrl = `/uploads/${req.file.filename}`;
+    } else if (req.body?.avatarData && typeof req.body.avatarData === 'string') {
+      // 2. Base64 data URL
+      const match = req.body.avatarData.match(/^data:image\/([a-zA-Z0-9+]+);base64,(.+)$/);
+      if (match) {
+        let ext = match[1].toLowerCase();
+        if (ext === 'jpeg') ext = 'jpg';
+        const buffer = Buffer.from(match[2], 'base64');
+        const filename = `avatar-${userId}-${Date.now()}.${ext}`;
+        const uploadsDir = path.resolve(__dirname, '../../uploads');
+        if (!fs.existsSync(uploadsDir)) {
+          fs.mkdirSync(uploadsDir, { recursive: true });
+        }
+        fs.writeFileSync(path.join(uploadsDir, filename), buffer);
+        finalAvatarUrl = `/uploads/${filename}`;
+      } else if (req.body.avatarData.startsWith('http://') || req.body.avatarData.startsWith('https://')) {
+        finalAvatarUrl = req.body.avatarData;
+      }
+    } else if (req.body?.avatar_url && typeof req.body.avatar_url === 'string') {
+      finalAvatarUrl = req.body.avatar_url;
+    }
+
+    if (!finalAvatarUrl) {
+      res.status(400).json({ error: 'No image provided for avatar.' });
+      return;
+    }
+
+    db.prepare('UPDATE users SET avatar_url = ?, updated_at = datetime(\'now\') WHERE id = ?').run(finalAvatarUrl, userId);
+
+    const user = getUserWithPlan(userId);
+    if (user) {
+      persistUserToPg({
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        password_hash: '',
+        full_name: user.full_name,
+        avatar_url: finalAvatarUrl,
+        bio: user.bio,
+        status: user.status,
+        country: user.country,
+      });
+    }
+
+    res.json({ success: true, avatar_url: finalAvatarUrl, user });
+  } catch (err: any) {
+    console.error('uploadAvatar error:', err);
+    res.status(500).json({ error: 'Failed to upload avatar: ' + err.message });
+  }
+}
+
 
 export async function getSettings(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {

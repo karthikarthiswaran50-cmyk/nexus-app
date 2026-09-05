@@ -93,6 +93,53 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ viewUser, onNavigateTo
     'https://api.dicebear.com/7.x/adventurer/svg?seed=RoyalEmpress',
   ];
 
+  // Helper to resize & compress image on device to fast ~60KB crisp JPEG
+  const compressAvatar = (file: File): Promise<{ blob: Blob; dataUrl: string }> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          const maxSize = 512;
+          let width = img.width;
+          let height = img.height;
+          if (width > height) {
+            if (width > maxSize) {
+              height = Math.round((height * maxSize) / width);
+              width = maxSize;
+            }
+          } else {
+            if (height > maxSize) {
+              width = Math.round((width * maxSize) / height);
+              height = maxSize;
+            }
+          }
+
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return reject(new Error('Canvas context error'));
+          ctx.drawImage(img, 0, 0, width, height);
+
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.88);
+          canvas.toBlob(
+            (blob) => {
+              if (blob) resolve({ blob, dataUrl });
+              else reject(new Error('Blob conversion error'));
+            },
+            'image/jpeg',
+            0.88
+          );
+        };
+        img.onerror = () => reject(new Error('Failed to load image for processing'));
+        img.src = event.target?.result as string;
+      };
+      reader.onerror = () => reject(new Error('Failed to read file'));
+      reader.readAsDataURL(file);
+    });
+  };
+
   // Handle direct file upload from Device / Camera
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -103,29 +150,30 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ viewUser, onNavigateTo
       return;
     }
 
-    if (file.size > 10 * 1024 * 1024) {
-      alert('Image size must be less than 10MB.');
-      return;
-    }
-
     setUploadingPhoto(true);
-    setUploadProgress('Uploading photo to cloud...');
+    setUploadProgress('Optimizing & uploading photo...');
 
     try {
+      // 1. Client-side instant canvas optimization (works on all phones & browsers)
+      const { blob, dataUrl } = await compressAvatar(file);
+
       let finalUrl = '';
 
-      // 1. Try Firebase Storage first
+      // 2. Try server avatar upload endpoint via FormData (DO NOT set Content-Type header manually)
       try {
-        finalUrl = await uploadToFirebaseStorage(file, 'profile_photos');
-      } catch (fbErr) {
-        console.warn('Firebase Storage upload fallback to server:', fbErr);
-        // 2. Fallback to Server Upload endpoint
         const formData = new FormData();
-        formData.append('file', file);
-        const res = await axios.post('/api/chat/upload', formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-        });
-        finalUrl = res.data.url;
+        formData.append('avatar', blob, 'avatar.jpg');
+        const res = await axios.post('/api/users/avatar', formData);
+        if (res.data?.avatar_url) {
+          finalUrl = res.data.avatar_url;
+        }
+      } catch (uploadErr) {
+        console.warn('Multipart avatar upload failed, falling back to data URL payload:', uploadErr);
+        // Fallback: Send optimized base64 JSON payload directly
+        const jsonRes = await axios.post('/api/users/avatar', { avatarData: dataUrl });
+        if (jsonRes.data?.avatar_url) {
+          finalUrl = jsonRes.data.avatar_url;
+        }
       }
 
       if (finalUrl) {
@@ -143,7 +191,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ viewUser, onNavigateTo
       }
     } catch (err: any) {
       console.error('Photo upload failed:', err);
-      alert('Failed to upload photo. Please try again.');
+      alert('Failed to upload photo: ' + (err.response?.data?.error || err.message || 'Please try again.'));
     } finally {
       setUploadingPhoto(false);
       setUploadProgress(null);
@@ -151,6 +199,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ viewUser, onNavigateTo
       if (cameraInputRef.current) cameraInputRef.current.value = '';
     }
   };
+
 
   // Generate random avatar
   const handleGenerateRandomAvatar = async () => {
