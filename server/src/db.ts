@@ -167,11 +167,69 @@ export function initDatabase() {
   try { db.exec(`ALTER TABLE messages ADD COLUMN deleted_for_users TEXT DEFAULT '[]';`); } catch (e) {}
   try { db.exec(`ALTER TABLE users ADD COLUMN last_seen TEXT DEFAULT (datetime('now'));`); } catch (e) {}
 
+  // 8. Stories Table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS stories (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      media_url TEXT,
+      content TEXT DEFAULT '',
+      background_color TEXT DEFAULT '#0f172a',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      expires_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_stories_user ON stories(user_id, expires_at);
+  `);
+
+  // 9. Story Views Table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS story_views (
+      id TEXT PRIMARY KEY,
+      story_id TEXT NOT NULL REFERENCES stories(id) ON DELETE CASCADE,
+      viewer_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      viewed_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(story_id, viewer_id)
+    );
+  `);
+
+  // Ensure Nexus AI official bot user exists
+  ensureNexusAiBot();
+
   // If PostgreSQL is configured, initialize remote tables and restore all saved users!
   if (pgPool) {
     initPostgresAndRestore();
   }
   purgeDemoData();
+}
+
+function ensureNexusAiBot() {
+  try {
+    const aiId = 'user_nexus_ai';
+    const existing = db.prepare('SELECT id FROM users WHERE id = ?').get(aiId);
+    if (!existing) {
+      db.prepare(`
+        INSERT INTO users (id, email, username, password_hash, full_name, avatar_url, bio, status, country)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        aiId,
+        'ai@nexusroyal.online',
+        'nexus_ai',
+        '$2a$10$wN3r9KqV0VfG711E81uT7.Hl4G3jAeqOqm1dO8C6J5i9L6NqT.q2K', // unusable hash
+        'Nexus AI Assistant 🤖',
+        'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=200&auto=format&fit=crop&q=80',
+        'Official Nexus Royal Intelligent Assistant. Ask me anything, generate ideas, or chat 24/7!',
+        '⚡ Online 24/7 to assist you',
+        'Nexus Royal'
+      );
+      // Give VIP subscription
+      db.prepare(`
+        INSERT OR REPLACE INTO subscriptions (id, user_id, plan_id, status, current_period_end, billing_cycle)
+        VALUES (?, ?, 'vip', 'active', datetime('now', '+10 years'), 'yearly')
+      `).run('sub_ai', aiId);
+    }
+  } catch (err) {
+    console.error('Error ensuring Nexus AI bot user:', err);
+  }
 }
 
 

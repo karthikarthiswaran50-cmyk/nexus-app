@@ -22,6 +22,7 @@ import {
   MoreVertical,
   CornerDownRight,
   Copy,
+  Palette,
 } from 'lucide-react';
 import axios from 'axios';
 import { trackUserActivity } from '../../config/firebase';
@@ -67,6 +68,12 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
   // Reaction popover & action menu state
   const [activeMenuMessageId, setActiveMenuMessageId] = useState<string | null>(null);
   const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null);
+
+  // Chat Wallpaper state
+  const [chatWallpaper, setChatWallpaper] = useState<string>(() => {
+    return localStorage.getItem(`nexus_wallpaper_${otherUser.id}`) || 'default';
+  });
+  const [showWallpaperMenu, setShowWallpaperMenu] = useState(false);
 
   // Fullscreen Media Viewer state
   const [viewingMediaUrl, setViewingMediaUrl] = useState<string | null>(null);
@@ -430,8 +437,48 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
           </div>
         </div>
 
-        {/* Action Buttons: Audio Call, Video Call, Profile info */}
-        <div className="flex items-center gap-2">
+        {/* Action Buttons: Audio Call, Video Call, Wallpaper, Profile info */}
+        <div className="flex items-center gap-2 relative">
+          <button
+            type="button"
+            onClick={() => setShowWallpaperMenu(!showWallpaperMenu)}
+            className="p-2.5 rounded-xl bg-dark-800 hover:bg-gold-500/20 text-dark-300 hover:text-amber-300 border border-dark-700 hover:border-gold-500/40 transition-all shadow-sm"
+            title="Chat Theme Wallpaper"
+          >
+            <Palette className="w-4 h-4" />
+          </button>
+
+          {showWallpaperMenu && (
+            <div className="absolute right-0 top-12 z-50 w-52 p-3 bg-dark-900 border border-gold-500/30 rounded-2xl shadow-2xl space-y-2 backdrop-blur-xl">
+              <span className="text-[11px] font-bold text-amber-300">Choose Chat Wallpaper</span>
+              <div className="grid grid-cols-4 gap-2 pt-1">
+                {[
+                  { id: 'default', color: '#090d16' },
+                  { id: 'royal_gold', color: 'linear-gradient(135deg, #181206 0%, #0c0a09 100%)' },
+                  { id: 'midnight_blue', color: 'linear-gradient(135deg, #0b1528 0%, #030712 100%)' },
+                  { id: 'emerald_velvet', color: 'linear-gradient(135deg, #062419 0%, #02120b 100%)' },
+                  { id: 'crimson_ruby', color: 'linear-gradient(135deg, #280a0a 0%, #090202 100%)' },
+                  { id: 'purple_galaxy', color: 'linear-gradient(135deg, #1f0d3d 0%, #080214 100%)' },
+                  { id: 'cyber_neon', color: 'linear-gradient(135deg, #022026 0%, #050a12 100%)' },
+                ].map((wp) => (
+                  <button
+                    key={wp.id}
+                    type="button"
+                    onClick={() => {
+                      setChatWallpaper(wp.id);
+                      localStorage.setItem(`nexus_wallpaper_${otherUser.id}`, wp.id);
+                      setShowWallpaperMenu(false);
+                    }}
+                    style={{ background: wp.color }}
+                    className={`w-8 h-8 rounded-xl border-2 transition-transform hover:scale-110 ${
+                      chatWallpaper === wp.id ? 'border-amber-400 ring-2 ring-amber-400/40' : 'border-white/10'
+                    }`}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
           <button
             type="button"
             onClick={() => handleStartCall('audio')}
@@ -463,10 +510,26 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
         </div>
       </div>
 
-      {/* 👑 Messages Thread Container */}
+      {/* 👑 Messages Thread Container with Custom Wallpaper */}
       <div 
-        className="flex-1 p-4 sm:p-6 overflow-y-auto space-y-4 royal-watermark bg-dark-950"
-        onClick={() => setActiveMenuMessageId(null)}
+        className="flex-1 p-4 sm:p-6 overflow-y-auto space-y-4 royal-watermark transition-all duration-300"
+        style={{
+          background:
+            chatWallpaper === 'royal_gold'
+              ? 'linear-gradient(135deg, #161006 0%, #0c0a09 100%)'
+              : chatWallpaper === 'midnight_blue'
+              ? 'linear-gradient(135deg, #091325 0%, #030712 100%)'
+              : chatWallpaper === 'emerald_velvet'
+              ? 'linear-gradient(135deg, #051f15 0%, #02120b 100%)'
+              : chatWallpaper === 'crimson_ruby'
+              ? 'linear-gradient(135deg, #220909 0%, #090202 100%)'
+              : chatWallpaper === 'purple_galaxy'
+              ? 'linear-gradient(135deg, #1b0c36 0%, #080214 100%)'
+              : chatWallpaper === 'cyber_neon'
+              ? 'linear-gradient(135deg, #021a1f 0%, #050a12 100%)'
+              : '#080c14',
+        }}
+        onClick={() => { setActiveMenuMessageId(null); setShowWallpaperMenu(false); }}
       >
         {loading ? (
           <div className="h-full flex items-center justify-center">

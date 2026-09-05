@@ -5,6 +5,7 @@ import { Conversation, User } from '../../types';
 import { Avatar } from '../common/Avatar';
 import { PlanBadge } from '../common/Badge';
 import { ChatRoom } from './ChatRoom';
+import { StoriesBar } from '../stories/StoriesBar';
 import {
   Search,
   MessageSquare,
@@ -132,6 +133,9 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
             />
           </div>
         </div>
+
+        {/* 👑 Stories & 24h Status Bar */}
+        <StoriesBar />
 
         {/* Conversations List */}
         <div className="flex-1 overflow-y-auto p-2 space-y-1 divide-y divide-dark-800/40">

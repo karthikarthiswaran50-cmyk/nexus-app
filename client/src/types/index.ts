@@ -118,3 +118,25 @@ export interface ActiveCallSession {
   isIncoming?: boolean;
   sdpOffer?: any;
 }
+
+export interface StoryItem {
+  id: string;
+  user_id: string;
+  media_url?: string;
+  content: string;
+  background_color: string;
+  created_at: string;
+  expires_at: string;
+  views_count: number;
+  has_viewed: boolean;
+}
+
+export interface UserStoryGroup {
+  user_id: string;
+  username: string;
+  full_name: string;
+  avatar_url: string;
+  all_viewed: boolean;
+  stories: StoryItem[];
+}
+

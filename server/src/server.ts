@@ -21,6 +21,7 @@ import * as chatCtrl from './controllers/chat.js';
 import * as callsCtrl from './controllers/calls.js';
 import * as subsCtrl from './controllers/subscriptions.js';
 import * as webrtcCtrl from './controllers/webrtc.js';
+import * as storiesCtrl from './controllers/stories.js';
 import { getVapidPublicKey, savePushSubscription, sendPushToUser } from './services/webpush.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -182,7 +183,11 @@ app.post('/api/users/avatar', requireAuth, upload.single('avatar'), usersCtrl.up
 app.post('/api/users/fcm-token', requireAuth, usersCtrl.updateFcmToken);
 app.get('/api/users/:id', requireAuth, usersCtrl.getUserByIdOrUsername);
 
-
+// Stories & Status Routes (24-Hour Stories)
+app.get('/api/stories', requireAuth, storiesCtrl.getActiveStories);
+app.post('/api/stories', requireAuth, upload.single('media'), storiesCtrl.createStory);
+app.post('/api/stories/:id/view', requireAuth, storiesCtrl.viewStory);
+app.delete('/api/stories/:id', requireAuth, storiesCtrl.deleteStory);
 
 // Push Notification & VAPID Endpoints
 app.get('/api/notifications/vapid-public-key', (_req, res) => {

@@ -154,6 +154,24 @@ export function setupSocket(io: Server) {
         // Emit back to sender
         socket.emit('chat:message_sent', result);
 
+        // If recipient is Nexus AI Assistant, generate an instant response
+        if (receiverId === 'user_nexus_ai') {
+          setTimeout(async () => {
+            try {
+              const aiReplyText = generateAiAssistantReply(content || '');
+              const aiResult = saveMessage({
+                senderId: 'user_nexus_ai',
+                receiverId: userId,
+                content: aiReplyText,
+                type: 'text',
+              });
+              socket.emit('chat:new_message', aiResult);
+            } catch (aiErr) {
+              console.error('Nexus AI response error:', aiErr);
+            }
+          }, 800);
+        }
+
         // Always dispatch high-priority Web Push / FCM to receiver's mobile device
         const sender = getUserWithPlan(userId);
         const preview = type === 'text'
@@ -568,3 +586,40 @@ export function setupSocket(io: Server) {
     });
   });
 }
+
+function generateAiAssistantReply(userMsg: string): string {
+  const query = userMsg.toLowerCase().trim();
+  
+  if (query.includes('hi') || query.includes('hello') || query.includes('வணக்கம்') || query.includes('hey')) {
+    return "Hello! 👋 Welcome to Nexus Royal. I'm your Nexus AI Assistant. How can I help you today? You can ask me anything about features, coding, language translations, or writing messages!";
+  }
+  
+  if (query.includes('who are you') || query.includes('யாரு')) {
+    return "I am Nexus AI Assistant 🤖, the official built-in intelligent companion for Nexus Royal. I can help you craft replies, explain app features, and answer your daily questions!";
+  }
+
+  if (query.includes('features') || query.includes('upgrade') || query.includes('வசதிகள்')) {
+    return "Nexus Royal offers cutting-edge capabilities:\n✨ Ultra-clear HD Audio & Video Calls\n🎙️ High-Fidelity Voice Messages\n📸 24-Hour Disappearing Stories\n🔒 End-to-End Chat Reactions & Quoted Replies\n📱 Native App Installation (PWA)";
+  }
+
+  if (query.includes('call') || query.includes('வீடியோ')) {
+    return "To start a call on Nexus Royal, simply click on any contact from the Directory or open their Chat and click the Phone 📞 or Video 📹 button on the top right!";
+  }
+
+  if (query.includes('story') || query.includes('status')) {
+    return "You can share Stories on Nexus Royal! Tap the '+' button on the Stories bar above your chats to upload photos or write stylish gradient status cards that stay active for 24 hours.";
+  }
+
+  if (query.includes('nexus') || query.includes('royal')) {
+    return "Nexus Royal is our premium next-generation social and communication platform, engineered for speed, privacy, and seamless connections!";
+  }
+
+  // General helpful responses
+  const generalReplies = [
+    `I understand you're saying: "${userMsg}". How can I best assist you with that on Nexus Royal?`,
+    `Got it! As your Nexus AI, I'm here to make your experience royal. Would you like tips, suggestions, or help with sending messages and stories?`,
+    `Thank you for reaching out! Nexus AI is always active to help you stay connected with friends and family smoothly. ✨`
+  ];
+  return generalReplies[Math.floor(Math.random() * generalReplies.length)];
+}
+
