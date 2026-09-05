@@ -74,7 +74,7 @@ export const DirectoryView: React.FC<DirectoryViewProps> = ({ onStartChat, onVie
             <span className="p-1.5 rounded-lg bg-gold-500/20 text-gold-400 border border-gold-500/30">
               <Crown className="w-4 h-4 fill-gold-400" />
             </span>
-            <span className="text-xs font-black gold-gradient-text uppercase tracking-widest">Instagram-Style Search</span>
+            <span className="text-xs font-black gold-gradient-text uppercase tracking-widest">Nexus Royal Search</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
             Find Members by @Username
@@ -118,7 +118,7 @@ export const DirectoryView: React.FC<DirectoryViewProps> = ({ onStartChat, onVie
         </div>
       </div>
 
-      {/* Instagram-Style Search Bar */}
+      {/* Royal Search Bar */}
       <div className="relative">
         <Search className="w-5 h-5 text-gold-400 absolute left-4 top-1/2 -translate-y-1/2" />
         <input
@@ -147,7 +147,7 @@ export const DirectoryView: React.FC<DirectoryViewProps> = ({ onStartChat, onVie
           <p className="text-xs text-dark-400 font-bold">Searching Royal directory...</p>
         </div>
       ) : !searchQuery.trim() ? (
-        /* Instagram-Style Empty Landing State */
+        /* Empty Landing State */
         <div className="p-12 sm:p-16 text-center bg-dark-900/60 border border-gold-500/15 rounded-3xl royal-card space-y-4 max-w-lg mx-auto">
           <div className="w-16 h-16 rounded-3xl bg-gold-500/10 border border-gold-500/25 flex items-center justify-center text-gold-400 mx-auto shadow-xl">
             <Search className="w-8 h-8 stroke-[2.2]" />
@@ -155,7 +155,7 @@ export const DirectoryView: React.FC<DirectoryViewProps> = ({ onStartChat, onVie
           <div className="space-y-1.5">
             <h3 className="text-base font-extrabold text-white">Search Friends by @Username</h3>
             <p className="text-xs text-dark-300 leading-relaxed">
-              Just like Instagram, profiles are private until searched. Enter any friend's username or name above to start a chat or video call.
+              Profiles are private and secure. Enter any friend's unique handle or name above to start an encrypted chat, audio, or video call.
             </p>
           </div>
         </div>

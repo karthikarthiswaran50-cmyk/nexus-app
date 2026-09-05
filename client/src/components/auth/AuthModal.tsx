@@ -49,7 +49,7 @@ export const AuthModal: React.FC = () => {
           </div>
           <div className="flex items-center gap-2.5 text-xs text-dark-200">
             <MessageSquare className="w-4 h-4 text-emerald-400 shrink-0" />
-            <span className="font-semibold">Instagram-Style Unique @Username & Chats</span>
+            <span className="font-semibold">Private Unique @Username & Encrypted Chats</span>
           </div>
           <div className="flex items-center gap-2.5 text-xs text-dark-200">
             <Shield className="w-4 h-4 text-cyan-400 shrink-0" />

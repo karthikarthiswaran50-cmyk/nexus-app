@@ -504,165 +504,171 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
                 key={msg.id}
                 onMouseEnter={() => setHoveredMessageId(msg.id)}
                 onMouseLeave={() => setHoveredMessageId(null)}
-                className={`relative flex flex-col ${isMe ? 'items-end' : 'items-start'} group animate-in fade-in duration-150`}
+                className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} group animate-in fade-in duration-150`}
               >
-                {/* Floating Action Menu Button */}
-                {!isDeleted && (
-                  <div
-                    className={`absolute top-0 ${isMe ? 'right-full mr-2' : 'left-full ml-2'} z-10 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity`}
-                  >
-                    <div className="flex items-center bg-dark-900 border border-gold-500/30 rounded-full px-1.5 py-0.5 shadow-lg shadow-black/60 backdrop-blur-md">
-                      {QUICK_REACTION_EMOJIS.slice(0, 4).map((em) => (
-                        <button
-                          key={em}
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleReact(msg.id, em);
-                          }}
-                          className="hover:scale-135 transition-transform p-1 text-xs"
-                          title={`React with ${em}`}
-                        >
-                          {em}
-                        </button>
-                      ))}
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setActiveMenuMessageId(isMenuOpen ? null : msg.id);
-                      }}
-                      className="p-1.5 rounded-full bg-dark-900 hover:bg-dark-800 text-dark-300 hover:text-white border border-dark-700 shadow-md transition-all"
-                      title="More message actions"
+                {/* Horizontal message row: Action toolbar sits directly next to the bubble */}
+                <div className={`relative flex items-center gap-2 max-w-[90%] sm:max-w-[75%] ${isMe ? 'flex-row' : 'flex-row-reverse'}`}>
+                  
+                  {/* Floating Action Menu Button (Always right beside the bubble) */}
+                  {!isDeleted && (
+                    <div
+                      className={`flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 z-20`}
                     >
-                      <MoreVertical className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                )}
+                      {/* Quick Reaction Pill */}
+                      <div className="flex items-center bg-dark-900 border border-gold-500/30 rounded-full px-1.5 py-0.5 shadow-lg shadow-black/60 backdrop-blur-md">
+                        {QUICK_REACTION_EMOJIS.slice(0, 4).map((em) => (
+                          <button
+                            key={em}
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleReact(msg.id, em);
+                            }}
+                            className="hover:scale-135 transition-transform p-1 text-xs"
+                            title={`React with ${em}`}
+                          >
+                            {em}
+                          </button>
+                        ))}
+                      </div>
 
-                {/* Dropdown Menu Modal */}
-                {isMenuOpen && !isDeleted && (
-                  <div
-                    onClick={(e) => e.stopPropagation()}
-                    className={`absolute top-8 ${isMe ? 'right-0' : 'left-0'} z-30 w-44 bg-dark-900 border border-gold-500/30 rounded-2xl shadow-2xl p-1.5 backdrop-blur-2xl animate-in zoom-in-95 duration-150 space-y-1`}
-                  >
-                    <div className="flex items-center justify-between px-2 py-1.5 border-b border-white/5">
-                      {QUICK_REACTION_EMOJIS.map((em) => (
-                        <button
-                          key={em}
-                          onClick={() => handleReact(msg.id, em)}
-                          className="hover:scale-130 transition-transform text-sm"
-                        >
-                          {em}
-                        </button>
-                      ))}
-                    </div>
-
-                    <button
-                      onClick={() => handleStartReply(msg)}
-                      className="w-full px-2.5 py-2 rounded-xl text-left text-xs text-dark-200 hover:text-white hover:bg-dark-800 flex items-center gap-2 transition-all"
-                    >
-                      <Reply className="w-3.5 h-3.5 text-brand-400" />
-                      <span>Reply</span>
-                    </button>
-
-                    {msg.type === 'text' && (
+                      {/* 3-dot dropdown trigger */}
                       <button
-                        onClick={() => handleCopyText(msg.content)}
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActiveMenuMessageId(isMenuOpen ? null : msg.id);
+                        }}
+                        className="p-1.5 rounded-full bg-dark-900 hover:bg-dark-800 text-dark-300 hover:text-white border border-dark-700 shadow-md transition-all"
+                        title="More message actions"
+                      >
+                        <MoreVertical className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Dropdown Menu Modal */}
+                  {isMenuOpen && !isDeleted && (
+                    <div
+                      onClick={(e) => e.stopPropagation()}
+                      className={`absolute top-10 ${isMe ? 'right-0' : 'left-0'} z-30 w-44 bg-dark-900 border border-gold-500/30 rounded-2xl shadow-2xl p-1.5 backdrop-blur-2xl animate-in zoom-in-95 duration-150 space-y-1`}
+                    >
+                      <div className="flex items-center justify-between px-2 py-1.5 border-b border-white/5">
+                        {QUICK_REACTION_EMOJIS.map((em) => (
+                          <button
+                            key={em}
+                            onClick={() => handleReact(msg.id, em)}
+                            className="hover:scale-130 transition-transform text-sm"
+                          >
+                            {em}
+                          </button>
+                        ))}
+                      </div>
+
+                      <button
+                        onClick={() => handleStartReply(msg)}
                         className="w-full px-2.5 py-2 rounded-xl text-left text-xs text-dark-200 hover:text-white hover:bg-dark-800 flex items-center gap-2 transition-all"
                       >
-                        <Copy className="w-3.5 h-3.5 text-amber-400" />
-                        <span>Copy Message</span>
+                        <Reply className="w-3.5 h-3.5 text-brand-400" />
+                        <span>Reply</span>
                       </button>
-                    )}
 
-                    <button
-                      onClick={() => handleDelete(msg.id, 'for_me')}
-                      className="w-full px-2.5 py-2 rounded-xl text-left text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 flex items-center gap-2 transition-all"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                      <span>Delete for Me</span>
-                    </button>
+                      {msg.type === 'text' && (
+                        <button
+                          onClick={() => handleCopyText(msg.content)}
+                          className="w-full px-2.5 py-2 rounded-xl text-left text-xs text-dark-200 hover:text-white hover:bg-dark-800 flex items-center gap-2 transition-all"
+                        >
+                          <Copy className="w-3.5 h-3.5 text-amber-400" />
+                          <span>Copy Message</span>
+                        </button>
+                      )}
 
-                    {isMe && (
                       <button
-                        onClick={() => handleDelete(msg.id, 'for_everyone')}
-                        className="w-full px-2.5 py-2 rounded-xl text-left text-xs text-rose-500 font-semibold hover:bg-rose-500/15 flex items-center gap-2 transition-all"
+                        onClick={() => handleDelete(msg.id, 'for_me')}
+                        className="w-full px-2.5 py-2 rounded-xl text-left text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 flex items-center gap-2 transition-all"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
-                        <span>Delete for Everyone</span>
+                        <span>Delete for Me</span>
                       </button>
-                    )}
-                  </div>
-                )}
 
-                {/* Message Bubble */}
-                <div
-                  className={`relative max-w-[85%] sm:max-w-[70%] rounded-2xl p-3.5 text-sm shadow-xl transition-all ${
-                    isDeleted
-                      ? 'bg-dark-900/60 text-dark-500 italic border border-white/5 rounded-2xl'
-                      : isMe
-                      ? 'bg-gradient-to-r from-indigo-700 via-indigo-600 to-brand-600 text-white rounded-br-xs border border-indigo-400/30 shadow-indigo-950/60'
-                      : 'royal-card bg-dark-900/90 text-dark-100 rounded-bl-xs border border-gold-500/20'
-                  }`}
-                >
-                  {/* Quoted Reply Preview */}
-                  {msg.reply_to_content && !isDeleted && (
-                    <div
-                      className={`mb-2.5 p-2 rounded-xl text-xs border-l-3 border-amber-400 ${
-                        isMe ? 'bg-indigo-950/60 text-indigo-100' : 'bg-dark-800/80 text-dark-300'
-                      }`}
-                    >
-                      <div className="font-bold text-amber-300 flex items-center gap-1 text-[11px]">
-                        <CornerDownRight className="w-3 h-3" />
-                        <span>{msg.reply_to_sender || 'Replied Message'}</span>
-                      </div>
-                      <p className="truncate line-clamp-1 mt-0.5 opacity-90">{msg.reply_to_content}</p>
+                      {isMe && (
+                        <button
+                          onClick={() => handleDelete(msg.id, 'for_everyone')}
+                          className="w-full px-2.5 py-2 rounded-xl text-left text-xs text-rose-500 font-semibold hover:bg-rose-500/15 flex items-center gap-2 transition-all"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Delete for Everyone</span>
+                        </button>
+                      )}
                     </div>
                   )}
 
-                  {/* Voice Note Player or Image Attachment */}
-                  {msg.type === 'audio' && msg.media_url && !isDeleted ? (
-                    <VoicePlayer audioUrl={msg.media_url} isMe={isMe} />
-                  ) : msg.type === 'image' && msg.media_url && !isDeleted ? (
-                    <div className="mb-2 rounded-xl overflow-hidden max-h-72 bg-dark-950 border border-white/10 group/img relative cursor-pointer">
-                      <img
-                        src={msg.media_url}
-                        alt="attachment"
-                        className="w-full h-full object-cover transition-transform duration-300 group-hover/img:scale-105"
-                        onClick={() => {
-                          setViewingMediaUrl(msg.media_url!);
-                          setViewingMediaSender(isMe ? 'You' : otherUser.full_name);
-                        }}
-                      />
-                      <div className="absolute inset-0 bg-black/30 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center text-xs text-white font-bold backdrop-blur-xs">
-                        Click to Zoom & Download
-                      </div>
-                    </div>
-                  ) : (
-                    <p className="leading-relaxed whitespace-pre-wrap break-words">{msg.content}</p>
-                  )}
-
-                  {/* Timestamp & status */}
+                  {/* Message Bubble */}
                   <div
-                    className={`flex items-center gap-1 text-[10px] mt-1.5 ${
-                      isMe ? 'text-indigo-200 justify-end' : 'text-dark-400 justify-start'
+                    className={`relative flex-1 rounded-2xl p-3.5 text-sm shadow-xl transition-all ${
+                      isDeleted
+                        ? 'bg-dark-900/60 text-dark-500 italic border border-white/5 rounded-2xl'
+                        : isMe
+                        ? 'bg-gradient-to-r from-indigo-700 via-indigo-600 to-brand-600 text-white rounded-br-xs border border-indigo-400/30 shadow-indigo-950/60'
+                        : 'royal-card bg-dark-900/90 text-dark-100 rounded-bl-xs border border-gold-500/20'
                     }`}
                   >
-                    <span>{formatTime(msg.created_at)}</span>
-                    {isMe && !isDeleted && (
-                      msg.is_read ? (
-                        <CheckCheck className="w-3.5 h-3.5 text-amber-300 stroke-[2.5]" />
-                      ) : (
-                        <Check className="w-3.5 h-3.5 text-indigo-200 stroke-[2]" />
-                      )
+                    {/* Quoted Reply Preview */}
+                    {msg.reply_to_content && !isDeleted && (
+                      <div
+                        className={`mb-2.5 p-2 rounded-xl text-xs border-l-3 border-amber-400 ${
+                          isMe ? 'bg-indigo-950/60 text-indigo-100' : 'bg-dark-800/80 text-dark-300'
+                        }`}
+                      >
+                        <div className="font-bold text-amber-300 flex items-center gap-1 text-[11px]">
+                          <CornerDownRight className="w-3 h-3" />
+                          <span>{msg.reply_to_sender || 'Replied Message'}</span>
+                        </div>
+                        <p className="truncate line-clamp-1 mt-0.5 opacity-90">{msg.reply_to_content}</p>
+                      </div>
                     )}
+
+                    {/* Voice Note Player or Image Attachment */}
+                    {msg.type === 'audio' && msg.media_url && !isDeleted ? (
+                      <VoicePlayer audioUrl={msg.media_url} isMe={isMe} />
+                    ) : msg.type === 'image' && msg.media_url && !isDeleted ? (
+                      <div className="mb-2 rounded-xl overflow-hidden max-h-72 bg-dark-950 border border-white/10 group/img relative cursor-pointer">
+                        <img
+                          src={msg.media_url}
+                          alt="attachment"
+                          className="w-full h-full object-cover transition-transform duration-300 group-hover/img:scale-105"
+                          onClick={() => {
+                            setViewingMediaUrl(msg.media_url!);
+                            setViewingMediaSender(isMe ? 'You' : otherUser.full_name);
+                          }}
+                        />
+                        <div className="absolute inset-0 bg-black/30 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center text-xs text-white font-bold backdrop-blur-xs">
+                          Click to Zoom & Download
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="leading-relaxed whitespace-pre-wrap break-words">{msg.content}</p>
+                    )}
+
+                    {/* Timestamp & status */}
+                    <div
+                      className={`flex items-center gap-1 text-[10px] mt-1.5 ${
+                        isMe ? 'text-indigo-200 justify-end' : 'text-dark-400 justify-start'
+                      }`}
+                    >
+                      <span>{formatTime(msg.created_at)}</span>
+                      {isMe && !isDeleted && (
+                        msg.is_read ? (
+                          <CheckCheck className="w-3.5 h-3.5 text-amber-300 stroke-[2.5]" />
+                        ) : (
+                          <Check className="w-3.5 h-3.5 text-indigo-200 stroke-[2]" />
+                        )
+                      )}
+                    </div>
                   </div>
                 </div>
 
-                {/* Emoji Reactions Badges */}
+                {/* Emoji Reactions Badges (Sticks neatly to the bottom edge of bubble) */}
                 {hasReactions && !isDeleted && (
                   <div
                     className={`flex items-center gap-1 -mt-2.5 z-10 ${
@@ -711,6 +717,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
         <div ref={messagesEndRef} />
       </div>
 
+      {/* Emoji Picker Flyout */}
       {showEmojis && (
         <div className="p-2.5 bg-dark-900 border-t border-dark-800 flex items-center gap-2 overflow-x-auto">
           {emojis.map((em, idx) => (
@@ -730,6 +737,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
         </div>
       )}
 
+      {/* Quoted Message Preview Bar */}
       {replyingTo && (
         <div className="p-2.5 px-4 bg-dark-900 border-t border-gold-500/20 flex items-center justify-between gap-3 text-xs animate-in slide-in-from-bottom-2">
           <div className="flex items-center gap-2 min-w-0 border-l-2 border-gold-400 pl-3">
@@ -758,6 +766,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
         </div>
       )}
 
+      {/* Audio Recording Bar or Composer Input */}
       {isRecording ? (
         <div className="p-3.5 bg-dark-900/95 border-t border-dark-800 backdrop-blur-md flex items-center justify-between gap-3 shrink-0 animate-in slide-in-from-bottom-2">
           <div className="flex items-center gap-3">
@@ -853,7 +862,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
               onClick={startRecording}
               disabled={uploading}
               className="p-2.5 px-3.5 rounded-xl bg-dark-850 hover:bg-gradient-to-tr hover:from-amber-500 hover:to-yellow-400 text-gold-400 hover:text-dark-950 border border-gold-500/20 hover:border-gold-400 shadow-md flex items-center justify-center transition-all active:scale-95 group"
-              title="Record Voice Message (WhatsApp Style)"
+              title="Record Voice Message"
             >
               <Mic className="w-4 h-4 group-hover:scale-110 transition-all" />
             </button>

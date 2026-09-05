@@ -120,7 +120,7 @@ export const UsernameSetupModal: React.FC<UsernameSetupModalProps> = ({ isOpen, 
             <span className="gold-gradient-text">Unique Royal ID</span>
           </h2>
           <p className="text-xs text-dark-300 leading-relaxed">
-            Create your personalized <strong>@username</strong> handle. Friends can search and find your profile on Nexus just like on Instagram.
+            Create your personalized <strong>@username</strong> handle. Friends can search and find your profile on Nexus using this private handle.
           </p>
         </div>
 
