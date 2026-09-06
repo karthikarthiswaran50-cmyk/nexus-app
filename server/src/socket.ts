@@ -41,12 +41,16 @@ export function setupSocket(io: Server) {
 
   function broadcastOnlineList() {
     const onlineUserIds = Array.from(userSockets.keys());
+    if (!onlineUserIds.includes('user_nexus_ai')) {
+      onlineUserIds.push('user_nexus_ai');
+    }
     let reachableUserIds: string[] = [];
     try {
       const subRows = db.prepare('SELECT DISTINCT user_id FROM push_subscriptions').all() as any[];
       const settingRows = db.prepare('SELECT user_id FROM user_settings WHERE fcm_token IS NOT NULL').all() as any[];
       reachableUserIds = Array.from(new Set([
         ...onlineUserIds,
+        'user_nexus_ai',
         ...subRows.map(r => r.user_id),
         ...settingRows.map(r => r.user_id),
       ]));

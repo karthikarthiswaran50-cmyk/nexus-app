@@ -117,16 +117,23 @@ export function useWebRTC(session: ActiveCallSession | null) {
       try {
         const wantsVideo = session!.callType === 'video';
 
-        // Acquire media devices
+        // Acquire media devices with high-fidelity crystal clear audio settings
         let stream: MediaStream;
+        const audioConstraints: MediaTrackConstraints = {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          channelCount: 1,
+        };
+
         try {
           stream = await navigator.mediaDevices.getUserMedia({
-            audio: true,
+            audio: audioConstraints,
             video: wantsVideo ? { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' } : false,
           });
         } catch (mediaErr) {
           console.warn('Media devices error, fallback to audio only:', mediaErr);
-          stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+          stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints, video: false });
           setIsCameraOff(true);
         }
 

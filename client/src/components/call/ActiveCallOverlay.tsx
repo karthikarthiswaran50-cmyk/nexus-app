@@ -151,13 +151,13 @@ export const ActiveCallOverlay: React.FC = () => {
       {/* Main Video & Stream Canvas Area */}
       <div className="relative w-full h-full flex items-center justify-center overflow-hidden p-4 sm:p-6 pb-28">
         
-        {/* Remote Video (4K Frame with Gold Sheen) */}
+        {/* Remote Video & Audio Output (Never unmount or hide with display:none to preserve audio playback) */}
         <video
           ref={remoteVideoRef}
           autoPlay
           playsInline
           className={`w-full h-full max-w-6xl max-h-[82vh] rounded-3xl object-cover bg-dark-900 ring-1 ring-gold-500/30 shadow-2xl transition-all ${
-            peerCameraOff && !peerScreenSharing ? 'hidden' : 'block'
+            peerCameraOff && !peerScreenSharing ? 'absolute opacity-0 pointer-events-none w-1 h-1' : 'block'
           }`}
         />
 
