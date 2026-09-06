@@ -30,7 +30,7 @@ import {
   BellRing,
 } from 'lucide-react';
 import axios from 'axios';
-import { getNotificationPermissionStatus, requestNotificationPermission } from '../../utils/notifications';
+import { getNotificationPermissionStatus, requestNotificationPermission, autoRegisterPushIfGranted } from '../../utils/notifications';
 import { requestFcmToken } from '../../config/firebase';
 import { UsernameSetupModal } from '../auth/UsernameSetupModal';
 
@@ -72,7 +72,9 @@ export const AppLayout: React.FC = () => {
 
   useEffect(() => {
     setNotifPermission(getNotificationPermissionStatus());
-  }, []);
+    // Automatically re-register / sync Web Push VAPID subscription with backend
+    autoRegisterPushIfGranted();
+  }, [user?.id]);
 
 
   const handleEnableNotifications = async () => {

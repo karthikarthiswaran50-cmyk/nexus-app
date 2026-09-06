@@ -2,7 +2,7 @@ import webpush, { RequestOptions } from 'web-push';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { db } from '../db.js';
+import { db, pgPool } from '../db.js';
 import { sendCallPushNotification, sendMessagePushNotification } from './firebase.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -10,7 +10,7 @@ const __dirname = path.dirname(__filename);
 const dataDir = path.resolve(__dirname, '../../data');
 const keysFile = path.join(dataDir, 'vapid.json');
 
-// Initialize push subscriptions table
+// Initialize push subscriptions table (SQLite + PostgreSQL permanent sync)
 export function initPushSubscriptionsTable() {
   try {
     db.exec(`
@@ -25,6 +25,19 @@ export function initPushSubscriptionsTable() {
     `);
   } catch (e) {
     console.warn('initPushSubscriptionsTable note:', e);
+  }
+
+  if (pgPool) {
+    pgPool.query(`
+      CREATE TABLE IF NOT EXISTS push_subscriptions (
+        id VARCHAR(100) PRIMARY KEY,
+        user_id VARCHAR(100) NOT NULL,
+        endpoint TEXT UNIQUE NOT NULL,
+        p256dh TEXT NOT NULL,
+        auth TEXT NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `).catch(() => {});
   }
 }
 
@@ -113,6 +126,18 @@ export function savePushSubscription(userId: string, sub: WebPushSubscription): 
         auth = excluded.auth,
         created_at = datetime('now')
     `).run(id, userId, sub.endpoint, sub.keys.p256dh, sub.keys.auth);
+
+    if (pgPool) {
+      pgPool.query(`
+        INSERT INTO push_subscriptions (id, user_id, endpoint, p256dh, auth, created_at)
+        VALUES ($1, $2, $3, $4, $5, NOW())
+        ON CONFLICT (endpoint) DO UPDATE SET
+          user_id = EXCLUDED.user_id,
+          p256dh = EXCLUDED.p256dh,
+          auth = EXCLUDED.auth,
+          created_at = NOW()
+      `, [id, userId, sub.endpoint, sub.keys.p256dh, sub.keys.auth]).catch(() => {});
+    }
   } catch (err) {
     console.error('Error saving push subscription:', err);
   }
@@ -121,6 +146,9 @@ export function savePushSubscription(userId: string, sub: WebPushSubscription): 
 export function removePushSubscriptionByEndpoint(endpoint: string): void {
   try {
     db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?').run(endpoint);
+    if (pgPool) {
+      pgPool.query('DELETE FROM push_subscriptions WHERE endpoint = $1', [endpoint]).catch(() => {});
+    }
   } catch (e) {}
 }
 

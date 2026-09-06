@@ -363,7 +363,19 @@ async function initPostgresAndRestore() {
         insertSet.run(st.id, st.user_id, st.theme, st.allow_calls_from, st.notification_sound, st.read_receipts, st.auto_accept_calls);
       }
 
-      console.log('✅ PostgreSQL database restored successfully! User sessions and accounts are intact.');
+      // Restore push_subscriptions
+      try {
+        const pushRes = await pgPool.query('SELECT * FROM push_subscriptions');
+        const insertPush = db.prepare(`
+          INSERT OR REPLACE INTO push_subscriptions (id, user_id, endpoint, p256dh, auth, created_at)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `);
+        for (const pr of pushRes.rows) {
+          insertPush.run(pr.id, pr.user_id, pr.endpoint, pr.p256dh, pr.auth, new Date(pr.created_at).toISOString());
+        }
+      } catch (e) {}
+
+      console.log('✅ PostgreSQL database restored successfully! User sessions, accounts, and push subscriptions are intact.');
     } else {
       console.log('🌱 PostgreSQL is empty. Ready for authentic user registrations.');
       purgeDemoData();

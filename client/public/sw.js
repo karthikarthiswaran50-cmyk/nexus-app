@@ -50,16 +50,23 @@ self.addEventListener('push', (event) => {
     body,
     icon: notification.icon || data.callerAvatar || '/icon-192.svg',
     badge: '/icon-192.svg',
-    vibrate: isCall ? [600, 200, 600, 200, 600, 200, 600] : [200, 100, 200],
-    tag,
+    vibrate: isCall ? [800, 300, 800, 300, 800, 300, 800, 300, 800] : [250, 100, 250],
+    tag: isCall ? 'nexus-incoming-call' : tag,
     renotify: true,
-    requireInteraction: isCall, // Call notifications stay visible until tapped
+    requireInteraction: isCall, // WhatsApp style: call stays pinned on lockscreen until answered
     silent: false,
+    actions: isCall
+      ? [
+          { action: 'answer', title: '📞 Answer' },
+          { action: 'decline', title: '❌ Decline' },
+        ]
+      : undefined,
     data: {
       url: data.url || '/',
       type: data.type,
       callType: data.callType,
       conversationId: data.conversationId,
+      callerId: data.callerId,
       timestamp: Date.now(),
     },
   };
