@@ -28,17 +28,27 @@ db.exec(`
 const databaseUrl = process.env.DATABASE_URL;
 const isPostgres = !!(databaseUrl && (databaseUrl.startsWith('postgres://') || databaseUrl.startsWith('postgresql://')));
 
+const isCloudPostgres = Boolean(
+  process.env.NODE_ENV === 'production' ||
+  databaseUrl?.includes('supabase.co') ||
+  databaseUrl?.includes('supabase.com') ||
+  databaseUrl?.includes('render.com') ||
+  databaseUrl?.includes('sslmode=require')
+);
+
 export const pgPool: pg.Pool | null = isPostgres
   ? new pg.Pool({
       connectionString: databaseUrl,
-      ssl: process.env.NODE_ENV === 'production' || databaseUrl?.includes('render.com') ? { rejectUnauthorized: false } : false,
+      ssl: isCloudPostgres ? { rejectUnauthorized: false } : false,
       max: 10,
       idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 10000,
     })
   : null;
 
 if (pgPool) {
-  console.log('🐘 PostgreSQL Database Pool connected for permanent storage!');
+  const isSupabase = databaseUrl?.includes('supabase');
+  console.log(`🐘 ${isSupabase ? 'Supabase' : 'PostgreSQL'} Database Pool connected for permanent storage!`);
 } else {
   console.log('📦 Local SQLite engine running (standalone mode).');
 }
