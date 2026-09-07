@@ -16,10 +16,13 @@
       "purpose": "any maskable"
     }
   ],
+  "id": "com.nexusroyal.app",
   "start_url": "/",
-  "background_color": "#030712",
-  "theme_color": "#090d16",
+  "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "scope": "/"
+  "background_color": "#030712",
+  "theme_color": "#090d16",
+  "lang": "en",
+  "categories": ["social", "communication", "entertainment"]
 }
