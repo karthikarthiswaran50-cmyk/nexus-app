@@ -195,11 +195,62 @@ export function initDatabase() {
   // Ensure Nexus AI official bot user exists
   ensureNexusAiBot();
 
+  // Execute requested 1-time wipe of all previous users (retaining only Nexus AI bot)
+  wipeAllUsersOnce();
+
   // If PostgreSQL is configured, initialize remote tables and restore all saved users!
   if (pgPool) {
     initPostgresAndRestore();
   }
   purgeDemoData();
+}
+
+export async function wipeAllUsersOnce() {
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS system_migrations (
+        name TEXT PRIMARY KEY,
+        executed_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+    `);
+
+    const alreadyDone = db.prepare('SELECT name FROM system_migrations WHERE name = ?').get('wipe_users_2026_free_all');
+    if (alreadyDone) {
+      return;
+    }
+
+    console.log('🧹 Executing user wipe request: Deleting all existing non-system users from local and cloud databases...');
+
+    // Wipe non-system users from local SQLite
+    db.exec(`DELETE FROM users WHERE id != 'user_nexus_ai';`);
+    db.exec(`DELETE FROM conversations;`);
+    db.exec(`DELETE FROM messages;`);
+    db.exec(`DELETE FROM call_logs;`);
+    db.exec(`DELETE FROM stories;`);
+    db.exec(`DELETE FROM story_views;`);
+    db.exec(`DELETE FROM push_subscriptions;`);
+
+    // Wipe from PostgreSQL if connected
+    if (pgPool) {
+      try {
+        await pgPool.query(`DELETE FROM users WHERE id != 'user_nexus_ai';`);
+        await pgPool.query(`DELETE FROM conversations;`);
+        await pgPool.query(`DELETE FROM messages;`);
+        await pgPool.query(`DELETE FROM call_logs;`);
+        await pgPool.query(`DELETE FROM push_subscriptions;`);
+        console.log('🐘 PostgreSQL database users wiped successfully!');
+      } catch (pgErr) {
+        console.error('Error wiping PostgreSQL users:', pgErr);
+      }
+    }
+
+    db.prepare('INSERT OR REPLACE INTO system_migrations (name, executed_at) VALUES (?, datetime(\'now\'))').run('wipe_users_2026_free_all');
+
+    ensureNexusAiBot();
+    console.log('✨ User purge complete. All previous user accounts removed.');
+  } catch (err) {
+    console.error('Error in wipeAllUsersOnce:', err);
+  }
 }
 
 function ensureNexusAiBot() {
@@ -311,7 +362,10 @@ async function initPostgresAndRestore() {
       );
     `);
 
-    // 2. Check if users exist in PostgreSQL
+    // 2. Perform requested 1-time wipe on PostgreSQL if pending
+    await wipeAllUsersOnce();
+
+    // 3. Check if users exist in PostgreSQL
     const res = await pgPool.query('SELECT * FROM users');
     if (res.rows.length > 0) {
       console.log(`📥 Restoring ${res.rows.length} persistent users from PostgreSQL into local cache...`);

@@ -336,15 +336,6 @@ export function setupSocket(io: Server) {
         return;
       }
 
-      // Enforce paywall: Video calls require paid subscription (Pro ₹99 or VIP ₹199)
-      if (callType === 'video' && caller.plan_id === 'free') {
-        socket.emit('call:error', {
-          message: '🌟 HD Video Calling requires an active Nexus Pro (₹99/month) or Ultra VIP (₹199/month) subscription. Please upgrade to make video calls.',
-          requiresUpgrade: true,
-        });
-        return;
-      }
-
       // Check if receiver is already in an active call
       const isReceiverBusy = Array.from(activeCalls.values()).some(
         c => c.callerId === receiverId || c.receiverId === receiverId

@@ -168,12 +168,6 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     // Handle Incoming Call
     newSocket.on('call:incoming', (data: IncomingCallData) => {
-      // Check privacy settings if available
-      if (settings?.allow_calls_from === 'subscribers' && (!data.caller.plan_id || data.caller.plan_id === 'free')) {
-        newSocket.emit('call:reject', { callerId: data.caller.id, reason: 'Recipient only accepts calls from Subscribers' });
-        return;
-      }
-
       setIncomingCall(data);
       if (settings?.notification_sound !== false) {
         soundEffects.playIncomingCallTone();

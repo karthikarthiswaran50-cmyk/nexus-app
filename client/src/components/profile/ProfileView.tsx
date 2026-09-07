@@ -586,35 +586,25 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ viewUser, onNavigateTo
             </div>
           </div>
 
-          {/* Subscription Tier Info (Col 3) */}
+          {/* Membership Info (Col 3) */}
           <div className="bg-dark-900 border border-gold-500/25 rounded-3xl p-6 sm:p-8 space-y-6 shadow-xl flex flex-col justify-between royal-card-gold">
             <div>
               <h3 className="text-xs font-black text-amber-300 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                <Gem className="w-4 h-4 text-gold-400" />
-                <span>Tier Standing</span>
+                <Crown className="w-4 h-4 text-gold-400" />
+                <span>Royal Membership</span>
               </h3>
               <div className="p-4 rounded-2xl bg-dark-850/90 border border-gold-500/30 space-y-2 shadow-inner">
-                <PlanBadge planId={targetUser.plan_id} size="lg" />
-                <p className="text-xs text-amber-200/80 pt-1 font-medium leading-relaxed">
-                  {targetUser.plan_id === 'vip'
-                    ? 'Imperial VIP Standing with Unlimited 4K Calling & Concierge Access.'
-                    : targetUser.plan_id === 'pro'
-                    ? 'Nexus Pro Standing with HD Video & Screen Sharing.'
-                    : 'Standard Starter Tier.'}
+                <PlanBadge size="lg" />
+                <p className="text-xs text-amber-200/90 pt-1 font-medium leading-relaxed">
+                  Full Lifetime Free Access Unlocked: Unlimited HD Video Calling, Audio Calling, Screen Sharing & Instant Messaging.
                 </p>
               </div>
             </div>
 
-            {isOwnProfile && onNavigateToSubscription && targetUser.plan_id !== 'vip' && (
-              <button
-                type="button"
-                onClick={onNavigateToSubscription}
-                className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-600 hover:from-amber-400 hover:to-yellow-300 text-dark-950 font-black text-xs shadow-xl shadow-gold-500/30 flex items-center justify-center gap-2 transition-all active:scale-95"
-              >
-                <Crown className="w-4 h-4 stroke-[2.5]" />
-                <span>Upgrade to Imperial VIP</span>
-              </button>
-            )}
+            <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-bold text-center flex items-center justify-center gap-1.5">
+              <ShieldCheck className="w-4 h-4 text-emerald-400" />
+              <span>100% Free Lifetime Active</span>
+            </div>
           </div>
         </div>
       )}

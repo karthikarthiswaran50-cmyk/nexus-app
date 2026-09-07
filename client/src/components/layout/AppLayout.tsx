@@ -158,13 +158,12 @@ export const AppLayout: React.FC = () => {
     setCurrentTab('profile');
   };
 
-  const navItems = [
-    { id: 'chats' as NavTab, label: 'Messages', icon: MessageSquare },
-    { id: 'calls' as NavTab, label: 'Calls', icon: Phone },
-    { id: 'directory' as NavTab, label: 'Community', icon: Compass },
-    { id: 'subscription' as NavTab, label: 'Royal Treasury', icon: Sparkles, badge: user?.plan_id === 'vip' ? 'VIP' : user?.plan_id === 'pro' ? 'PRO' : '₹99' },
-    { id: 'profile' as NavTab, label: 'My Passport', icon: UserIcon },
-    { id: 'settings' as NavTab, label: 'Settings', icon: Settings },
+  const navItems: Array<{ id: NavTab; label: string; icon: any; badge?: string }> = [
+    { id: 'chats', label: 'Messages', icon: MessageSquare },
+    { id: 'calls', label: 'Calls', icon: Phone },
+    { id: 'directory', label: 'Community', icon: Compass },
+    { id: 'profile', label: 'My Passport', icon: UserIcon },
+    { id: 'settings', label: 'Settings', icon: Settings },
   ];
 
   return (
@@ -323,7 +322,7 @@ export const AppLayout: React.FC = () => {
             />
             <div className="hidden lg:block">
               <p className="text-xs font-extrabold text-white leading-tight truncate max-w-[120px] group-hover:text-amber-200 transition-colors">{user?.full_name}</p>
-              <p className="text-[10px] text-gold-400/80 uppercase font-bold tracking-wider">{user?.plan_id === 'vip' ? '👑 Imperial VIP' : user?.plan_id === 'pro' ? '⚡ Pro Member' : 'Starter'}</p>
+              <p className="text-[10px] text-gold-400/80 uppercase font-bold tracking-wider">👑 Royal Member</p>
             </div>
           </button>
 
@@ -500,17 +499,6 @@ export const AppLayout: React.FC = () => {
         >
           <Compass className="w-5 h-5" />
           <span className="text-[10px]">Users</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setCurrentTab('subscription')}
-          className={`flex flex-col items-center gap-0.5 py-1 px-3 rounded-xl transition-all ${
-            currentTab === 'subscription' ? 'text-amber-300 font-extrabold scale-105' : 'text-dark-400'
-          }`}
-        >
-          <Sparkles className="w-5 h-5 text-gold-400" />
-          <span className="text-[10px] text-gold-400 font-bold">₹99 Pro</span>
         </button>
 
         <button
