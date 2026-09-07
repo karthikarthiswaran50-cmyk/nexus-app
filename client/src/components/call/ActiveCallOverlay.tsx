@@ -12,13 +12,10 @@ import {
   Maximize2,
   Minimize2,
   MessageSquare,
-  Sparkles,
   Shield,
   Volume2,
   Send,
   X,
-  Crown,
-  Lock,
 } from 'lucide-react';
 import { Avatar } from '../common/Avatar';
 import { PlanBadge } from '../common/Badge';

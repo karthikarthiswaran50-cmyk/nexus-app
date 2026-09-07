@@ -25,6 +25,7 @@ export const CreateStoryModal: React.FC<CreateStoryModalProps> = ({ isOpen, onCl
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [postError, setPostError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen) return null;
@@ -60,7 +61,8 @@ export const CreateStoryModal: React.FC<CreateStoryModalProps> = ({ isOpen, onCl
       }
     } catch (err) {
       console.error('Failed to post story:', err);
-      alert('Failed to share story. Please try again.');
+      setPostError('Failed to share story. Please try again.');
+      setTimeout(() => setPostError(null), 4000);
     } finally {
       setLoading(false);
     }
@@ -184,6 +186,9 @@ export const CreateStoryModal: React.FC<CreateStoryModalProps> = ({ isOpen, onCl
               <span>Share Story</span>
             </button>
           </div>
+          {postError && (
+            <p className="text-xs text-rose-400 text-center font-semibold animate-in fade-in duration-200 pt-1">{postError}</p>
+          )}
         </div>
       </div>
     </div>

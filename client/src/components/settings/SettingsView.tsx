@@ -129,9 +129,11 @@ export const SettingsView: React.FC = () => {
   const [updatingPw, setUpdatingPw] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
   const [settingsSuccess, setSettingsSuccess] = useState(false);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
 
   const handleSavePreferences = async () => {
     setSavingSettings(true);
+    setSettingsError(null);
     try {
       await updateSettings({
         allow_calls_from: allowCallsFrom as any,
@@ -141,7 +143,8 @@ export const SettingsView: React.FC = () => {
       setSettingsSuccess(true);
       setTimeout(() => setSettingsSuccess(false), 3000);
     } catch (err) {
-      alert('Failed to save settings.');
+      setSettingsError('Failed to save settings. Please try again.');
+      setTimeout(() => setSettingsError(null), 4000);
     } finally {
       setSavingSettings(false);
     }
@@ -265,6 +268,9 @@ export const SettingsView: React.FC = () => {
             >
               {savingSettings ? 'Saving...' : 'Save Privacy Preferences'}
             </button>
+            {settingsError && (
+              <p className="text-xs text-rose-400 text-center font-semibold animate-in fade-in duration-200">{settingsError}</p>
+            )}
           </div>
         </div>
 

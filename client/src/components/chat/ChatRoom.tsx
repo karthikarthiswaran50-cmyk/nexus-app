@@ -79,6 +79,10 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
   const [viewingMediaUrl, setViewingMediaUrl] = useState<string | null>(null);
   const [viewingMediaSender, setViewingMediaSender] = useState<string | undefined>(undefined);
 
+  // Toast notification state
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const showToast = (msg: string) => { setToastMessage(msg); setTimeout(() => setToastMessage(null), 3500); };
+
   // Voice Note Recording State
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
@@ -302,7 +306,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
       }, 1000);
     } catch (err) {
       console.error('Microphone access denied:', err);
-      alert('Microphone permission is required to record and send voice messages.');
+      showToast('Microphone permission is required to record voice messages.');
     }
   };
 
@@ -408,6 +412,13 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
   return (
     <div className="h-full flex flex-col bg-dark-950 border-0 sm:border border-dark-800 rounded-none sm:rounded-2xl overflow-hidden shadow-xl font-['Plus_Jakarta_Sans',sans-serif]">
       
+      {/* Toast notification */}
+      {toastMessage && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-xl bg-dark-900/95 border border-gold-500/30 text-amber-200 text-xs font-semibold shadow-lg backdrop-blur-sm animate-in fade-in slide-in-from-top-2 duration-200">
+          {toastMessage}
+        </div>
+      )}
+
       {/* 👑 Chat Header */}
       <div className="p-3 sm:p-4 px-4 sm:px-6 bg-dark-900/90 border-b border-dark-800 backdrop-blur-md flex items-center justify-between shrink-0 z-20">
         <div className="flex items-center gap-2.5 sm:gap-3.5">

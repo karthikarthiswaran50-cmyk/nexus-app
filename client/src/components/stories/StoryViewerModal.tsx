@@ -69,7 +69,7 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
       onStoryDeleted?.(currentStory.id);
       handleNextStory();
     } catch (err) {
-      alert('Failed to delete story');
+      console.error('Failed to delete story:', err);
     }
   };
 

@@ -146,7 +146,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ viewUser, onNavigateTo
     if (!file) return;
 
     if (!file.type.startsWith('image/')) {
-      alert('Please select a valid image file (PNG, JPG, JPEG, WEBP).');
+      showToast('Please select a valid image file (PNG, JPG, JPEG, WEBP).');
       return;
     }
 
@@ -191,7 +191,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ viewUser, onNavigateTo
       }
     } catch (err: any) {
       console.error('Photo upload failed:', err);
-      alert('Failed to upload photo: ' + (err.response?.data?.error || err.message || 'Please try again.'));
+      showToast('Failed to upload photo: ' + (err.response?.data?.error || err.message || 'Please try again.'));
     } finally {
       setUploadingPhoto(false);
       setUploadProgress(null);
@@ -255,7 +255,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ viewUser, onNavigateTo
         details: { full_name: fullName, status },
       });
     } catch (err) {
-      alert('Failed to update profile.');
+      showToast('Failed to update profile. Please try again.');
     } finally {
       setSaving(false);
     }

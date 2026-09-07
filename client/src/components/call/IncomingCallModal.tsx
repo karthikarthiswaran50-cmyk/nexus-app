@@ -1,6 +1,6 @@
 import React from 'react';
 import { useSocket } from '../../context/SocketContext';
-import { Phone, PhoneOff, Video, Mic, Sparkles, Crown } from 'lucide-react';
+import { Phone, PhoneOff, Video } from 'lucide-react';
 import { Avatar } from '../common/Avatar';
 import { PlanBadge } from '../common/Badge';
 
