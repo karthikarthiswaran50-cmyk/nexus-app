@@ -1,14 +1,33 @@
-// Nexus Royal PWA & Notification Service Worker v6
-const CACHE_NAME = 'nexus-cache-v6';
+// Nexus Royal PWA & Notification Service Worker v7
+const CACHE_NAME = 'nexus-cache-v7';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => {
+      return cache.addAll([
+        '/',
+        '/manifest.json',
+        '/icon-192.png',
+        '/icon-512.png',
+        '/icon-maskable-192.png',
+        '/icon-maskable-512.png',
+        '/apple-touch-icon.png',
+      ]).catch(() => {});
+    })
+  );
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) => {
-      return Promise.all(keys.map((k) => caches.delete(k)));
+      return Promise.all(
+        keys.map((k) => {
+          if (k !== CACHE_NAME) {
+            return caches.delete(k);
+          }
+        })
+      );
     }).then(() => self.clients.claim())
   );
 });

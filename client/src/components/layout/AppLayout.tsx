@@ -551,23 +551,67 @@ export const AppLayout: React.FC = () => {
             </div>
 
             {/* Options Tabs / Steps */}
-            <div className="space-y-3">
+            <div className="space-y-3 text-left">
               {/* Android Box */}
-              <div className="p-4 rounded-2xl bg-dark-850/90 border border-gold-500/25 space-y-2">
-                <div className="flex items-center gap-2 text-xs font-bold text-amber-300">
-                  <span>🤖 Android Phone (Chrome / Brave / Edge)</span>
+              <div className="p-4 rounded-2xl bg-dark-850/90 border border-gold-500/25 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-xs font-bold text-amber-300">
+                    <Smartphone className="w-4 h-4" />
+                    <span>Android (Poco, Xiaomi, Samsung, Vivo, Oppo)</span>
+                  </div>
+                  {deferredPrompt && (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold border border-emerald-500/30 animate-pulse">
+                      1-Tap Ready
+                    </span>
+                  )}
                 </div>
-                <p className="text-xs text-dark-300">
-                  Tap the button below to install directly to your app drawer, or tap <strong className="text-white">⋮ menu</strong> &gt; <strong className="text-white">"Install App"</strong>.
-                </p>
-                <button
-                  type="button"
-                  onClick={handleInstallApp}
-                  className="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-600 hover:from-amber-400 hover:to-yellow-300 text-dark-950 font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-gold-500/25 transition-all active:scale-95"
-                >
-                  <Download className="w-4 h-4 stroke-[2.5]" />
-                  <span>Install Nexus Royal App</span>
-                </button>
+
+                {deferredPrompt ? (
+                  <button
+                    type="button"
+                    onClick={handleInstallApp}
+                    className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-600 hover:from-amber-400 hover:to-yellow-300 text-dark-950 font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-gold-500/25 transition-all active:scale-95"
+                  >
+                    <Download className="w-4 h-4 stroke-[2.5]" />
+                    <span>⚡ 1-Tap Install Nexus Royal App</span>
+                  </button>
+                ) : (
+                  <div className="space-y-2.5 text-xs text-dark-300">
+                    <p className="font-semibold text-white">
+                      உங்கள் போனில் (Poco C51 / Android Go) இன்ஸ்டால் செய்ய:
+                    </p>
+
+                    <div className="p-2.5 rounded-xl bg-dark-900 border border-gold-500/20 space-y-1.5">
+                      <p className="text-[11px] text-amber-300 font-bold">
+                        முறை 1 (Chrome 3-புள்ளி மெனு):
+                      </p>
+                      <p className="text-[11px] leading-relaxed">
+                        1. மேலே உள்ள Chrome <strong className="text-white font-bold">⋮ (3-dots)</strong> மெனுவை தொடவும்.<br />
+                        2. <strong className="text-emerald-400 font-bold">"Install app"</strong> அல்லது <strong className="text-emerald-400 font-bold">"Add to Home screen"</strong> (முகப்புத் திரையில் சேர்) என்பதை கிளிக் செய்யவும்.
+                      </p>
+                    </div>
+
+                    <div className="p-2.5 rounded-xl bg-dark-900 border border-gold-500/20 space-y-1.5">
+                      <p className="text-[11px] text-amber-300 font-bold">
+                        முறை 2 (Poco C51 / Share ஆப்ஷன்):
+                      </p>
+                      <p className="text-[11px] leading-relaxed">
+                        1. Chrome <strong className="text-white font-bold">⋮ (3-dots)</strong> மெனுவில் <strong className="text-white font-bold">"Share..."</strong> (பகிர்) தொடவும்.<br />
+                        2. கீழிருந்து வரும் பட்டியலில் <strong className="text-emerald-400 font-bold">"Add to Home screen"</strong> (முகப்புத் திரையில் சேர் 📲) தொடவும்.<br />
+                        3. <strong className="text-white font-bold">"Add"</strong> கொடுத்தால் Nexus Royal ஆப் உங்கள் போன் ஹோம் ஸ்கிரீனில் வந்துவிடும்!
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleInstallApp}
+                      className="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-600 hover:from-amber-400 hover:to-yellow-300 text-dark-950 font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-gold-500/25 transition-all active:scale-95 mt-1"
+                    >
+                      <Download className="w-4 h-4 stroke-[2.5]" />
+                      <span>Install / Add to Phone</span>
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* iOS Box */}
@@ -576,8 +620,8 @@ export const AppLayout: React.FC = () => {
                   <span>🍏 iPhone / iPad (Safari)</span>
                 </div>
                 <p className="text-xs text-dark-300">
-                  1. Tap the <strong className="text-white">Share button (📤)</strong> at bottom of Safari.<br />
-                  2. Scroll down and tap <strong className="text-white">"Add to Home Screen"</strong>.
+                  1. Safari-ன் கீழேயுள்ள <strong className="text-white">Share பொத்தானை (📤)</strong> தொடவும்.<br />
+                  2. கீழே ஸ்க்ரோல் செய்து <strong className="text-white">"Add to Home Screen"</strong> தொடவும்.
                 </p>
               </div>
             </div>
