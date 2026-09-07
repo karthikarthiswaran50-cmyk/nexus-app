@@ -34,22 +34,55 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
     }
   }, [isOpen, initialUserIndex]);
 
-  if (!isOpen || storyGroups.length === 0) return null;
-
   const currentGroup = storyGroups[userIndex] || storyGroups[0];
   const currentStory = currentGroup?.stories?.[storyIndex];
   const isOwner = currentStory?.user_id === currentUserId;
 
+  const handleNextStory = () => {
+    if (!currentGroup?.stories) return;
+    if (storyIndex < currentGroup.stories.length - 1) {
+      setStoryIndex(storyIndex + 1);
+    } else if (userIndex < storyGroups.length - 1) {
+      setUserIndex(userIndex + 1);
+      setStoryIndex(0);
+    } else {
+      onClose();
+    }
+  };
+
+  const handlePrevStory = () => {
+    if (storyIndex > 0) {
+      setStoryIndex(storyIndex - 1);
+    } else if (userIndex > 0) {
+      setUserIndex(userIndex - 1);
+      const prevStories = storyGroups[userIndex - 1]?.stories;
+      setStoryIndex(prevStories && prevStories.length > 0 ? prevStories.length - 1 : 0);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!currentStory || !isOwner) return;
+    if (!window.confirm('Delete this story?')) return;
+
+    try {
+      await axios.delete(`/api/stories/${currentStory.id}`);
+      onStoryDeleted?.(currentStory.id);
+      handleNextStory();
+    } catch (err) {
+      alert('Failed to delete story');
+    }
+  };
+
   // Mark story as viewed
   useEffect(() => {
-    if (currentStory && !isOwner) {
+    if (isOpen && currentStory && !isOwner) {
       axios.post(`/api/stories/${currentStory.id}/view`).catch(() => {});
     }
-  }, [currentStory?.id, isOwner]);
+  }, [isOpen, currentStory?.id, isOwner]);
 
   // Story Progress Timer (5 seconds per story)
   useEffect(() => {
-    if (isPaused || !currentStory) return;
+    if (!isOpen || isPaused || !currentStory) return;
 
     setProgress(0);
     const stepMs = 50;
@@ -69,42 +102,9 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [userIndex, storyIndex, isPaused, currentStory?.id]);
+  }, [isOpen, userIndex, storyIndex, isPaused, currentStory?.id]);
 
-  const handleNextStory = () => {
-    if (storyIndex < currentGroup.stories.length - 1) {
-      setStoryIndex(storyIndex + 1);
-    } else if (userIndex < storyGroups.length - 1) {
-      setUserIndex(userIndex + 1);
-      setStoryIndex(0);
-    } else {
-      onClose();
-    }
-  };
-
-  const handlePrevStory = () => {
-    if (storyIndex > 0) {
-      setStoryIndex(storyIndex - 1);
-    } else if (userIndex > 0) {
-      setUserIndex(userIndex - 1);
-      setStoryIndex(storyGroups[userIndex - 1].stories.length - 1);
-    }
-  };
-
-  const handleDelete = async () => {
-    if (!currentStory || !isOwner) return;
-    if (!window.confirm('Delete this story?')) return;
-
-    try {
-      await axios.delete(`/api/stories/${currentStory.id}`);
-      onStoryDeleted?.(currentStory.id);
-      handleNextStory();
-    } catch (err) {
-      alert('Failed to delete story');
-    }
-  };
-
-  if (!currentStory) return null;
+  if (!isOpen || storyGroups.length === 0 || !currentStory) return null;
 
   return (
     <div

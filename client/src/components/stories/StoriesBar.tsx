@@ -45,7 +45,19 @@ export const StoriesBar: React.FC = () => {
       <div className="flex items-center gap-3 overflow-x-auto no-scrollbar py-1">
         
         {/* 1. Add My Story Button */}
-        <div className="flex flex-col items-center gap-1 shrink-0 cursor-pointer group" onClick={() => setShowCreateModal(true)}>
+        <div
+          className="flex flex-col items-center gap-1 shrink-0 cursor-pointer group"
+          onClick={() => {
+            if (currentUserGroup) {
+              const myIndex = storyGroups.findIndex((g) => g.user_id === user?.id);
+              if (myIndex !== -1) {
+                handleOpenStory(myIndex);
+                return;
+              }
+            }
+            setShowCreateModal(true);
+          }}
+        >
           <div className="relative">
             <div className={`w-12 h-12 rounded-full p-0.5 ${
               currentUserGroup
@@ -60,6 +72,10 @@ export const StoriesBar: React.FC = () => {
             </div>
             <button
               type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowCreateModal(true);
+              }}
               className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-gradient-to-r from-amber-500 to-yellow-400 text-dark-950 flex items-center justify-center shadow-lg border-2 border-dark-900 group-hover:scale-110 transition-transform"
             >
               <Plus className="w-3 h-3 stroke-[3]" />
