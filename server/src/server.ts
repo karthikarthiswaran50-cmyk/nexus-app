@@ -169,8 +169,8 @@ export function isOriginAllowed(origin: string | undefined): boolean {
   // Always allow configured origins
   if (allowedOrigins.length > 0 && allowedOrigins.includes(origin)) return true;
 
-  // Allow Render deployed domains
-  if (origin.endsWith('.onrender.com')) return true;
+  // Allow Render deployed domains and custom domains (e.g., nexusroyal.online)
+  if (origin.endsWith('.onrender.com') || origin.includes('nexusroyal') || origin.includes('nuxesroyal')) return true;
 
   // Allow localhost even in production if testing
   if (origin.includes('localhost') || origin.includes('127.0.0.1')) return true;
