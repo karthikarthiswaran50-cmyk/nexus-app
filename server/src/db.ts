@@ -438,6 +438,8 @@ export function persistUserToPg(user: {
     `INSERT INTO users (id, email, username, password_hash, full_name, avatar_url, bio, status, country)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      ON CONFLICT (id) DO UPDATE SET
+       username = EXCLUDED.username,
+       password_hash = EXCLUDED.password_hash,
        full_name = EXCLUDED.full_name,
        avatar_url = EXCLUDED.avatar_url,
        bio = EXCLUDED.bio,

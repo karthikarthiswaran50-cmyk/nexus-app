@@ -151,17 +151,23 @@ export function setupSocket(io: Server) {
     }) => {
       try {
         const { receiverId, content, type = 'text', mediaUrl, replyToId, replyToContent, replyToSender } = data;
-        if (!receiverId || (!content && !mediaUrl)) return;
+        if (typeof receiverId !== 'string' || !receiverId.trim() || (!content && !mediaUrl)) return;
+
+        const safeContent = typeof content === 'string' ? content.slice(0, 10000) : '';
+        const safeType = ['text', 'image', 'audio', 'system', 'call_log'].includes(type) ? type : 'text';
+        const safeMediaUrl = typeof mediaUrl === 'string' && (mediaUrl.startsWith('/uploads/') || mediaUrl.startsWith('https://'))
+          ? mediaUrl.slice(0, 500)
+          : undefined;
 
         const result = saveMessage({
           senderId: userId,
-          receiverId,
-          content: content || '',
-          type,
-          mediaUrl,
-          replyToId,
-          replyToContent,
-          replyToSender,
+          receiverId: receiverId.trim(),
+          content: safeContent,
+          type: safeType as any,
+          mediaUrl: safeMediaUrl,
+          replyToId: typeof replyToId === 'string' ? replyToId.slice(0, 100) : undefined,
+          replyToContent: typeof replyToContent === 'string' ? replyToContent.slice(0, 500) : undefined,
+          replyToSender: typeof replyToSender === 'string' ? replyToSender.slice(0, 100) : undefined,
         });
 
         // Emit to all active sockets of receiver

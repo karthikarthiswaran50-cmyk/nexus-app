@@ -32,7 +32,7 @@ export async function getUsers(req: AuthenticatedRequest, res: Response): Promis
     const query = rawQuery.replace(/^@/, '').toLowerCase(); // strip leading '@' if user typed @username
 
     const sql = `
-      SELECT u.id, u.email, u.username, u.full_name, u.avatar_url, u.bio, u.status, u.country, u.created_at, u.updated_at,
+      SELECT u.id, '' as email, u.username, u.full_name, u.avatar_url, u.bio, u.status, u.country, u.created_at, u.updated_at,
              COALESCE(s.plan_id, 'free') as plan_id,
              COALESCE(s.status, 'active') as subscription_status,
              s.current_period_end as subscription_expires_at
@@ -96,6 +96,11 @@ export async function getUserByIdOrUsername(req: AuthenticatedRequest, res: Resp
     if (!user) {
       res.status(404).json({ error: 'User not found.' });
       return;
+    }
+
+    // Privacy protection: Redact email unless viewing own profile
+    if (user.id !== req.user?.userId) {
+      user = { ...user, email: '' };
     }
 
     res.json({ user });

@@ -11,7 +11,7 @@ import multer from 'multer';
 import { Server } from 'socket.io';
 import { fileURLToPath } from 'node:url';
 
-import { initDatabase } from './db.js';
+import { initDatabase, db } from './db.js';
 import { requireAuth } from './middleware/auth.js';
 import { setupSocket } from './socket.js';
 
@@ -83,6 +83,14 @@ const paymentLimiter = rateLimit({
   message: { error: 'Rate limit exceeded for payment operations.' },
 });
 
+const uploadLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30, // Max 30 upload requests per 15 minutes per IP (prevents storage & network DoS)
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Upload limit reached. Please wait a few minutes before uploading more media.' },
+});
+
 // Uploads directory
 const uploadsDir = path.resolve(__dirname, '../uploads');
 if (!fs.existsSync(uploadsDir)) {
@@ -145,8 +153,46 @@ const upload = multer({
   },
 });
 
-// Middleware
-app.use(cors({ origin: '*', credentials: true }));
+// Dynamic Origin Security for CORS & Socket.IO
+const rawCorsOrigin = process.env.CORS_ORIGIN;
+const allowedOrigins = rawCorsOrigin
+  ? rawCorsOrigin.split(',').map((o) => o.trim()).filter(Boolean)
+  : [];
+
+export function isOriginAllowed(origin: string | undefined): boolean {
+  // Allow mobile apps, curl, native web workers, same-server requests without Origin header
+  if (!origin) return true;
+
+  // In non-production, allow all local origins
+  if (process.env.NODE_ENV !== 'production') return true;
+
+  // Always allow configured origins
+  if (allowedOrigins.length > 0 && allowedOrigins.includes(origin)) return true;
+
+  // Allow Render deployed domains
+  if (origin.endsWith('.onrender.com')) return true;
+
+  // Allow localhost even in production if testing
+  if (origin.includes('localhost') || origin.includes('127.0.0.1')) return true;
+
+  // If no explicit whitelist is defined in production, allow same-origin requests
+  return allowedOrigins.length === 0;
+}
+
+const corsOptions: cors.CorsOptions = {
+  origin: (origin, callback) => {
+    if (isOriginAllowed(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error(`CORS Security Violation: Origin ${origin} is not allowed.`));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+};
+
+app.use(cors(corsOptions));
 
 // Razorpay Webhook Endpoint
 app.post(
@@ -157,7 +203,19 @@ app.post(
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-app.use('/uploads', express.static(uploadsDir));
+
+// Strict static file security headers (prevents script execution & XSS in upload directory)
+app.use(
+  '/uploads',
+  (_req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    res.setHeader('Cache-Control', 'public, max-age=86400, immutable');
+    next();
+  },
+  express.static(uploadsDir)
+);
 
 // Health check
 app.get('/api/health', (_req, res) => {
@@ -182,13 +240,13 @@ app.get('/api/users/check-username/:username', usersCtrl.checkUsernameAvailable)
 app.get('/api/users/settings', requireAuth, usersCtrl.getSettings);
 app.put('/api/users/settings', requireAuth, usersCtrl.updateSettings);
 app.put('/api/users/profile', requireAuth, usersCtrl.updateProfile);
-app.post('/api/users/avatar', requireAuth, upload.single('avatar'), usersCtrl.uploadAvatar);
+app.post('/api/users/avatar', requireAuth, uploadLimiter, upload.single('avatar'), usersCtrl.uploadAvatar);
 app.post('/api/users/fcm-token', requireAuth, usersCtrl.updateFcmToken);
 app.get('/api/users/:id', requireAuth, usersCtrl.getUserByIdOrUsername);
 
 // Stories & Status Routes (24-Hour Stories)
 app.get('/api/stories', requireAuth, storiesCtrl.getActiveStories);
-app.post('/api/stories', requireAuth, upload.single('media'), storiesCtrl.createStory);
+app.post('/api/stories', requireAuth, uploadLimiter, upload.single('media'), storiesCtrl.createStory);
 app.post('/api/stories/:id/view', requireAuth, storiesCtrl.viewStory);
 app.delete('/api/stories/:id', requireAuth, storiesCtrl.deleteStory);
 
@@ -281,7 +339,6 @@ app.post('/api/notifications/test', requireAuth, async (req: any, res) => {
 app.get('/api/notifications/subscriptions', requireAuth, (req: any, res) => {
   const userId = req.user?.userId;
   try {
-    const { db } = require('./db.js');
     const subs = db.prepare('SELECT id, endpoint, created_at FROM push_subscriptions WHERE user_id = ?').all(userId);
     const settings = db.prepare('SELECT fcm_token FROM user_settings WHERE user_id = ?').get(userId) as any;
     res.json({
@@ -304,7 +361,7 @@ app.get('/api/chat/conversations', requireAuth, chatCtrl.getConversations);
 app.get('/api/chat/messages/:otherUserId', requireAuth, chatCtrl.getMessages);
 app.post('/api/chat/send', requireAuth, chatCtrl.sendMessageHttp);
 app.post('/api/chat/mark-read', requireAuth, chatCtrl.markRead);
-app.post('/api/chat/upload', requireAuth, upload.single('file'), (req: any, res: any) => {
+app.post('/api/chat/upload', requireAuth, uploadLimiter, upload.single('file'), (req: any, res: any) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded' });
   }
@@ -345,10 +402,17 @@ const clientDistDir = candidateDistPaths.find((dirPath) => fs.existsSync(dirPath
 if (clientDistDir) {
   console.log(`🚀 Serving static web client from: ${clientDistDir}`);
   app.use(express.static(clientDistDir));
-  app.get('*', (_req, res) => {
+  app.get('*', (req, res) => {
+    if (req.path.startsWith('/api/')) {
+      res.status(404).json({ error: 'API route not found' });
+      return;
+    }
     res.sendFile(path.join(clientDistDir, 'index.html'));
   });
 } else {
+  app.use('/api/*', (_req, res) => {
+    res.status(404).json({ error: 'API route not found' });
+  });
   console.warn('⚠️ Warning: client/dist not found. Please run `npm run build:client`.');
 }
 
@@ -370,10 +434,16 @@ if (isHttps && fs.existsSync(sslKeyPath) && fs.existsSync(sslCertPath)) {
   server = http.createServer(app);
 }
 
-// Initialize Socket.io
+// Initialize Socket.io with strict origin security
 const io = new Server(server, {
   cors: {
-    origin: '*',
+    origin: (origin, callback) => {
+      if (isOriginAllowed(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error('Socket.IO CORS policy violation: Origin not allowed'), false);
+      }
+    },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
     credentials: true,
   },

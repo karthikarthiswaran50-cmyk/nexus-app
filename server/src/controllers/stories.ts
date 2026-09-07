@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { db } from '../db.js';
 import crypto from 'node:crypto';
 import { AuthenticatedRequest } from '../middleware/auth.js';
+import { sanitizeText } from '../utils/sanitize.js';
 
 export async function getActiveStories(req: AuthenticatedRequest, res: Response) {
   try {
@@ -72,13 +73,17 @@ export async function createStory(req: AuthenticatedRequest, res: Response) {
     const userId = req.user?.userId;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
-    const { content = '', background_color = '#0f172a' } = req.body;
+    const rawContent = typeof req.body.content === 'string' ? req.body.content.slice(0, 1000) : '';
+    const content = sanitizeText(rawContent);
+    const rawBgColor = typeof req.body.background_color === 'string' ? req.body.background_color : '';
+    const background_color = /^#[0-9a-fA-F]{3,8}$/.test(rawBgColor) ? rawBgColor : '#0f172a';
+
     let mediaUrl: string | undefined;
 
     if (req.file) {
       mediaUrl = `/uploads/${req.file.filename}`;
-    } else if (req.body.media_url) {
-      mediaUrl = req.body.media_url;
+    } else if (typeof req.body.media_url === 'string' && req.body.media_url.startsWith('/uploads/')) {
+      mediaUrl = req.body.media_url.slice(0, 200);
     }
 
     if (!content.trim() && !mediaUrl) {

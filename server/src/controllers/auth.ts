@@ -11,16 +11,37 @@ export async function register(req: Request, res: Response): Promise<void> {
   try {
     const { email, username, password, full_name, avatar_url, bio, country } = req.body;
 
-    if (!email || !username || !password || !full_name) {
-      res.status(400).json({ error: 'Email, username, full name, and password are required.' });
+    if (
+      typeof email !== 'string' ||
+      typeof username !== 'string' ||
+      typeof password !== 'string' ||
+      typeof full_name !== 'string' ||
+      !email.trim() ||
+      !username.trim() ||
+      !password ||
+      !full_name.trim()
+    ) {
+      res.status(400).json({ error: 'Valid email, username, full name, and password are required.' });
+      return;
+    }
+
+    if (password.length > 128) {
+      res.status(400).json({ error: 'Password must not exceed 128 characters.' });
       return;
     }
 
     const cleanEmail = sanitizeEmail(email);
     const cleanUsername = sanitizeUsername(username);
 
-    if (cleanUsername.length < 3) {
-      res.status(400).json({ error: 'Username must be at least 3 alphanumeric characters.' });
+    // Strict email format validation
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    if (!emailRegex.test(cleanEmail)) {
+      res.status(400).json({ error: 'Please provide a valid email address.' });
+      return;
+    }
+
+    if (cleanUsername.length < 3 || cleanUsername.length > 30) {
+      res.status(400).json({ error: 'Username must be between 3 and 30 characters.' });
       return;
     }
 
@@ -113,8 +134,13 @@ export async function register(req: Request, res: Response): Promise<void> {
 export async function login(req: Request, res: Response): Promise<void> {
   try {
     const { login, password } = req.body;
-    if (!login || !password) {
+    if (typeof login !== 'string' || typeof password !== 'string' || !login.trim() || !password) {
       res.status(400).json({ error: 'Email/Username and password are required.' });
+      return;
+    }
+
+    if (password.length > 128 || login.length > 100) {
+      res.status(400).json({ error: 'Invalid credentials format.' });
       return;
     }
 
@@ -176,17 +202,29 @@ export async function updatePassword(req: AuthenticatedRequest, res: Response): 
     const userId = req.user?.userId;
     const { currentPassword, newPassword } = req.body;
 
-    if (!userId || !currentPassword || !newPassword) {
+    if (
+      !userId ||
+      typeof currentPassword !== 'string' ||
+      typeof newPassword !== 'string' ||
+      !currentPassword ||
+      !newPassword
+    ) {
       res.status(400).json({ error: 'Current password and new password are required.' });
       return;
     }
 
-    if (newPassword.length < 6) {
-      res.status(400).json({ error: 'New password must be at least 6 characters.' });
+    if (currentPassword.length > 128 || newPassword.length > 128) {
+      res.status(400).json({ error: 'Password must not exceed 128 characters.' });
       return;
     }
 
-    const user = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(userId) as unknown as { password_hash: string } | undefined;
+    const pwCheck = validatePasswordStrength(newPassword);
+    if (!pwCheck.valid) {
+      res.status(400).json({ error: pwCheck.reason });
+      return;
+    }
+
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as unknown as User & { password_hash: string } | undefined;
     if (!user) {
       res.status(404).json({ error: 'User not found.' });
       return;
@@ -198,10 +236,23 @@ export async function updatePassword(req: AuthenticatedRequest, res: Response): 
       return;
     }
 
-    const salt = bcrypt.genSaltSync(10);
+    const salt = bcrypt.genSaltSync(12);
     const newHash = bcrypt.hashSync(newPassword, salt);
 
     db.prepare('UPDATE users SET password_hash = ?, updated_at = datetime(\'now\') WHERE id = ?').run(newHash, userId);
+
+    // Sync updated password hash to permanent PostgreSQL database
+    persistUserToPg({
+      id: user.id,
+      email: user.email,
+      username: user.username,
+      password_hash: newHash,
+      full_name: user.full_name,
+      avatar_url: user.avatar_url,
+      bio: user.bio,
+      status: user.status,
+      country: user.country,
+    });
 
     res.json({ message: 'Password updated successfully.' });
   } catch (error) {
