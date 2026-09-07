@@ -36,6 +36,9 @@ interface SocketContextType {
   typingMap: Record<string, boolean>; // userId -> isTyping
   sendTyping: (receiverId: string, isTyping: boolean) => void;
   callBannerMessage: string | null;
+  getBufferedCandidates: () => Array<{ fromUserId: string; candidate: any }>;
+  subscribeToIceCandidates: (cb: (data: { fromUserId: string; candidate: any }) => void) => () => void;
+  unlockAudioContext: () => void;
 }
 
 const SocketContext = createContext<SocketContextType | undefined>(undefined);
@@ -58,6 +61,35 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const activeCallRef = useRef<ActiveCallSession | null>(null);
   activeCallRef.current = activeCall;
+
+  // Global ICE candidate buffer (captured even when phone is ringing / before useWebRTC mounts)
+  const bufferedCandidatesRef = useRef<Array<{ fromUserId: string; candidate: any }>>([]);
+  const candidateListenersRef = useRef<Set<(data: { fromUserId: string; candidate: any }) => void>>(new Set());
+
+  const unlockAudioContext = useCallback(() => {
+    try {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (AudioContextClass) {
+        const ctx = new AudioContextClass();
+        if (ctx.state === 'suspended') {
+          ctx.resume();
+        }
+      }
+    } catch (e) {}
+  }, []);
+
+  const getBufferedCandidates = useCallback(() => {
+    const list = [...bufferedCandidatesRef.current];
+    bufferedCandidatesRef.current = [];
+    return list;
+  }, []);
+
+  const subscribeToIceCandidates = useCallback((cb: (data: { fromUserId: string; candidate: any }) => void) => {
+    candidateListenersRef.current.add(cb);
+    return () => {
+      candidateListenersRef.current.delete(cb);
+    };
+  }, []);
 
   useEffect(() => {
     if (!token || !user) {
@@ -228,6 +260,23 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setLastSeenMap(prev => ({ ...prev, [data.userId]: data.lastSeen }));
     });
 
+    // Global ICE candidate listeners (buffers candidates even when phone is ringing before user taps accept)
+    newSocket.on('call:ice_candidate', (data: { fromUserId: string; candidate: any }) => {
+      if (data?.candidate) {
+        bufferedCandidatesRef.current.push(data);
+        candidateListenersRef.current.forEach(cb => cb(data));
+      }
+    });
+
+    newSocket.on('call:buffered_ice_candidates', (data: { candidates: Array<{ fromUserId: string; candidate: any }> }) => {
+      if (data?.candidates && Array.isArray(data.candidates)) {
+        bufferedCandidatesRef.current.push(...data.candidates);
+        data.candidates.forEach(cand => {
+          candidateListenersRef.current.forEach(cb => cb(cand));
+        });
+      }
+    });
+
     setSocket(newSocket);
 
     return () => {
@@ -241,6 +290,8 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const startCall = useCallback((peerUser: User, callType: CallType) => {
     if (!socket || !user) return;
+    unlockAudioContext();
+    bufferedCandidatesRef.current = [];
     soundEffects.playOutgoingRing();
     setActiveCall({
       peerUser,
@@ -259,10 +310,11 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         recipientUsername: peerUser.username,
       },
     });
-  }, [socket, user]);
+  }, [socket, user, unlockAudioContext]);
 
   const acceptIncomingCall = useCallback(() => {
     if (!incomingCall) return;
+    unlockAudioContext();
     closeCallNotification();
     soundEffects.stopIncomingCallTone();
     soundEffects.playConnectedTone();
@@ -288,10 +340,11 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     });
 
     setIncomingCall(null);
-  }, [incomingCall, user]);
+  }, [incomingCall, user, unlockAudioContext]);
 
   const rejectIncomingCall = useCallback(() => {
     closeCallNotification();
+    bufferedCandidatesRef.current = [];
     if (!incomingCall || !socket) return;
     soundEffects.stopIncomingCallTone();
     socket.emit('call:reject', {
@@ -303,6 +356,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const endActiveCall = useCallback(() => {
     closeCallNotification();
+    bufferedCandidatesRef.current = [];
     soundEffects.stopOutgoingRing();
     soundEffects.stopIncomingCallTone();
     soundEffects.playCallEndedTone();
@@ -328,6 +382,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const clearIncomingCall = () => {
     closeCallNotification();
+    bufferedCandidatesRef.current = [];
     soundEffects.stopIncomingCallTone();
     setIncomingCall(null);
   };
@@ -374,6 +429,9 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         typingMap,
         sendTyping,
         callBannerMessage,
+        getBufferedCandidates,
+        subscribeToIceCandidates,
+        unlockAudioContext,
       }}
     >
       {children}

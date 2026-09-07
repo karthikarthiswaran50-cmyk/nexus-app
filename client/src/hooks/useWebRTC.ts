@@ -11,7 +11,19 @@ const ICE_SERVERS: RTCConfiguration = {
     { urls: 'stun:stun2.l.google.com:19302' },
     { urls: 'stun:stun3.l.google.com:19302' },
     { urls: 'stun:stun4.l.google.com:19302' },
+    { urls: 'stun:stun.services.mozilla.com' },
     { urls: 'stun:global.stun.twilio.com:3478' },
+    {
+      urls: [
+        'turn:openrelay.metered.ca:80',
+        'turn:openrelay.metered.ca:80?transport=tcp',
+        'turn:openrelay.metered.ca:443',
+        'turns:openrelay.metered.ca:443?transport=tcp',
+        'turns:openrelay.metered.ca:5349',
+      ],
+      username: 'openrelayproject',
+      credential: 'openrelayproject',
+    },
     {
       urls: [
         'turn:global.relay.metered.ca:80',
@@ -23,10 +35,53 @@ const ICE_SERVERS: RTCConfiguration = {
       credential: 'openrelayproject',
     },
   ],
+  iceCandidatePoolSize: 10,
+  bundlePolicy: 'max-bundle',
 };
 
+// Enable Opus Forward Error Correction (FEC) and crystal-clear voice bitrates on mobile data
+function preferOpusAndFec(sdp: string): string {
+  if (!sdp) return sdp;
+  return sdp.replace(/a=fmtp:(\d+) (.*)/g, (match, pt, params) => {
+    if (sdp.includes(`a=rtpmap:${pt} opus/48000`)) {
+      if (!params.includes('useinbandfec=1')) {
+        return `a=fmtp:${pt} ${params};useinbandfec=1;stereo=0;sprop-stereo=0;maxaveragebitrate=64000`;
+      }
+    }
+    return match;
+  });
+}
+
+// Wait for initial ICE candidates to gather into SDP (Hybrid Trickle + Vanilla ICE)
+function waitForIceGathering(pc: RTCPeerConnection, maxTimeoutMs = 600): Promise<void> {
+  return new Promise((resolve) => {
+    if (pc.iceGatheringState === 'complete') {
+      resolve();
+      return;
+    }
+    const timer = setTimeout(() => {
+      resolve();
+    }, maxTimeoutMs);
+
+    const onStateChange = () => {
+      if (pc.iceGatheringState === 'complete') {
+        clearTimeout(timer);
+        pc.removeEventListener('icegatheringstatechange', onStateChange);
+        resolve();
+      }
+    };
+    pc.addEventListener('icegatheringstatechange', onStateChange);
+  });
+}
+
 export function useWebRTC(session: ActiveCallSession | null) {
-  const { socket, endActiveCall } = useSocket();
+  const {
+    socket,
+    endActiveCall,
+    getBufferedCandidates,
+    subscribeToIceCandidates,
+    unlockAudioContext,
+  } = useSocket();
   const { user } = useAuth();
 
   const [callStatus, setCallStatus] = useState<'initiating' | 'ringing' | 'connecting' | 'connected' | 'ended'>('initiating');
@@ -43,6 +98,9 @@ export function useWebRTC(session: ActiveCallSession | null) {
 
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
+  const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
+  const remoteAudioStreamRef = useRef<MediaStream>(new MediaStream());
+
   const localStreamRef = useRef<MediaStream | null>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
@@ -104,7 +162,7 @@ export function useWebRTC(session: ActiveCallSession | null) {
       remoteVideoRef.current.srcObject = remoteStream;
       remoteVideoRef.current.play().catch(err => console.warn('Remote video play error:', err));
     }
-  }, [remoteStream, peerCameraOff]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [remoteStream, peerCameraOff]);
 
   // 4. Initialize WebRTC connection
   useEffect(() => {
@@ -113,27 +171,34 @@ export function useWebRTC(session: ActiveCallSession | null) {
     let isCleanedUp = false;
     pendingIceCandidatesRef.current = [];
 
+    // Ensure audio context is ready
+    unlockAudioContext();
+
     async function initWebRTC() {
       try {
         const wantsVideo = session!.callType === 'video';
 
-        // Acquire media devices with high-fidelity crystal clear audio settings
-        let stream: MediaStream;
+        // Robust mobile & desktop audio constraints
         const audioConstraints: MediaTrackConstraints = {
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true,
-          channelCount: 1,
         };
 
+        let stream: MediaStream;
         try {
           stream = await navigator.mediaDevices.getUserMedia({
             audio: audioConstraints,
             video: wantsVideo ? { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' } : false,
           });
         } catch (mediaErr) {
-          console.warn('Media devices error, fallback to audio only:', mediaErr);
-          stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints, video: false });
+          console.warn('Primary media constraints failed, fallback to standard audio:', mediaErr);
+          try {
+            stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+          } catch (audioOnlyErr) {
+            console.error('Failed to get any audio stream:', audioOnlyErr);
+            throw new Error('Microphone permission denied or device not found.');
+          }
           setIsCameraOff(true);
         }
 
@@ -141,6 +206,11 @@ export function useWebRTC(session: ActiveCallSession | null) {
           stream.getTracks().forEach(t => t.stop());
           return;
         }
+
+        // Explicitly enable all audio tracks
+        stream.getAudioTracks().forEach(t => {
+          t.enabled = true;
+        });
 
         localStreamRef.current = stream;
         if (localVideoRef.current) {
@@ -154,14 +224,15 @@ export function useWebRTC(session: ActiveCallSession | null) {
           if (configRes.iceServers && configRes.iceServers.length > 0) {
             rtcConfig = {
               iceServers: configRes.iceServers,
+              iceCandidatePoolSize: 10,
               bundlePolicy: configRes.bundlePolicy || 'max-bundle',
             };
           }
         } catch (e) {
-          console.warn('Using default STUN fallback:', e);
+          console.warn('Using default STUN/TURN fallback:', e);
         }
 
-        // Create PeerConnection with STUN/TURN
+        // Create PeerConnection
         const pc = new RTCPeerConnection(rtcConfig);
         peerConnectionRef.current = pc;
 
@@ -170,30 +241,61 @@ export function useWebRTC(session: ActiveCallSession | null) {
           pc.addTrack(track, stream);
         });
 
-        // Remote track handler
+        // Dedicated remote track handler with direct <audio> pipeline
         pc.ontrack = (event) => {
           console.log('WebRTC ontrack event:', event.track.kind, event.streams);
-          let streamToSet: MediaStream;
-          if (event.streams && event.streams[0]) {
-            streamToSet = event.streams[0];
-          } else {
-            streamToSet = new MediaStream([event.track]);
-          }
 
-          setRemoteStream(streamToSet);
+          if (event.track.kind === 'audio') {
+            event.track.enabled = true;
+
+            // Update dedicated audio stream for crystal-clear output
+            const existingTracks = remoteAudioStreamRef.current.getAudioTracks();
+            existingTracks.forEach(t => remoteAudioStreamRef.current.removeTrack(t));
+            remoteAudioStreamRef.current.addTrack(event.track);
+
+            if (remoteAudioRef.current) {
+              remoteAudioRef.current.srcObject = remoteAudioStreamRef.current;
+              remoteAudioRef.current.muted = false;
+              remoteAudioRef.current.volume = 1.0;
+
+              remoteAudioRef.current.play().catch(playErr => {
+                console.warn('Audio play auto-blocked by browser, waiting for user interaction:', playErr);
+                const unlock = () => {
+                  remoteAudioRef.current?.play().catch(() => {});
+                  window.removeEventListener('click', unlock);
+                  window.removeEventListener('touchstart', unlock);
+                };
+                window.addEventListener('click', unlock, { once: true });
+                window.addEventListener('touchstart', unlock, { once: true });
+              });
+            }
+
+            event.track.onunmute = () => {
+              setPeerMicMuted(false);
+              remoteAudioRef.current?.play().catch(() => {});
+            };
+            event.track.onmute = () => {
+              setPeerMicMuted(true);
+            };
+          }
 
           if (event.track.kind === 'video') {
+            let streamToSet: MediaStream;
+            if (event.streams && event.streams[0]) {
+              streamToSet = event.streams[0];
+            } else {
+              streamToSet = new MediaStream([event.track]);
+            }
+            setRemoteStream(streamToSet);
             setPeerCameraOff(false);
-          }
 
-          event.track.onunmute = () => {
-            if (event.track.kind === 'video') setPeerCameraOff(false);
-            if (event.track.kind === 'audio') setPeerMicMuted(false);
-          };
-          event.track.onmute = () => {
-            if (event.track.kind === 'video') setPeerCameraOff(true);
-            if (event.track.kind === 'audio') setPeerMicMuted(true);
-          };
+            event.track.onunmute = () => {
+              setPeerCameraOff(false);
+            };
+            event.track.onmute = () => {
+              setPeerCameraOff(true);
+            };
+          }
         };
 
         // ICE candidate handler
@@ -213,22 +315,45 @@ export function useWebRTC(session: ActiveCallSession | null) {
             soundEffects.stopOutgoingRing();
             soundEffects.playConnectedTone();
             setCallStatus('connected');
+            remoteAudioRef.current?.play().catch(() => {});
           } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed' || pc.connectionState === 'closed') {
             setCallStatus('ended');
           }
         };
 
-        // If caller: create offer
+        // ICE connection state monitor
+        pc.oniceconnectionstatechange = () => {
+          console.log('ICE connection state:', pc.iceConnectionState);
+          if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+            remoteAudioRef.current?.play().catch(() => {});
+          } else if (pc.iceConnectionState === 'failed') {
+            if (session?.role === 'caller' && typeof (pc as any).restartIce === 'function') {
+              console.log('Restarting ICE connection...');
+              (pc as any).restartIce();
+            }
+          }
+        };
+
+        // If caller: create offer & gather candidates
         if (session!.role === 'caller') {
           setCallStatus('ringing');
-          const offer = await pc.createOffer();
-          await pc.setLocalDescription(offer);
+          const offer = await pc.createOffer({
+            offerToReceiveAudio: true,
+            offerToReceiveVideo: wantsVideo,
+          });
+
+          const optimizedOfferSdp = preferOpusAndFec(offer.sdp || '');
+          const localOffer = new RTCSessionDescription({ type: 'offer', sdp: optimizedOfferSdp });
+          await pc.setLocalDescription(localOffer);
+
+          // Wait brief moment for initial STUN/host candidates to pack into offer SDP
+          await waitForIceGathering(pc, 500);
 
           if (socket) {
             socket.emit('call:initiate', {
               receiverId: session!.peerUser.id,
               callType: session!.callType,
-              sdpOffer: offer,
+              sdpOffer: pc.localDescription || localOffer,
             });
           }
         }
@@ -236,21 +361,41 @@ export function useWebRTC(session: ActiveCallSession | null) {
         else if (session!.role === 'receiver' && session!.sdpOffer) {
           setCallStatus('connecting');
           await pc.setRemoteDescription(new RTCSessionDescription(session!.sdpOffer));
-          await processPendingIceCandidates();
 
-          const answer = await pc.createAnswer();
-          await pc.setLocalDescription(answer);
+          // Process all pending candidates (local & pre-buffered by SocketContext)
+          await processPendingIceCandidates();
+          const preBuffered = getBufferedCandidates();
+          for (const item of preBuffered) {
+            if (item.candidate) {
+              await addOrQueueCandidate(item.candidate);
+            }
+          }
+
+          // Request any remaining candidates from server
+          socket.emit('call:get_buffered_candidates');
+
+          const answer = await pc.createAnswer({
+            offerToReceiveAudio: true,
+            offerToReceiveVideo: wantsVideo,
+          });
+
+          const optimizedAnswerSdp = preferOpusAndFec(answer.sdp || '');
+          const localAnswer = new RTCSessionDescription({ type: 'answer', sdp: optimizedAnswerSdp });
+          await pc.setLocalDescription(localAnswer);
+
+          // Wait brief moment for initial candidates
+          await waitForIceGathering(pc, 400);
 
           if (socket) {
             socket.emit('call:accept', {
               callerId: session!.peerUser.id,
-              sdpAnswer: answer,
+              sdpAnswer: pc.localDescription || localAnswer,
             });
           }
         }
       } catch (err: any) {
         console.error('WebRTC Initialization Error:', err);
-        setErrorMessage(err?.message || 'Failed to initialize camera/microphone.');
+        setErrorMessage(err?.message || 'Failed to initialize microphone or connection.');
       }
     }
 
@@ -263,6 +408,16 @@ export function useWebRTC(session: ActiveCallSession | null) {
       if (peerConnectionRef.current) {
         await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(data.sdpAnswer));
         await processPendingIceCandidates();
+
+        // Process any candidates buffered while ringing
+        const preBuffered = getBufferedCandidates();
+        for (const item of preBuffered) {
+          if (item.candidate) {
+            await addOrQueueCandidate(item.candidate);
+          }
+        }
+
+        socket.emit('call:get_buffered_candidates');
       }
     };
 
@@ -275,6 +430,9 @@ export function useWebRTC(session: ActiveCallSession | null) {
     const handlePeerMediaState = (data: { fromUserId: string; trackType: 'audio' | 'video'; enabled: boolean }) => {
       if (data.trackType === 'audio') {
         setPeerMicMuted(!data.enabled);
+        if (data.enabled) {
+          remoteAudioRef.current?.play().catch(() => {});
+        }
       } else if (data.trackType === 'video') {
         setPeerCameraOff(!data.enabled);
       }
@@ -286,16 +444,23 @@ export function useWebRTC(session: ActiveCallSession | null) {
 
     if (socket) {
       socket.on('call:accepted', handleAccepted);
-      socket.on('call:ice_candidate', handleIceCandidate);
       socket.on('call:peer_media_state_change', handlePeerMediaState);
       socket.on('call:peer_screen_share_toggle', handlePeerScreenShare);
     }
 
+    // Subscribe to live ICE candidates forwarded from SocketContext
+    const unsubscribeLiveCandidates = subscribeToIceCandidates((data) => {
+      if (data.candidate) {
+        addOrQueueCandidate(data.candidate);
+      }
+    });
+
     return () => {
       isCleanedUp = true;
+      unsubscribeLiveCandidates();
+
       if (socket) {
         socket.off('call:accepted', handleAccepted);
-        socket.off('call:ice_candidate', handleIceCandidate);
         socket.off('call:peer_media_state_change', handlePeerMediaState);
         socket.off('call:peer_screen_share_toggle', handlePeerScreenShare);
       }
@@ -313,16 +478,22 @@ export function useWebRTC(session: ActiveCallSession | null) {
         peerConnectionRef.current.close();
         peerConnectionRef.current = null;
       }
+      if (remoteAudioStreamRef.current) {
+        remoteAudioStreamRef.current.getTracks().forEach(t => t.stop());
+        remoteAudioStreamRef.current = new MediaStream();
+      }
     };
-  }, [session?.peerUser.id, session?.role, socket, addOrQueueCandidate, processPendingIceCandidates]);
+  }, [session?.peerUser.id, session?.role, socket, addOrQueueCandidate, processPendingIceCandidates, getBufferedCandidates, subscribeToIceCandidates, unlockAudioContext]);
 
   // 5. Toggle Microphone
   const toggleMicrophone = useCallback(() => {
     if (localStreamRef.current) {
-      const audioTrack = localStreamRef.current.getAudioTracks()[0];
-      if (audioTrack) {
-        const nextState = !audioTrack.enabled;
-        audioTrack.enabled = nextState;
+      const audioTracks = localStreamRef.current.getAudioTracks();
+      if (audioTracks.length > 0) {
+        const nextState = !audioTracks[0].enabled;
+        audioTracks.forEach(t => {
+          t.enabled = nextState;
+        });
         setIsMicMuted(!nextState);
 
         if (socket && session) {
@@ -468,6 +639,7 @@ export function useWebRTC(session: ActiveCallSession | null) {
     errorMessage,
     localVideoRef,
     remoteVideoRef,
+    remoteAudioRef,
     toggleMicrophone,
     toggleCamera,
     toggleScreenShare,

@@ -34,6 +34,25 @@ export function setupSocket(io: Server) {
   const activeCalls = new Map<string, { callerId: string; receiverId: string; callType: CallType; startedAt: number }>();
   // Map: pending call invitations for offline/sleeping devices (receiverId -> PendingCall)
   const pendingCalls = new Map<string, PendingCall>();
+  // Map: targetUserId -> list of buffered ICE candidates
+  const bufferedCandidates = new Map<string, Array<{ fromUserId: string; candidate: any }>>();
+
+  function addBufferedCandidate(targetUserId: string, item: { fromUserId: string; candidate: any }) {
+    if (!bufferedCandidates.has(targetUserId)) {
+      bufferedCandidates.set(targetUserId, []);
+    }
+    const list = bufferedCandidates.get(targetUserId)!;
+    // Limit to latest 100 candidates to prevent memory leaks
+    if (list.length < 100) {
+      list.push(item);
+    }
+  }
+
+  function getAndClearBufferedCandidates(targetUserId: string) {
+    const list = bufferedCandidates.get(targetUserId) || [];
+    bufferedCandidates.delete(targetUserId);
+    return list;
+  }
 
   function getSocketsForUser(userId: string): string[] {
     return Array.from(userSockets.get(userId) || []);
@@ -446,6 +465,19 @@ export function setupSocket(io: Server) {
           sdpAnswer,
         });
       });
+
+      // Deliver all buffered ICE candidates sent by caller to this receiver
+      const candidatesForReceiver = getAndClearBufferedCandidates(userId);
+      if (candidatesForReceiver.length > 0) {
+        socket.emit('call:buffered_ice_candidates', { candidates: candidatesForReceiver });
+      }
+    });
+
+    socket.on('call:get_buffered_candidates', () => {
+      const candidates = getAndClearBufferedCandidates(userId);
+      if (candidates.length > 0) {
+        socket.emit('call:buffered_ice_candidates', { candidates });
+      }
     });
 
     socket.on('call:reject', (data: {
@@ -459,6 +491,8 @@ export function setupSocket(io: Server) {
       const actualCallType: CallType = activeCallEntry?.callType || 'audio';
       
       activeCalls.delete(`${callerId}-${userId}`);
+      bufferedCandidates.delete(userId);
+      bufferedCandidates.delete(callerId);
 
       if (pendingCalls.has(userId)) {
         clearTimeout(pendingCalls.get(userId)!.timeoutId);
@@ -487,8 +521,12 @@ export function setupSocket(io: Server) {
       candidate: any;
     }) => {
       const { targetUserId, candidate } = data;
-      const targetSockets = getSocketsForUser(targetUserId);
+      if (!targetUserId || !candidate) return;
 
+      // Always buffer for target user in case their peer connection is still initializing or ringing
+      addBufferedCandidate(targetUserId, { fromUserId: userId, candidate });
+
+      const targetSockets = getSocketsForUser(targetUserId);
       targetSockets.forEach((sId) => {
         io.to(sId).emit('call:ice_candidate', {
           fromUserId: userId,
@@ -504,9 +542,11 @@ export function setupSocket(io: Server) {
     }) => {
       const { targetUserId, callType = 'video', duration = 0 } = data;
       
-      // Cleanup active call map & pending calls
+      // Cleanup active call map, buffered candidates & pending calls
       activeCalls.delete(`${userId}-${targetUserId}`);
       activeCalls.delete(`${targetUserId}-${userId}`);
+      bufferedCandidates.delete(userId);
+      bufferedCandidates.delete(targetUserId);
 
       if (pendingCalls.has(targetUserId)) {
         clearTimeout(pendingCalls.get(targetUserId)!.timeoutId);

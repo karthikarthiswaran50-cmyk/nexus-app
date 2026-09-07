@@ -5,11 +5,16 @@ import { Avatar } from '../common/Avatar';
 import { PlanBadge } from '../common/Badge';
 
 export const IncomingCallModal: React.FC = () => {
-  const { incomingCall, acceptIncomingCall, rejectIncomingCall } = useSocket();
+  const { incomingCall, acceptIncomingCall, rejectIncomingCall, unlockAudioContext } = useSocket();
 
   if (!incomingCall) return null;
 
   const isVideo = incomingCall.callType === 'video';
+
+  const handleAccept = () => {
+    unlockAudioContext();
+    acceptIncomingCall();
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-dark-950/85 backdrop-blur-2xl animate-in fade-in zoom-in-95 duration-200 font-['Plus_Jakarta_Sans',sans-serif]">
@@ -62,7 +67,7 @@ export const IncomingCallModal: React.FC = () => {
           {/* Accept Button */}
           <button
             type="button"
-            onClick={acceptIncomingCall}
+            onClick={handleAccept}
             className="flex flex-col items-center gap-2 group"
           >
             <div className="w-16 h-16 rounded-full bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-white flex items-center justify-center shadow-xl shadow-emerald-500/30 transition-all transform active:scale-95 group-hover:scale-105 animate-bounce">

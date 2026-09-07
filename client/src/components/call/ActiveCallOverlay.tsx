@@ -43,6 +43,7 @@ export const ActiveCallOverlay: React.FC = () => {
     errorMessage,
     localVideoRef,
     remoteVideoRef,
+    remoteAudioRef,
     toggleMicrophone,
     toggleCamera,
     toggleScreenShare,
@@ -96,7 +97,18 @@ export const ActiveCallOverlay: React.FC = () => {
   const isVideoCall = activeCall.callType === 'video';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-dark-950/95 backdrop-blur-2xl animate-in fade-in duration-300 font-['Plus_Jakarta_Sans',sans-serif]">
+    <div
+      onClick={() => remoteAudioRef.current?.play().catch(() => {})}
+      onTouchStart={() => remoteAudioRef.current?.play().catch(() => {})}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-dark-950/95 backdrop-blur-2xl animate-in fade-in duration-300 font-['Plus_Jakarta_Sans',sans-serif]"
+    >
+      {/* 🔊 Dedicated Direct WebRTC Audio Pipeline (Never blocked by video occlusion/throttling) */}
+      <audio
+        ref={remoteAudioRef}
+        autoPlay
+        playsInline
+        style={{ position: 'fixed', top: -9999, left: -9999, width: '1px', height: '1px', opacity: 0.01, pointerEvents: 'none' }}
+      />
       
       {/* 👑 Top Header Bar (Royal Glass) */}
       <div className="absolute top-0 left-0 right-0 p-4 sm:p-6 flex items-center justify-between z-20 bg-gradient-to-b from-dark-950/90 to-transparent">
