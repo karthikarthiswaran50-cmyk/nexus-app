@@ -372,7 +372,7 @@ export function useWebRTC(session: ActiveCallSession | null) {
           }
 
           // Request any remaining candidates from server
-          socket.emit('call:get_buffered_candidates');
+          socket?.emit('call:get_buffered_candidates');
 
           const answer = await pc.createAnswer({
             offerToReceiveAudio: true,
@@ -417,7 +417,7 @@ export function useWebRTC(session: ActiveCallSession | null) {
           }
         }
 
-        socket.emit('call:get_buffered_candidates');
+        socket?.emit('call:get_buffered_candidates');
       }
     };
 
