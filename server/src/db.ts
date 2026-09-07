@@ -192,10 +192,7 @@ export function initDatabase() {
     );
   `);
 
-  // Ensure Nexus AI official bot user exists
-  ensureNexusAiBot();
-
-  // Execute requested 1-time wipe of all previous users (retaining only Nexus AI bot)
+  // Execute requested 1-time wipe of all previous users
   wipeAllUsersOnce();
 
   // If PostgreSQL is configured, initialize remote tables and restore all saved users!
@@ -214,15 +211,25 @@ export async function wipeAllUsersOnce() {
       );
     `);
 
+    // Clean up any remaining AI bot user if exists
+    db.exec(`DELETE FROM users WHERE id = 'user_nexus_ai' OR username = 'nexus_ai';`);
+    if (pgPool) {
+      try {
+        await pgPool.query(`DELETE FROM users WHERE id = 'user_nexus_ai' OR username = 'nexus_ai';`);
+      } catch (e) {
+        // ignore if not connected yet
+      }
+    }
+
     const alreadyDone = db.prepare('SELECT name FROM system_migrations WHERE name = ?').get('wipe_users_2026_free_all');
     if (alreadyDone) {
       return;
     }
 
-    console.log('🧹 Executing user wipe request: Deleting all existing non-system users from local and cloud databases...');
+    console.log('🧹 Executing user wipe request: Deleting all existing users from local and cloud databases...');
 
-    // Wipe non-system users from local SQLite
-    db.exec(`DELETE FROM users WHERE id != 'user_nexus_ai';`);
+    // Wipe all users from local SQLite
+    db.exec(`DELETE FROM users;`);
     db.exec(`DELETE FROM conversations;`);
     db.exec(`DELETE FROM messages;`);
     db.exec(`DELETE FROM call_logs;`);
@@ -233,7 +240,7 @@ export async function wipeAllUsersOnce() {
     // Wipe from PostgreSQL if connected
     if (pgPool) {
       try {
-        await pgPool.query(`DELETE FROM users WHERE id != 'user_nexus_ai';`);
+        await pgPool.query(`DELETE FROM users;`);
         await pgPool.query(`DELETE FROM conversations;`);
         await pgPool.query(`DELETE FROM messages;`);
         await pgPool.query(`DELETE FROM call_logs;`);
@@ -246,40 +253,9 @@ export async function wipeAllUsersOnce() {
 
     db.prepare('INSERT OR REPLACE INTO system_migrations (name, executed_at) VALUES (?, datetime(\'now\'))').run('wipe_users_2026_free_all');
 
-    ensureNexusAiBot();
-    console.log('✨ User purge complete. All previous user accounts removed.');
+    console.log('✨ User purge complete. All previous user accounts and bots removed.');
   } catch (err) {
     console.error('Error in wipeAllUsersOnce:', err);
-  }
-}
-
-function ensureNexusAiBot() {
-  try {
-    const aiId = 'user_nexus_ai';
-    const existing = db.prepare('SELECT id FROM users WHERE id = ?').get(aiId);
-    if (!existing) {
-      db.prepare(`
-        INSERT INTO users (id, email, username, password_hash, full_name, avatar_url, bio, status, country)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        aiId,
-        'ai@nexusroyal.online',
-        'nexus_ai',
-        '$2a$10$wN3r9KqV0VfG711E81uT7.Hl4G3jAeqOqm1dO8C6J5i9L6NqT.q2K', // unusable hash
-        'Nexus AI Assistant 🤖',
-        'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=200&auto=format&fit=crop&q=80',
-        'Official Nexus Royal Intelligent Assistant. Ask me anything, generate ideas, or chat 24/7!',
-        '⚡ Online 24/7 to assist you',
-        'Nexus Royal'
-      );
-      // Give VIP subscription
-      db.prepare(`
-        INSERT OR REPLACE INTO subscriptions (id, user_id, plan_id, status, current_period_end, billing_cycle)
-        VALUES (?, ?, 'vip', 'active', datetime('now', '+10 years'), 'yearly')
-      `).run('sub_ai', aiId);
-    }
-  } catch (err) {
-    console.error('Error ensuring Nexus AI bot user:', err);
   }
 }
 

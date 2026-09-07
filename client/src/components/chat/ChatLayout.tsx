@@ -12,7 +12,6 @@ import {
   Plus,
   Video,
   Phone,
-  Sparkles,
   Users,
   Compass,
   Crown,
@@ -148,32 +147,11 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
               <div className="flex flex-col gap-2 pt-1">
                 <button
                   type="button"
-                  onClick={() => {
-                    setSelectedUser({
-                      id: 'user_nexus_ai',
-                      email: 'ai@nexusroyal.online',
-                      username: 'nexus_ai',
-                      full_name: 'Nexus AI Assistant 🤖',
-                      avatar_url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=200&auto=format&fit=crop&q=80',
-                      bio: 'Official Nexus Royal Intelligent Assistant. Ask me anything 24/7!',
-                      status: '⚡ Online 24/7 to assist you',
-                      country: 'Nexus Royal',
-                      created_at: new Date().toISOString(),
-                      updated_at: new Date().toISOString(),
-                      plan_id: 'vip',
-                    });
-                  }}
+                  onClick={onNavigateToDirectory}
                   className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 text-dark-950 text-xs font-black shadow-lg shadow-gold-500/25 hover:scale-105 transition-all flex items-center justify-center gap-2"
                 >
-                  <Sparkles className="w-3.5 h-3.5 fill-dark-950" />
-                  <span>Chat with Nexus AI</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={onNavigateToDirectory}
-                  className="px-4 py-2 rounded-xl bg-dark-800 hover:bg-dark-750 text-dark-300 hover:text-white border border-dark-700 text-xs font-semibold transition-all"
-                >
-                  Browse Royal Members
+                  <Users className="w-3.5 h-3.5 text-dark-950" />
+                  <span>Browse Royal Members</span>
                 </button>
               </div>
             </div>

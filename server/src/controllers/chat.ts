@@ -48,33 +48,6 @@ export async function getConversations(req: AuthenticatedRequest, res: Response)
       };
     });
 
-    // Automatically include Nexus AI Assistant in conversations for quick access
-    const hasAiConv = conversations.some(c => c.other_user?.id === 'user_nexus_ai');
-    if (!hasAiConv) {
-      const aiUser = getUserWithPlan('user_nexus_ai');
-      if (aiUser) {
-        conversations.unshift({
-          id: `conv_ai_${userId}`,
-          user1_id: userId,
-          user2_id: 'user_nexus_ai',
-          last_message_at: new Date().toISOString(),
-          created_at: new Date().toISOString(),
-          other_user: aiUser,
-          last_message: {
-            id: 'msg_welcome_ai',
-            conversation_id: `conv_ai_${userId}`,
-            sender_id: 'user_nexus_ai',
-            receiver_id: userId,
-            content: 'Hello! I am your 24/7 Nexus AI Assistant. Tap here to chat with me anytime! ✨',
-            type: 'text',
-            is_read: true,
-            created_at: new Date().toISOString(),
-          },
-          unread_count: 0,
-        });
-      }
-    }
-
     res.json({ conversations });
   } catch (error) {
     console.error('getConversations error:', error);
