@@ -13,7 +13,6 @@ import {
   Check,
   CheckCheck,
   Info,
-  Sparkles,
   X,
   Mic,
   Trash2,
@@ -60,7 +59,6 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [showEmojis, setShowEmojis] = useState(false);
-  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
   // Quoted Reply state
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
@@ -372,10 +370,6 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
   };
 
   const handleStartCall = (callType: CallType) => {
-    if (callType === 'video' && user?.plan_id === 'free') {
-      setShowUpgradeModal(true);
-      return;
-    }
     startCall(otherUser, callType);
   };
 
@@ -967,62 +961,6 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
           senderName={viewingMediaSender}
           onClose={() => setViewingMediaUrl(null)}
         />
-      )}
-
-      {showUpgradeModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-dark-950/85 backdrop-blur-md animate-in fade-in">
-          <div className="relative w-full max-w-sm bg-dark-900 border border-dark-700 rounded-3xl p-6 shadow-2xl text-center space-y-4">
-            <button
-              type="button"
-              onClick={() => setShowUpgradeModal(false)}
-              className="absolute top-4 right-4 p-1.5 rounded-lg text-dark-400 hover:text-white"
-            >
-              <X className="w-5 h-5" />
-            </button>
-
-            <div className="w-14 h-14 mx-auto rounded-2xl bg-gradient-to-tr from-amber-500 to-brand-500 flex items-center justify-center text-white shadow-xl shadow-amber-500/20">
-              <Sparkles className="w-7 h-7" />
-            </div>
-
-            <div>
-              <h3 className="text-lg font-bold text-white mb-1">Unlock HD Video Calling</h3>
-              <p className="text-xs text-dark-300 leading-relaxed">
-                Video calling and screen sharing are locked on the Free tier. Upgrade to <span className="text-emerald-400 font-bold">Nexus Pro for just ₹99/month</span> to start unlimited HD calls.
-              </p>
-            </div>
-
-            <div className="p-3.5 rounded-2xl bg-dark-800/80 border border-dark-700/80 text-left space-y-2 text-xs">
-              <div className="flex items-center gap-2 text-emerald-400 font-medium">
-                <Sparkles className="w-3.5 h-3.5 shrink-0" />
-                <span>Unlimited 1-on-1 HD Video & Audio Calls</span>
-              </div>
-              <div className="flex items-center gap-2 text-dark-300">
-                <Sparkles className="w-3.5 h-3.5 shrink-0 text-brand-400" />
-                <span>Crystal-Clear Screen Sharing & Pro Badge</span>
-              </div>
-            </div>
-
-            <div className="pt-2 space-y-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowUpgradeModal(false);
-                  if (onNavigateToSubscription) onNavigateToSubscription();
-                }}
-                className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-bold text-xs shadow-lg shadow-emerald-500/25 transition-all"
-              >
-                Upgrade to Pro (₹99/Month)
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowUpgradeModal(false)}
-                className="w-full py-2 text-xs text-dark-400 hover:text-white transition-colors"
-              >
-                Maybe Later
-              </button>
-            </div>
-          </div>
-        </div>
       )}
     </div>
   );
