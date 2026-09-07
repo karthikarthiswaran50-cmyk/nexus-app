@@ -1,5 +1,5 @@
-// Nexus Royal PWA & Notification Service Worker v5
-const CACHE_NAME = 'nexus-cache-v5';
+// Nexus Royal PWA & Notification Service Worker v6
+const CACHE_NAME = 'nexus-cache-v6';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
@@ -67,6 +67,7 @@ self.addEventListener('push', (event) => {
       callType: data.callType,
       conversationId: data.conversationId,
       callerId: data.callerId,
+      callerName: data.callerName,
       timestamp: Date.now(),
     },
   };
@@ -88,8 +89,23 @@ self.addEventListener('push', (event) => {
 // 👆 NOTIFICATION CLICK / TAP HANDLER
 // ============================================================
 self.addEventListener('notificationclick', (event) => {
-  event.notification.close();
   const notifData = event.notification.data || {};
+  const action = event.action; // 'answer' | 'decline' | '' (body click)
+
+  event.notification.close();
+
+  if (action === 'decline') {
+    // Close notification and notify open clients to decline
+    event.waitUntil(
+      clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+        windowClients.forEach((client) => {
+          client.postMessage({ type: 'CALL_ACTION', action: 'decline', data: notifData });
+        });
+      })
+    );
+    return;
+  }
+
   const targetUrl = notifData.url || '/';
 
   event.waitUntil(
@@ -98,7 +114,7 @@ self.addEventListener('notificationclick', (event) => {
       for (const client of windowClients) {
         if (client.url.includes(self.location.origin) && 'focus' in client) {
           client.focus();
-          client.postMessage({ type: 'NOTIFICATION_CLICKED', data: notifData });
+          client.postMessage({ type: 'NOTIFICATION_CLICKED', data: notifData, action });
           return;
         }
       }

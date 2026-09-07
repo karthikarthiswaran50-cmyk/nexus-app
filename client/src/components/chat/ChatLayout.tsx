@@ -66,9 +66,9 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
     }
   }, [initialSelectedUser]);
 
-  // Update conversations on new incoming message
+  // Update conversations on new incoming message (only from others — own messages already update via message_sent)
   useEffect(() => {
-    if (latestMessage) {
+    if (latestMessage && latestMessage.sender_id !== user?.id) {
       fetchConversations();
     }
   }, [latestMessage]);

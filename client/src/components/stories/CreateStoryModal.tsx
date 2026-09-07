@@ -20,14 +20,14 @@ const BG_GRADIENTS = [
 ];
 
 export const CreateStoryModal: React.FC<CreateStoryModalProps> = ({ isOpen, onClose, onStoryCreated }) => {
-  if (!isOpen) return null;
-
   const [content, setContent] = useState('');
   const [selectedBg, setSelectedBg] = useState(BG_GRADIENTS[0]);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  if (!isOpen) return null;
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

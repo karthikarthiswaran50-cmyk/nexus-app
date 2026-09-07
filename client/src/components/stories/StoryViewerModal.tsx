@@ -20,13 +20,21 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
   currentUserId,
   onStoryDeleted,
 }) => {
-  if (!isOpen || storyGroups.length === 0) return null;
-
   const [userIndex, setUserIndex] = useState(initialUserIndex);
   const [storyIndex, setStoryIndex] = useState(0);
   const [progress, setProgress] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const timerRef = useRef<any>(null);
+
+  // Sync userIndex when viewer opens with a different user
+  useEffect(() => {
+    if (isOpen) {
+      setUserIndex(initialUserIndex);
+      setStoryIndex(0);
+    }
+  }, [isOpen, initialUserIndex]);
+
+  if (!isOpen || storyGroups.length === 0) return null;
 
   const currentGroup = storyGroups[userIndex] || storyGroups[0];
   const currentStory = currentGroup?.stories?.[storyIndex];

@@ -92,6 +92,22 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
   const typingTimeoutRef = useRef<any>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
+  // Cleanup on unmount: stop any active recording, release mic, clear typing timeout
+  useEffect(() => {
+    return () => {
+      if (recordingIntervalRef.current) clearInterval(recordingIntervalRef.current);
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        mediaRecorderRef.current.onstop = null;
+        mediaRecorderRef.current.stop();
+      }
+      if (audioStreamRef.current) {
+        audioStreamRef.current.getTracks().forEach((t) => t.stop());
+        audioStreamRef.current = null;
+      }
+    };
+  }, []);
+
   const isOnline = onlineUserIds.has(otherUser.id);
   const isReachable = reachableUserIds.has(otherUser.id);
   const isPeerTyping = !!typingMap[otherUser.id];

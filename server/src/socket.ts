@@ -274,6 +274,12 @@ export function setupSocket(io: Server) {
 
     socket.on('chat:read', (data: { senderId: string }) => {
       try {
+        // Find conversation between these two users
+        const conv = db.prepare(`
+          SELECT id FROM conversations
+          WHERE (user1_id = ? AND user2_id = ?) OR (user1_id = ? AND user2_id = ?)
+        `).get(userId, data.senderId, data.senderId, userId) as any;
+
         db.prepare(`
           UPDATE messages
           SET is_read = 1
@@ -282,7 +288,7 @@ export function setupSocket(io: Server) {
 
         const senderSocketIds = getSocketsForUser(data.senderId);
         senderSocketIds.forEach((sId) => {
-          io.to(sId).emit('chat:messages_read', { readBy: userId });
+          io.to(sId).emit('chat:messages_read', { readBy: userId, conversationId: conv?.id });
         });
       } catch (err) {
         console.error('Socket chat:read error:', err);
@@ -447,6 +453,11 @@ export function setupSocket(io: Server) {
       reason?: string;
     }) => {
       const { callerId, reason = 'declined' } = data;
+      
+      // Get the actual call type from the active calls map
+      const activeCallEntry = activeCalls.get(`${callerId}-${userId}`);
+      const actualCallType: CallType = activeCallEntry?.callType || 'audio';
+      
       activeCalls.delete(`${callerId}-${userId}`);
 
       if (pendingCalls.has(userId)) {
@@ -457,7 +468,7 @@ export function setupSocket(io: Server) {
       recordCallLog({
         callerId,
         receiverId: userId,
-        callType: 'video',
+        callType: actualCallType,
         status: 'rejected',
         duration: 0,
       });

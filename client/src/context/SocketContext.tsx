@@ -102,6 +102,23 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         }
         newSocket.emit('call:check_pending');
       }
+
+      // Handle call action buttons (Answer / Decline) from lockscreen notification
+      if (event.data?.type === 'CALL_ACTION') {
+        if (event.data.action === 'decline') {
+          const callerId = event.data.data?.callerId;
+          if (callerId && newSocket.connected) {
+            newSocket.emit('call:reject', { callerId, reason: 'Call declined from notification' });
+          } else if (!newSocket.connected) {
+            newSocket.connect();
+            newSocket.once('connect', () => {
+              if (callerId) {
+                newSocket.emit('call:reject', { callerId, reason: 'Call declined from notification' });
+              }
+            });
+          }
+        }
+      }
     };
     navigator.serviceWorker?.addEventListener('message', swMessageHandler);
 

@@ -60,7 +60,7 @@ export const StoriesBar: React.FC = () => {
             </div>
             <button
               type="button"
-              className="absolute -bottom-1 -right-1 w-4.5 h-4.5 rounded-full bg-gradient-to-r from-amber-500 to-yellow-400 text-dark-950 flex items-center justify-center shadow-lg border-2 border-dark-900 group-hover:scale-110 transition-transform"
+              className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-gradient-to-r from-amber-500 to-yellow-400 text-dark-950 flex items-center justify-center shadow-lg border-2 border-dark-900 group-hover:scale-110 transition-transform"
             >
               <Plus className="w-3 h-3 stroke-[3]" />
             </button>

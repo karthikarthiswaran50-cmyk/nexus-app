@@ -252,6 +252,7 @@ async function initPostgresAndRestore() {
         bio TEXT DEFAULT '',
         status VARCHAR(255) DEFAULT 'Hey there! I am using Nexus.',
         country VARCHAR(100) DEFAULT 'Global',
+        last_seen TIMESTAMPTZ DEFAULT NOW(),
         created_at TIMESTAMPTZ DEFAULT NOW(),
         updated_at TIMESTAMPTZ DEFAULT NOW()
       );
@@ -273,7 +274,8 @@ async function initPostgresAndRestore() {
         allow_calls_from VARCHAR(50) DEFAULT 'everyone',
         notification_sound INT DEFAULT 1,
         read_receipts INT DEFAULT 1,
-        auto_accept_calls INT DEFAULT 0
+        auto_accept_calls INT DEFAULT 0,
+        fcm_token TEXT
       );
 
       CREATE TABLE IF NOT EXISTS conversations (
@@ -356,11 +358,11 @@ async function initPostgresAndRestore() {
       // Restore settings
       const setRes = await pgPool.query('SELECT * FROM user_settings');
       const insertSet = db.prepare(`
-        INSERT OR REPLACE INTO user_settings (id, user_id, theme, allow_calls_from, notification_sound, read_receipts, auto_accept_calls)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT OR REPLACE INTO user_settings (id, user_id, theme, allow_calls_from, notification_sound, read_receipts, auto_accept_calls, fcm_token)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `);
       for (const st of setRes.rows) {
-        insertSet.run(st.id, st.user_id, st.theme, st.allow_calls_from, st.notification_sound, st.read_receipts, st.auto_accept_calls);
+        insertSet.run(st.id, st.user_id, st.theme, st.allow_calls_from, st.notification_sound, st.read_receipts, st.auto_accept_calls, st.fcm_token || null);
       }
 
       // Restore push_subscriptions
@@ -455,18 +457,20 @@ export function persistSettingsToPg(st: {
   notification_sound: number;
   read_receipts: number;
   auto_accept_calls: number;
+  fcm_token?: string | null;
 }) {
   if (!pgPool) return;
   pgPool.query(
-    `INSERT INTO user_settings (id, user_id, theme, allow_calls_from, notification_sound, read_receipts, auto_accept_calls)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `INSERT INTO user_settings (id, user_id, theme, allow_calls_from, notification_sound, read_receipts, auto_accept_calls, fcm_token)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      ON CONFLICT (user_id) DO UPDATE SET
        theme = EXCLUDED.theme,
        allow_calls_from = EXCLUDED.allow_calls_from,
        notification_sound = EXCLUDED.notification_sound,
        read_receipts = EXCLUDED.read_receipts,
-       auto_accept_calls = EXCLUDED.auto_accept_calls`,
-    [st.id, st.user_id, st.theme, st.allow_calls_from, st.notification_sound, st.read_receipts, st.auto_accept_calls]
+       auto_accept_calls = EXCLUDED.auto_accept_calls,
+       fcm_token = COALESCE(EXCLUDED.fcm_token, user_settings.fcm_token)`,
+    [st.id, st.user_id, st.theme, st.allow_calls_from, st.notification_sound, st.read_receipts, st.auto_accept_calls, st.fcm_token || null]
   ).catch(err => console.error('Error persisting settings to PostgreSQL:', err.message));
 }
 

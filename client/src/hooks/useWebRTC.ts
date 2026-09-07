@@ -104,7 +104,7 @@ export function useWebRTC(session: ActiveCallSession | null) {
       remoteVideoRef.current.srcObject = remoteStream;
       remoteVideoRef.current.play().catch(err => console.warn('Remote video play error:', err));
     }
-  }, [remoteStream, remoteVideoRef.current, peerCameraOff]);
+  }, [remoteStream, peerCameraOff]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 4. Initialize WebRTC connection
   useEffect(() => {

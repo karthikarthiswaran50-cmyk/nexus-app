@@ -100,6 +100,8 @@ const ALLOWED_MIME_TYPES = new Set([
   'audio/mp3',
   'audio/mpeg',
   'audio/wav',
+  'audio/mp4',   // iOS Safari
+  'audio/aac',   // iOS Safari alternative
   'video/webm',
   'video/mp4',
 ]);
@@ -115,6 +117,7 @@ const ALLOWED_EXTENSIONS = new Set([
   '.mp3',
   '.wav',
   '.mp4',
+  '.aac',
 ]);
 
 // Multer storage
