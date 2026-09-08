@@ -3,6 +3,7 @@ import { useAuth } from '../../context/AuthContext';
 import {
   Settings as SettingsIcon,
   Shield,
+  ShieldCheck,
   Bell,
   Lock,
   Moon,
@@ -130,6 +131,38 @@ export const SettingsView: React.FC = () => {
   const [savingSettings, setSavingSettings] = useState(false);
   const [settingsSuccess, setSettingsSuccess] = useState(false);
   const [settingsError, setSettingsError] = useState<string | null>(null);
+
+  // Royal Vault PIN Lock state
+  const [pinEnabled, setPinEnabled] = useState(() => !!localStorage.getItem('nexus_app_pin'));
+  const [pinInput, setPinInput] = useState('');
+  const [pinMessage, setPinMessage] = useState<{ text: string; isError?: boolean } | null>(null);
+
+  const handleSavePin = () => {
+    if (!pinEnabled) {
+      localStorage.removeItem('nexus_app_pin');
+      sessionStorage.removeItem('nexus_app_unlocked');
+      setPinMessage({ text: 'PIN lock has been disabled' });
+      setTimeout(() => setPinMessage(null), 3500);
+      return;
+    }
+
+    if (pinInput.length !== 4 || !/^\d{4}$/.test(pinInput)) {
+      setPinMessage({ text: 'PIN must be exactly 4 numbers (e.g. 1234)', isError: true });
+      setTimeout(() => setPinMessage(null), 3500);
+      return;
+    }
+
+    localStorage.setItem('nexus_app_pin', pinInput);
+    sessionStorage.setItem('nexus_app_unlocked', 'true');
+    setPinInput('');
+    setPinMessage({ text: 'Royal 4-Digit PIN saved and active!' });
+    setTimeout(() => setPinMessage(null), 3500);
+  };
+
+  const handleLockNow = () => {
+    sessionStorage.removeItem('nexus_app_unlocked');
+    window.dispatchEvent(new Event('nexus_lock_app'));
+  };
 
   const handleSavePreferences = async () => {
     setSavingSettings(true);
@@ -270,6 +303,79 @@ export const SettingsView: React.FC = () => {
             </button>
             {settingsError && (
               <p className="text-xs text-rose-400 text-center font-semibold animate-in fade-in duration-200">{settingsError}</p>
+            )}
+          </div>
+        </div>
+
+        {/* 🔐 Royal Vault PIN Lock Card */}
+        <div className="bg-dark-900 border border-gold-500/15 rounded-3xl p-6 space-y-5 shadow-xl royal-card">
+          <h3 className="text-sm font-black text-white flex items-center justify-between border-b border-gold-500/15 pb-3">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-gold-400" />
+              <span>Royal Vault App Lock (PIN)</span>
+            </div>
+            {localStorage.getItem('nexus_app_pin') && (
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-extrabold border border-emerald-500/30">
+                ACTIVE
+              </span>
+            )}
+          </h3>
+
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-bold text-white">Enable 4-Digit Security PIN</p>
+                <p className="text-[11px] text-dark-400">Lock app with PIN whenever opened</p>
+              </div>
+              <input
+                type="checkbox"
+                checked={pinEnabled}
+                onChange={(e) => setPinEnabled(e.target.checked)}
+                className="w-4 h-4 accent-gold-500 rounded cursor-pointer"
+              />
+            </div>
+
+            {pinEnabled && (
+              <div className="space-y-3 pt-1">
+                <div>
+                  <label className="block text-xs font-bold text-dark-300 mb-1.5">
+                    {localStorage.getItem('nexus_app_pin') ? 'Update 4-Digit PIN' : 'Set New 4-Digit PIN'}
+                  </label>
+                  <input
+                    type="password"
+                    maxLength={4}
+                    value={pinInput}
+                    onChange={(e) => setPinInput(e.target.value.replace(/\D/g, ''))}
+                    placeholder="e.g. 1234"
+                    className="w-full px-4 py-2.5 bg-dark-850 border border-gold-500/20 rounded-xl text-xs text-white placeholder:text-dark-500 focus:outline-none focus:border-gold-400 font-mono tracking-widest text-center text-sm"
+                  />
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleSavePin}
+                    className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 text-dark-950 font-black text-xs shadow-md shadow-gold-500/20 transition-all active:scale-95"
+                  >
+                    Save PIN
+                  </button>
+                  {localStorage.getItem('nexus_app_pin') && (
+                    <button
+                      type="button"
+                      onClick={handleLockNow}
+                      className="px-3 py-2.5 rounded-xl bg-dark-800 hover:bg-dark-750 text-amber-300 border border-gold-500/30 text-xs font-bold transition-all"
+                    >
+                      Lock Now
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {pinMessage && (
+              <p className={`text-xs text-center font-semibold animate-in fade-in duration-200 ${pinMessage.isError ? 'text-rose-400' : 'text-emerald-400'}`}>
+                {pinMessage.text}
+              </p>
             )}
           </div>
         </div>

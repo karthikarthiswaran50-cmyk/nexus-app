@@ -22,11 +22,18 @@ import {
   CornerDownRight,
   Copy,
   Palette,
+  Search,
+  Pin,
+  PinOff,
+  ChevronUp,
+  ChevronDown,
+  Image as ImageIcon,
 } from 'lucide-react';
 import axios from 'axios';
 import { trackUserActivity } from '../../config/firebase';
 import { VoicePlayer } from './VoicePlayer';
 import { MediaViewerModal } from './MediaViewerModal';
+import { ChatMediaGalleryModal } from './ChatMediaGalleryModal';
 
 interface ChatRoomProps {
   otherUser: User;
@@ -80,6 +87,69 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
   // Toast notification state
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const showToast = (msg: string) => { setToastMessage(msg); setTimeout(() => setToastMessage(null), 3500); };
+
+  // In-Chat Search state
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeMatchIndex, setActiveMatchIndex] = useState(0);
+
+  // Shared Media Gallery state
+  const [showMediaGallery, setShowMediaGallery] = useState(false);
+
+  // Pinned Message state
+  const [pinnedMessage, setPinnedMessage] = useState<Message | null>(() => {
+    try {
+      const saved = localStorage.getItem(`nexus_pinned_${otherUser.id}`);
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const handleTogglePin = (msg: Message) => {
+    if (pinnedMessage?.id === msg.id) {
+      setPinnedMessage(null);
+      localStorage.removeItem(`nexus_pinned_${otherUser.id}`);
+      showToast('Message unpinned');
+    } else {
+      setPinnedMessage(msg);
+      localStorage.setItem(`nexus_pinned_${otherUser.id}`, JSON.stringify(msg));
+      showToast('Message pinned to chat top');
+    }
+    setActiveMenuMessageId(null);
+  };
+
+  // Search matching logic
+  const matchingMessageIds = React.useMemo(() => {
+    if (!searchQuery.trim()) return [];
+    const q = searchQuery.toLowerCase();
+    return messages
+      .filter((m) => !m.is_deleted_for_all && m.content && m.content.toLowerCase().includes(q))
+      .map((m) => m.id);
+  }, [messages, searchQuery]);
+
+  const scrollToMessage = (msgId: string) => {
+    const el = document.getElementById(`msg-${msgId}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.classList.add('ring-2', 'ring-amber-400');
+      setTimeout(() => el.classList.remove('ring-2', 'ring-amber-400'), 2500);
+    }
+  };
+
+  const handleNextMatch = () => {
+    if (matchingMessageIds.length === 0) return;
+    const nextIdx = (activeMatchIndex + 1) % matchingMessageIds.length;
+    setActiveMatchIndex(nextIdx);
+    scrollToMessage(matchingMessageIds[nextIdx]);
+  };
+
+  const handlePrevMatch = () => {
+    if (matchingMessageIds.length === 0) return;
+    const prevIdx = (activeMatchIndex - 1 + matchingMessageIds.length) % matchingMessageIds.length;
+    setActiveMatchIndex(prevIdx);
+    scrollToMessage(matchingMessageIds[prevIdx]);
+  };
 
   // Voice Note Recording State
   const [isRecording, setIsRecording] = useState(false);
@@ -458,8 +528,35 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
           </div>
         </div>
 
-        {/* Action Buttons: Audio Call, Video Call, Wallpaper, Profile info */}
+        {/* Action Buttons: Search, Gallery, Audio Call, Video Call, Wallpaper, Profile info */}
         <div className="flex items-center gap-2 relative">
+          {/* In-Chat Search Button */}
+          <button
+            type="button"
+            onClick={() => {
+              setIsSearchOpen(!isSearchOpen);
+              if (isSearchOpen) setSearchQuery('');
+            }}
+            className={`p-2.5 rounded-xl border transition-all shadow-sm ${
+              isSearchOpen
+                ? 'bg-amber-500/20 text-amber-300 border-gold-500/40'
+                : 'bg-dark-800 hover:bg-gold-500/20 text-dark-300 hover:text-amber-300 border-dark-700 hover:border-gold-500/40'
+            }`}
+            title="Search Messages"
+          >
+            <Search className="w-4 h-4" />
+          </button>
+
+          {/* Shared Media Gallery Button */}
+          <button
+            type="button"
+            onClick={() => setShowMediaGallery(true)}
+            className="p-2.5 rounded-xl bg-dark-800 hover:bg-gold-500/20 text-dark-300 hover:text-amber-300 border border-dark-700 hover:border-gold-500/40 transition-all shadow-sm"
+            title="Shared Media & Files"
+          >
+            <ImageIcon className="w-4 h-4" />
+          </button>
+
           <button
             type="button"
             onClick={() => setShowWallpaperMenu(!showWallpaperMenu)}
@@ -530,6 +627,105 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
           )}
         </div>
       </div>
+
+      {/* 🔍 In-Chat Search Toolbar */}
+      {isSearchOpen && (
+        <div className="p-2.5 px-4 bg-dark-900 border-b border-gold-500/20 flex items-center justify-between gap-3 animate-in slide-in-from-top duration-200 z-10">
+          <div className="flex items-center gap-2 flex-1 max-w-md">
+            <Search className="w-4 h-4 text-gold-400 shrink-0" />
+            <input
+              type="text"
+              autoFocus
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setActiveMatchIndex(0);
+              }}
+              placeholder="Search in conversation..."
+              className="w-full bg-dark-850 border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white placeholder:text-dark-500 focus:outline-none focus:border-gold-400"
+            />
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-mono text-dark-400">
+              {searchQuery.trim() ? (
+                matchingMessageIds.length > 0 ? (
+                  <span className="text-amber-300 font-bold">
+                    {activeMatchIndex + 1} of {matchingMessageIds.length}
+                  </span>
+                ) : (
+                  <span className="text-dark-500">No matches</span>
+                )
+              ) : null}
+            </span>
+
+            {matchingMessageIds.length > 0 && (
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={handlePrevMatch}
+                  className="p-1 rounded-lg bg-dark-800 hover:bg-dark-700 text-dark-300 hover:text-white"
+                  title="Previous match"
+                >
+                  <ChevronUp className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={handleNextMatch}
+                  className="p-1 rounded-lg bg-dark-800 hover:bg-dark-700 text-dark-300 hover:text-white"
+                  title="Next match"
+                >
+                  <ChevronDown className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={() => {
+                setIsSearchOpen(false);
+                setSearchQuery('');
+              }}
+              className="p-1.5 rounded-lg text-dark-400 hover:text-white hover:bg-dark-800"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 📌 Pinned Message Bar */}
+      {pinnedMessage && (
+        <div
+          onClick={() => scrollToMessage(pinnedMessage.id)}
+          className="p-2.5 px-4 bg-dark-900/95 border-b border-gold-500/25 flex items-center justify-between gap-3 cursor-pointer hover:bg-dark-850 transition-colors backdrop-blur-md z-10"
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <Pin className="w-3.5 h-3.5 text-amber-400 shrink-0 fill-amber-400/20" />
+            <div className="min-w-0">
+              <span className="text-[10px] uppercase font-bold text-amber-300 tracking-wider">Pinned Message</span>
+              <p className="text-xs text-dark-200 truncate">
+                {pinnedMessage.type === 'audio'
+                  ? '🎤 Voice Message'
+                  : pinnedMessage.type === 'image'
+                  ? '📷 Photo'
+                  : pinnedMessage.content}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleTogglePin(pinnedMessage);
+            }}
+            className="p-1 rounded-lg text-dark-400 hover:text-rose-400 hover:bg-dark-800 transition-colors"
+            title="Unpin message"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* 👑 Messages Thread Container with Custom Wallpaper */}
       <div 
@@ -667,6 +863,24 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
                         </button>
                       )}
 
+                      {/* Pin / Unpin Message */}
+                      <button
+                        onClick={() => handleTogglePin(msg)}
+                        className="w-full px-2.5 py-2 rounded-xl text-left text-xs text-dark-200 hover:text-white hover:bg-dark-800 flex items-center gap-2 transition-all"
+                      >
+                        {pinnedMessage?.id === msg.id ? (
+                          <>
+                            <PinOff className="w-3.5 h-3.5 text-amber-400" />
+                            <span>Unpin Message</span>
+                          </>
+                        ) : (
+                          <>
+                            <Pin className="w-3.5 h-3.5 text-amber-400" />
+                            <span>Pin Message</span>
+                          </>
+                        )}
+                      </button>
+
                       <button
                         onClick={() => handleDelete(msg.id, 'for_me')}
                         className="w-full px-2.5 py-2 rounded-xl text-left text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 flex items-center gap-2 transition-all"
@@ -689,7 +903,12 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
 
                   {/* Message Bubble */}
                   <div
+                    id={`msg-${msg.id}`}
                     className={`relative flex-1 rounded-2xl p-3.5 text-sm shadow-xl transition-all ${
+                      matchingMessageIds.includes(msg.id)
+                        ? 'ring-2 ring-amber-400 shadow-amber-500/30'
+                        : ''
+                    } ${
                       isDeleted
                         ? 'bg-dark-900/60 text-dark-500 italic border border-white/5 rounded-2xl'
                         : isMe
@@ -962,6 +1181,19 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
           onClose={() => setViewingMediaUrl(null)}
         />
       )}
+
+      {/* Shared Media & Files Gallery Modal */}
+      <ChatMediaGalleryModal
+        isOpen={showMediaGallery}
+        onClose={() => setShowMediaGallery(false)}
+        messages={messages}
+        otherUser={otherUser}
+        onSelectMedia={(url, senderName) => {
+          setShowMediaGallery(false);
+          setViewingMediaUrl(url);
+          setViewingMediaSender(senderName);
+        }}
+      />
     </div>
   );
 };

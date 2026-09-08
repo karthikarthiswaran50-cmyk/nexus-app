@@ -356,6 +356,13 @@ app.get('/api/notifications/subscriptions', requireAuth, (req: any, res) => {
   }
 });
 
+// 2.5 Stories Routes
+app.get('/api/stories', requireAuth, storiesCtrl.getActiveStories);
+app.post('/api/stories', requireAuth, uploadLimiter, upload.single('media'), storiesCtrl.createStory);
+app.post('/api/stories/:id/view', requireAuth, storiesCtrl.viewStory);
+app.get('/api/stories/:id/viewers', requireAuth, storiesCtrl.getStoryViewers);
+app.delete('/api/stories/:id', requireAuth, storiesCtrl.deleteStory);
+
 // 3. Chat Routes
 app.get('/api/chat/conversations', requireAuth, chatCtrl.getConversations);
 app.get('/api/chat/messages/:otherUserId', requireAuth, chatCtrl.getMessages);

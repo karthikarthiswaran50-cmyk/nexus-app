@@ -150,3 +150,29 @@ export async function deleteStory(req: AuthenticatedRequest, res: Response) {
     res.status(500).json({ error: 'Failed to delete story' });
   }
 }
+
+export async function getStoryViewers(req: AuthenticatedRequest, res: Response) {
+  try {
+    const userId = req.user?.userId;
+    const storyId = req.params.id;
+    if (!userId || !storyId) return res.status(400).json({ error: 'Missing parameters' });
+
+    const viewers = db.prepare(`
+      SELECT 
+        u.id,
+        u.username,
+        u.full_name,
+        u.avatar_url,
+        sv.viewed_at
+      FROM story_views sv
+      JOIN users u ON sv.viewer_id = u.id
+      WHERE sv.story_id = ?
+      ORDER BY sv.viewed_at DESC
+    `).all(storyId) as any[];
+
+    res.json({ success: true, viewers });
+  } catch (err: any) {
+    console.error('Failed to get story viewers:', err);
+    res.status(500).json({ error: 'Failed to get story viewers' });
+  }
+}

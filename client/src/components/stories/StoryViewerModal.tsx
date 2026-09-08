@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, ChevronLeft, ChevronRight, Eye, Trash2, ShieldCheck } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, Eye, Trash2, ShieldCheck, Send } from 'lucide-react';
 import { UserStoryGroup } from '../../types';
 import axios from 'axios';
 
@@ -26,13 +26,71 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
   const [isPaused, setIsPaused] = useState(false);
   const timerRef = useRef<any>(null);
 
+  // Story Viewers Drawer state
+  const [showViewers, setShowViewers] = useState(false);
+  const [viewersList, setViewersList] = useState<any[]>([]);
+  const [loadingViewers, setLoadingViewers] = useState(false);
+
+  // Quick reaction and reply state
+  const [flyingEmoji, setFlyingEmoji] = useState<string | null>(null);
+  const [replyText, setReplyText] = useState('');
+  const [replySent, setReplySent] = useState(false);
+
   // Sync userIndex when viewer opens with a different user
   useEffect(() => {
     if (isOpen) {
       setUserIndex(initialUserIndex);
       setStoryIndex(0);
+      setShowViewers(false);
+      setFlyingEmoji(null);
+      setReplyText('');
     }
   }, [isOpen, initialUserIndex]);
+
+  const fetchViewers = async (storyId: string) => {
+    setLoadingViewers(true);
+    setIsPaused(true);
+    try {
+      const res = await axios.get(`/api/stories/${storyId}/viewers`);
+      setViewersList(res.data.viewers || []);
+      setShowViewers(true);
+    } catch (err) {
+      console.error('Failed to fetch viewers:', err);
+    } finally {
+      setLoadingViewers(false);
+    }
+  };
+
+  const handleSendReaction = async (emoji: string) => {
+    setFlyingEmoji(emoji);
+    setTimeout(() => setFlyingEmoji(null), 1500);
+
+    try {
+      await axios.post('/api/chat/send', {
+        receiver_id: currentGroup.user_id,
+        content: `Reacted ${emoji} to your story!`,
+        type: 'text',
+      });
+    } catch (e) {}
+  };
+
+  const handleSendStoryReply = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!replyText.trim()) return;
+
+    const text = replyText.trim();
+    setReplyText('');
+    setReplySent(true);
+    setTimeout(() => setReplySent(false), 2000);
+
+    try {
+      await axios.post('/api/chat/send', {
+        receiver_id: currentGroup.user_id,
+        content: `Story Reply: "${text}"`,
+        type: 'text',
+      });
+    } catch (e) {}
+  };
 
   const currentGroup = storyGroups[userIndex] || storyGroups[0];
   const currentStory = currentGroup?.stories?.[storyIndex];
@@ -230,19 +288,118 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
           <div className="w-2/3 h-full" onClick={handleNextStory} />
         </div>
 
-        {/* Bottom Bar: Views count (for owner) or message reply (for others) */}
-        <div className="relative z-20 p-4 bg-gradient-to-t from-black/90 via-black/50 to-transparent flex items-center justify-between">
+        {/* Floating Flying Reaction Animation */}
+        {flyingEmoji && (
+          <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none animate-in zoom-in fade-in duration-300">
+            <span className="text-7xl drop-shadow-2xl animate-bounce">{flyingEmoji}</span>
+          </div>
+        )}
+
+        {/* Bottom Bar: Views count (for owner) or quick reactions & reply (for others) */}
+        <div className="relative z-20 p-3.5 bg-gradient-to-t from-black/95 via-black/70 to-transparent flex flex-col gap-2">
           {isOwner ? (
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/15 backdrop-blur-md text-white text-xs font-bold border border-white/10 mx-auto">
-              <Eye className="w-4 h-4 text-amber-400" />
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                fetchViewers(currentStory.id);
+              }}
+              className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/15 hover:bg-gold-500 hover:text-dark-950 backdrop-blur-md text-white text-xs font-black border border-white/15 mx-auto transition-all active:scale-95 shadow-lg group"
+            >
+              <Eye className="w-4 h-4 text-amber-400 group-hover:text-dark-950 transition-colors" />
               <span>{currentStory.views_count || 0} Views</span>
-            </div>
+            </button>
           ) : (
-            <div className="text-[11px] text-white/60 text-center w-full">
-              👑 Nexus Royal 24h Story
+            <div className="flex flex-col gap-2" onClick={(e) => e.stopPropagation()}>
+              {/* Quick Reactions Bar */}
+              <div className="flex items-center justify-center gap-3">
+                {['❤️', '🔥', '😂', '👏', '😮'].map((emoji) => (
+                  <button
+                    key={emoji}
+                    type="button"
+                    onClick={() => handleSendReaction(emoji)}
+                    className="p-1.5 rounded-full hover:scale-130 active:scale-90 transition-transform text-xl bg-white/10 hover:bg-white/20 backdrop-blur-sm"
+                    title={`React ${emoji}`}
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+
+              {/* Story Reply Input */}
+              <form onSubmit={handleSendStoryReply} className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={replyText}
+                  onChange={(e) => setReplyText(e.target.value)}
+                  onFocus={() => setIsPaused(true)}
+                  onBlur={() => setIsPaused(false)}
+                  placeholder={replySent ? 'Reply sent!' : `Reply to ${currentGroup.full_name}...`}
+                  className="flex-1 bg-white/10 border border-white/20 rounded-full px-4 py-2 text-xs text-white placeholder:text-white/60 focus:outline-none focus:border-gold-400 backdrop-blur-md"
+                />
+                <button
+                  type="submit"
+                  disabled={!replyText.trim()}
+                  className="p-2 rounded-full bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-dark-950 font-bold transition-all"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                </button>
+              </form>
             </div>
           )}
         </div>
+
+        {/* 👁️ Story Viewers Slide-up Drawer */}
+        {showViewers && (
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="absolute inset-x-0 bottom-0 max-h-[70%] z-40 bg-dark-900/98 border-t border-gold-500/30 rounded-t-3xl p-4 flex flex-col backdrop-blur-2xl shadow-2xl animate-in slide-in-from-bottom duration-250"
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-white/10">
+              <div className="flex items-center gap-2">
+                <Eye className="w-4 h-4 text-amber-400" />
+                <h4 className="text-sm font-black text-white">Story Viewers ({viewersList.length})</h4>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowViewers(false);
+                  setIsPaused(false);
+                }}
+                className="p-1.5 rounded-full text-dark-400 hover:text-white hover:bg-dark-800 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto py-3 space-y-2.5">
+              {loadingViewers ? (
+                <div className="text-center py-8 text-xs text-dark-400">Loading viewers...</div>
+              ) : viewersList.length === 0 ? (
+                <div className="text-center py-8 text-xs text-dark-400">No views recorded yet.</div>
+              ) : (
+                viewersList.map((viewer) => (
+                  <div key={viewer.id} className="flex items-center justify-between gap-3 p-2 rounded-2xl bg-dark-850/60 border border-white/5">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <img
+                        src={viewer.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${viewer.username}`}
+                        alt=""
+                        className="w-9 h-9 rounded-full object-cover border border-gold-500/30"
+                      />
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-white truncate">{viewer.full_name}</p>
+                        <p className="text-[10px] text-dark-400 truncate">@{viewer.username}</p>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-mono text-amber-300/80 shrink-0">
+                      {new Date(viewer.viewed_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

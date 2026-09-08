@@ -16,6 +16,7 @@ import {
   Volume2,
   Send,
   X,
+  ChevronDown,
 } from 'lucide-react';
 import { Avatar } from '../common/Avatar';
 import { PlanBadge } from '../common/Badge';
@@ -24,6 +25,7 @@ export const ActiveCallOverlay: React.FC = () => {
   const { activeCall, socket } = useSocket();
   const { user } = useAuth();
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isMinimized, setIsMinimized] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState<Array<{ id: string; sender_id: string; content: string; created_at: string }>>([]);
   const [inputMsg, setInputMsg] = useState('');
@@ -93,6 +95,100 @@ export const ActiveCallOverlay: React.FC = () => {
   const peer = activeCall.peerUser;
   const isVideoCall = activeCall.callType === 'video';
 
+  if (isMinimized) {
+    return (
+      <div className="fixed bottom-24 right-4 sm:right-6 z-50 w-64 sm:w-72 bg-dark-900/95 border-2 border-gold-400/80 rounded-3xl p-3 shadow-2xl shadow-black/80 backdrop-blur-2xl animate-in slide-in-from-bottom-5 duration-200 royal-card flex flex-col gap-2.5 select-none font-['Plus_Jakarta_Sans',sans-serif]">
+        {/* Dedicated Audio Element */}
+        <audio
+          ref={remoteAudioRef}
+          autoPlay
+          playsInline
+          style={{ position: 'fixed', top: -9999, left: -9999, width: '1px', height: '1px', opacity: 0.01, pointerEvents: 'none' }}
+        />
+
+        {/* Mini Header */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 min-w-0">
+            <Avatar src={peer.avatar_url} name={peer.full_name} size="xs" planId={peer.plan_id} />
+            <div className="min-w-0">
+              <h4 className="text-xs font-bold text-white truncate">{peer.full_name}</h4>
+              <span className="text-[10px] text-amber-300 font-mono font-semibold">{formattedDuration}</span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsMinimized(false)}
+            className="p-1.5 rounded-xl bg-dark-800 hover:bg-gold-500/20 text-dark-300 hover:text-amber-300 border border-dark-700 transition-all"
+            title="Expand to Fullscreen"
+          >
+            <Maximize2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        {/* Mini Video / Voice Preview */}
+        <div
+          onClick={() => setIsMinimized(false)}
+          className="relative w-full h-36 rounded-2xl overflow-hidden bg-dark-950 border border-gold-500/20 flex items-center justify-center cursor-pointer group"
+          title="Click to expand"
+        >
+          <video
+            ref={remoteVideoRef}
+            autoPlay
+            playsInline
+            className={`w-full h-full object-cover ${peerCameraOff && !peerScreenSharing ? 'hidden' : 'block'}`}
+          />
+          {peerCameraOff && !peerScreenSharing && (
+            <div className="flex flex-col items-center gap-1.5 p-2 text-center">
+              <Avatar src={peer.avatar_url} name={peer.full_name} size="md" planId={peer.plan_id} />
+              <div className="flex items-center gap-1 text-[10px] text-amber-200 font-medium bg-dark-900/80 px-2 py-0.5 rounded-full border border-gold-500/20">
+                <Volume2 className="w-3 h-3 text-gold-400 animate-pulse" />
+                <span>HD Voice Active</span>
+              </div>
+            </div>
+          )}
+          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-[11px] font-bold text-white backdrop-blur-xs">
+            Tap to Expand
+          </div>
+        </div>
+
+        {/* Mini Controls */}
+        <div className="flex items-center justify-between pt-1">
+          <button
+            type="button"
+            onClick={toggleMicrophone}
+            className={`p-2 rounded-xl border text-xs flex items-center gap-1 font-bold transition-all ${
+              isMicMuted ? 'bg-rose-500/20 text-rose-300 border-rose-500/30' : 'bg-dark-850 text-amber-200 border-gold-500/20'
+            }`}
+          >
+            {isMicMuted ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
+            <span className="text-[10px]">{isMicMuted ? 'Muted' : 'Mute'}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={toggleCamera}
+            className={`p-2 rounded-xl border text-xs flex items-center gap-1 font-bold transition-all ${
+              isCameraOff ? 'bg-rose-500/20 text-rose-300 border-rose-500/30' : 'bg-dark-850 text-amber-200 border-gold-500/20'
+            }`}
+          >
+            {isCameraOff ? <VideoOff className="w-3.5 h-3.5" /> : <Video className="w-3.5 h-3.5" />}
+            <span className="text-[10px]">{isCameraOff ? 'Cam Off' : 'Cam'}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={hangup}
+            className="p-2 px-3 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 text-white text-xs font-bold flex items-center gap-1 shadow-md shadow-rose-600/30 active:scale-95 transition-all"
+            title="End Call"
+          >
+            <PhoneOff className="w-3.5 h-3.5" />
+            <span className="text-[10px]">End</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       onClick={() => remoteAudioRef.current?.play().catch(() => {})}
@@ -131,6 +227,16 @@ export const ActiveCallOverlay: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Minimize to PiP Button */}
+          <button
+            type="button"
+            onClick={() => setIsMinimized(true)}
+            className="p-2.5 rounded-xl bg-dark-900/80 hover:bg-dark-850 text-dark-300 hover:text-amber-200 border border-gold-500/20 transition-all shadow-sm"
+            title="Minimize to Picture-in-Picture"
+          >
+            <ChevronDown className="w-4 h-4" />
+          </button>
+
           {/* In-Call Chat Toggle */}
           <button
             type="button"

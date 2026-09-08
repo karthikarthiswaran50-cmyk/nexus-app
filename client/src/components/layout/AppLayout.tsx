@@ -33,6 +33,7 @@ import axios from 'axios';
 import { getNotificationPermissionStatus, requestNotificationPermission, autoRegisterPushIfGranted } from '../../utils/notifications';
 import { requestFcmToken } from '../../config/firebase';
 import { UsernameSetupModal } from '../auth/UsernameSetupModal';
+import { AppLockOverlay } from '../auth/AppLockOverlay';
 
 export type NavTab = 'chats' | 'calls' | 'directory' | 'subscription' | 'profile' | 'settings';
 
@@ -169,6 +170,9 @@ export const AppLayout: React.FC = () => {
   return (
     <div className="h-[100dvh] bg-dark-950 text-dark-100 flex flex-col selection:bg-gold-500 selection:text-dark-950 overflow-hidden font-['Plus_Jakarta_Sans',sans-serif]">
       
+      {/* 🔐 Royal Vault PIN Lock (protects all views when enabled) */}
+      <AppLockOverlay />
+
       {/* Global Call Modals (always listening) */}
       <IncomingCallModal />
       <ActiveCallOverlay />
