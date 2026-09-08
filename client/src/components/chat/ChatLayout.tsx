@@ -231,8 +231,8 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
         ) : (
           /* Empty / Welcome State Hero */
           <div className="h-full flex flex-col items-center justify-center p-8 bg-dark-900 border border-gold-500/20 rounded-3xl text-center shadow-2xl royal-card">
-            <div className="w-16 h-16 rounded-3xl bg-gradient-to-tr from-amber-500 via-yellow-400 to-amber-600 flex items-center justify-center text-dark-950 shadow-xl shadow-gold-500/30 mb-6 animate-pulse-subtle">
-              <Crown className="w-8 h-8 fill-dark-950" />
+            <div className="w-16 h-16 rounded-3xl overflow-hidden shadow-xl shadow-gold-500/30 mb-6 ring-2 ring-gold-500/40 animate-pulse-subtle">
+              <img src="/icon-192.png" alt="Nexus Royal" className="w-full h-full object-cover" />
             </div>
             <h3 className="text-2xl font-black text-white mb-2">
               Welcome to <span className="gold-gradient-text">Nexus Royal</span>

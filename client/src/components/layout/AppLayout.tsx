@@ -234,8 +234,8 @@ export const AppLayout: React.FC = () => {
             onClick={() => { setCurrentTab('chats'); setSelectedUserForChat(null); }}
             className="flex items-center gap-2 sm:gap-2.5 cursor-pointer group"
           >
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-tr from-amber-600 via-yellow-500 to-amber-400 flex items-center justify-center text-dark-950 shadow-lg shadow-gold-500/30 group-hover:scale-105 group-hover:rotate-3 transition-all">
-              <Crown className="w-4 h-4 sm:w-5 sm:h-5 fill-dark-950" />
+            <div className="relative w-8 h-8 sm:w-9 sm:h-9 rounded-xl overflow-hidden shadow-lg shadow-gold-500/25 ring-1 ring-gold-500/40 group-hover:scale-105 group-hover:rotate-2 transition-all shrink-0">
+              <img src="/icon-192.png" alt="Nexus Royal" className="w-full h-full object-cover" />
             </div>
             <div>
               <span className="text-sm sm:text-base font-extrabold tracking-tight flex items-center gap-1.5 leading-none">
@@ -533,8 +533,8 @@ export const AppLayout: React.FC = () => {
 
             {/* Header */}
             <div className="text-center space-y-2">
-              <div className="w-16 h-16 mx-auto rounded-3xl bg-gradient-to-tr from-amber-500 via-yellow-400 to-amber-600 flex items-center justify-center text-dark-950 shadow-xl shadow-gold-500/30">
-                <Crown className="w-8 h-8 fill-dark-950" />
+              <div className="w-16 h-16 mx-auto rounded-3xl overflow-hidden shadow-xl shadow-gold-500/30 ring-2 ring-gold-500/40">
+                <img src="/icon-192.png" alt="Nexus Royal" className="w-full h-full object-cover" />
               </div>
               <h3 className="text-lg font-extrabold gold-gradient-text">Install Nexus Royal App</h3>
               <p className="text-xs text-dark-300 leading-relaxed max-w-xs mx-auto">

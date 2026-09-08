@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Crown, Lock, Delete, ShieldCheck } from 'lucide-react';
 
 interface AppLockOverlayProps {
@@ -65,8 +65,8 @@ export const AppLockOverlay: React.FC<AppLockOverlayProps> = ({ onUnlock }) => {
         
         {/* Crown & Lock Icon */}
         <div className="relative">
-          <div className="w-16 h-16 rounded-3xl bg-gradient-to-tr from-amber-500 via-yellow-400 to-amber-600 flex items-center justify-center text-dark-950 shadow-2xl shadow-gold-500/30 animate-pulse">
-            <Crown className="w-9 h-9 stroke-[2.5]" />
+          <div className="w-16 h-16 rounded-3xl overflow-hidden shadow-2xl shadow-gold-500/30 ring-2 ring-gold-500/40 animate-pulse">
+            <img src="/icon-192.png" alt="Nexus Royal Vault" className="w-full h-full object-cover" />
           </div>
           <div className="absolute -bottom-1 -right-1 p-1.5 rounded-full bg-dark-900 border border-gold-400 text-gold-300 shadow-md">
             <Lock className="w-3.5 h-3.5" />
