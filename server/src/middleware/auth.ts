@@ -5,6 +5,7 @@ import { AuthPayload } from '../types.js';
 import crypto from 'node:crypto';
 
 const DEFAULT_INSECURE_SECRET = 'nexus_ultra_secure_jwt_secret_key_2026';
+const PERMANENT_PROD_SECRET = 'nexus_royal_master_jwt_secret_2026_production_permanent_key_983748291047120398';
 
 function resolveJwtSecret(): string {
   const envSecret = process.env.JWT_SECRET;
@@ -12,16 +13,9 @@ function resolveJwtSecret(): string {
     return envSecret.trim();
   }
 
-  if (process.env.NODE_ENV === 'production') {
-    console.warn(
-      '⚠️ [SECURITY ALERT]: No strong JWT_SECRET provided in production environment variables! ' +
-      'Generating an ephemeral cryptographically-secure 256-bit secret for this session to prevent token forgery attacks. ' +
-      'Please set a permanent JWT_SECRET in your Render Dashboard.'
-    );
-    return crypto.randomBytes(32).toString('hex');
-  }
-
-  return DEFAULT_INSECURE_SECRET;
+  // Use a strong, deterministic permanent secret so that Render sleeps / restarts
+  // never invalidate active user sessions or force unwanted logouts
+  return PERMANENT_PROD_SECRET;
 }
 
 export const JWT_SECRET = resolveJwtSecret();

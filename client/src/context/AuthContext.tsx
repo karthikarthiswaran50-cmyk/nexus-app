@@ -24,9 +24,46 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [token, setToken] = useState<string | null>(() => localStorage.getItem('nexus_auth_token'));
-  const [user, setUser] = useState<User | null>(null);
-  const [settings, setSettings] = useState<UserSettings | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<User | null>(() => {
+    try {
+      const cached = localStorage.getItem('nexus_cached_user');
+      return cached ? JSON.parse(cached) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [settings, setSettings] = useState<UserSettings | null>(() => {
+    try {
+      const cached = localStorage.getItem('nexus_cached_settings');
+      return cached ? JSON.parse(cached) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [loading, setLoading] = useState(() => {
+    const hasToken = !!localStorage.getItem('nexus_auth_token');
+    const hasCachedUser = !!localStorage.getItem('nexus_cached_user');
+    // If token and cached user exist, render immediately without blocking spinner
+    return hasToken && !hasCachedUser;
+  });
+
+  const persistUser = (newUser: User | null) => {
+    setUser(newUser);
+    if (newUser) {
+      localStorage.setItem('nexus_cached_user', JSON.stringify(newUser));
+    } else {
+      localStorage.removeItem('nexus_cached_user');
+    }
+  };
+
+  const persistSettings = (newSettings: UserSettings | null) => {
+    setSettings(newSettings);
+    if (newSettings) {
+      localStorage.setItem('nexus_cached_settings', JSON.stringify(newSettings));
+    } else {
+      localStorage.removeItem('nexus_cached_settings');
+    }
+  };
 
   // Set default axios header
   if (token) {
@@ -38,16 +75,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const fetchSession = async (currentToken: string) => {
     try {
       axios.defaults.headers.common['Authorization'] = `Bearer ${currentToken}`;
-      const res = await axios.get('/api/auth/me', { timeout: 5000 });
+      // Allow up to 30 seconds for Render server to wake up from sleep
+      const res = await axios.get('/api/auth/me', { timeout: 30000 });
       if (res.data?.user) {
-        setUser(res.data.user);
-        setSettings(res.data.settings);
+        persistUser(res.data.user);
+        persistSettings(res.data.settings);
       } else {
         logout();
       }
-    } catch (err) {
-      console.error('Session restore failed:', err);
-      logout();
+    } catch (err: any) {
+      // ONLY log out if the server explicitly rejected the token (401 / 403)
+      // Never log out on network disconnects, timeouts, or temporary 502/503/504 server sleep errors!
+      if (err.response?.status === 401 || err.response?.status === 403) {
+        logout();
+      } else {
+        console.warn('Backend server cold-starting or offline; preserving active user session.');
+      }
     } finally {
       setLoading(false);
     }
@@ -59,13 +102,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } else {
       setLoading(false);
     }
-
-    // Safety fallback: Never keep loading screen for more than 2 seconds
-    const safetyTimer = setTimeout(() => {
-      setLoading(false);
-    }, 2000);
-
-    return () => clearTimeout(safetyTimer);
   }, [token]);
 
   const login = async (loginStr: string, passwordStr: string) => {
@@ -73,7 +109,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const newToken = res.data.token;
     localStorage.setItem('nexus_auth_token', newToken);
     setToken(newToken);
-    setUser(res.data.user);
+    persistUser(res.data.user);
     axios.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
     
     // Log user activity to Firebase
@@ -87,7 +123,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Fetch settings
     try {
       const setRes = await axios.get('/api/users/settings');
-      setSettings(setRes.data.settings);
+      persistSettings(setRes.data.settings);
     } catch (e) {}
   };
 
@@ -101,7 +137,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const newToken = res.data.token;
     localStorage.setItem('nexus_auth_token', newToken);
     setToken(newToken);
-    setUser(res.data.user);
+    persistUser(res.data.user);
     axios.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
 
     if (res.data.user?.username) {
@@ -118,7 +154,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     try {
       const setRes = await axios.get('/api/users/settings');
-      setSettings(setRes.data.settings);
+      persistSettings(setRes.data.settings);
     } catch (e) {}
   };
 
@@ -130,7 +166,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       axios.defaults.headers.common['Authorization'] = `Bearer ${res.data.token}`;
     }
     if (res.data?.user) {
-      setUser(res.data.user);
+      persistUser(res.data.user);
       localStorage.setItem('nexus_saved_username', res.data.user.username);
     }
   };
@@ -141,7 +177,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const newToken = res.data.token;
     localStorage.setItem('nexus_auth_token', newToken);
     setToken(newToken);
-    setUser(res.data.user);
+    persistUser(res.data.user);
     axios.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
 
     // Log registration activity to Firebase
@@ -154,7 +190,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     try {
       const setRes = await axios.get('/api/users/settings');
-      setSettings(setRes.data.settings);
+      persistSettings(setRes.data.settings);
     } catch (e) {}
   };
 
@@ -167,6 +203,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
     }
     localStorage.removeItem('nexus_auth_token');
+    localStorage.removeItem('nexus_cached_user');
+    localStorage.removeItem('nexus_cached_settings');
     setToken(null);
     setUser(null);
     setSettings(null);
@@ -177,8 +215,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!token) return;
     try {
       const res = await axios.get('/api/auth/me');
-      setUser(res.data.user);
-      setSettings(res.data.settings);
+      persistUser(res.data.user);
+      persistSettings(res.data.settings);
     } catch (err) {
       console.error('Failed to refresh user:', err);
     }
@@ -186,12 +224,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const updateProfile = async (data: Partial<User>) => {
     const res = await axios.put('/api/users/profile', data);
-    setUser(res.data.user);
+    persistUser(res.data.user);
   };
 
   const updateSettings = async (data: Partial<UserSettings>) => {
     const res = await axios.put('/api/users/settings', data);
-    setSettings(res.data.settings);
+    persistSettings(res.data.settings);
   };
 
   return (
