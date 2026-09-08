@@ -1,0 +1,24 @@
+﻿name: 24-7 Server Keep-Alive Robot
+
+on:
+  schedule:
+    # Run every 10 minutes, 24 hours a day, 7 days a week
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  keep-alive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Nexus Royal Health Endpoints
+        run: |
+          echo "🤖 [Keep-Alive Robot]: Sending keep-alive pings to keep server awake 24/7..."
+          STATUS_ONLINE=$(curl -s -o /dev/null -w "%{http_code}" https://nexusroyal.online/api/health || true)
+          STATUS_RENDER=$(curl -s -o /dev/null -w "%{http_code}" https://nexus-platform-76j4.onrender.com/api/health || true)
+          echo "https://nexusroyal.online/api/health -> HTTP $STATUS_ONLINE"
+          echo "https://nexus-platform-76j4.onrender.com/api/health -> HTTP $STATUS_RENDER"
+          if [ "$STATUS_ONLINE" = "200" ] || [ "$STATUS_RENDER" = "200" ]; then
+            echo "✅ Server is ACTIVE and responding! Idle sleep prevented."
+          else
+            echo "⚠️ Ping received code $STATUS_ONLINE / $STATUS_RENDER. Server waking up."
+          fi

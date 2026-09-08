@@ -457,4 +457,19 @@ const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
   console.log(`🚀 Nexus Production Server running on ${isHttps ? 'https' : 'http'}://localhost:${PORT}`);
   console.log(`📡 WebSocket / WebRTC Signaling Gateway ready`);
+
+  // 🤖 24/7 Keep-Alive Robot: Pings external URL every 10 minutes to prevent Render idle sleep
+  const keepAliveUrl = process.env.RENDER_EXTERNAL_URL || 'https://nexusroyal.online';
+  if (process.env.NODE_ENV === 'production' && keepAliveUrl) {
+    console.log(`🤖 [Keep-Alive Robot]: Activated. Pinging ${keepAliveUrl} every 10 minutes to prevent sleep.`);
+    setInterval(async () => {
+      try {
+        const pingUrl = `${keepAliveUrl.replace(/\/$/, '')}/api/health`;
+        const res = await fetch(pingUrl);
+        console.log(`🤖 [Keep-Alive Robot]: Ping sent to ${pingUrl} - Status: ${res.status}`);
+      } catch (err: any) {
+        console.warn(`🤖 [Keep-Alive Robot]: Ping attempt:`, err.message);
+      }
+    }, 10 * 60 * 1000); // 10 minutes
+  }
 });
