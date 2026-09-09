@@ -207,6 +207,15 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setActiveCall(null);
     });
 
+    newSocket.on('call:error', (data: { message?: string }) => {
+      closeCallNotification();
+      soundEffects.stopOutgoingRing();
+      soundEffects.playCallEndedTone();
+      setCallBannerMessage(data?.message || 'Call could not connect');
+      setTimeout(() => setCallBannerMessage(null), 4000);
+      setActiveCall(null);
+    });
+
     newSocket.on('call:ended', () => {
       closeCallNotification();
       soundEffects.stopOutgoingRing();

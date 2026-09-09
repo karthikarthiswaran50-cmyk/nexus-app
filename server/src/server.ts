@@ -472,9 +472,17 @@ const io = new Server(server, {
 
 setupSocket(io);
 
-const PORT = process.env.PORT || 5000;
-server.listen(PORT, () => {
-  console.log(`🚀 Nexus Production Server running on ${isHttps ? 'https' : 'http'}://localhost:${PORT}`);
+// 🛡️ Global Production Watchdog (prevents server process from crashing on unhandled errors)
+process.on('uncaughtException', (err) => {
+  console.error('🛡️ [Server Watchdog] Caught Uncaught Exception:', err?.message || err);
+});
+process.on('unhandledRejection', (reason: any) => {
+  console.error('🛡️ [Server Watchdog] Caught Unhandled Rejection:', reason?.message || reason);
+});
+
+const PORT = Number(process.env.PORT) || 5000;
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Nexus Production Server running on ${isHttps ? 'https' : 'http'}://0.0.0.0:${PORT}`);
   console.log(`📡 WebSocket / WebRTC Signaling Gateway ready`);
 
   // 🤖 24/7 Keep-Alive Robot: Pings external URL every 10 minutes to prevent Render idle sleep

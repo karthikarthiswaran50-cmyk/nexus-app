@@ -47,8 +47,12 @@ export const pgPool: pg.Pool | null = isPostgres
   : null;
 
 if (pgPool) {
+  // Prevent unhandled error events on idle clients from crashing Node.js process
+  pgPool.on('error', (err: any) => {
+    console.warn('⚠️ [PostgreSQL Pool] Client connection note (auto-handled):', err?.message || err);
+  });
   const isSupabase = databaseUrl?.includes('supabase');
-  console.log(`🐘 ${isSupabase ? 'Supabase' : 'PostgreSQL'} Database Pool connected for permanent storage!`);
+  console.log(`🐘 ${isSupabase ? 'Supabase' : 'PostgreSQL'} Database Pool initialized!`);
 } else {
   console.log('📦 Local SQLite engine running (standalone mode).');
 }

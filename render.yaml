@@ -12,9 +12,7 @@ services:
       - key: NODE_ENV
         value: production
       - key: DATABASE_URL
-        fromDatabase:
-          name: nexus-db
-          property: connectionString
+        sync: false
       - key: JWT_SECRET
         generateValue: true
       - key: RAZORPAY_KEY_ID
@@ -42,9 +40,3 @@ services:
       - key: FIREBASE_STORAGE_BUCKET
         value: "nexus-platform-cb84c.firebasestorage.app"
 
-databases:
-  # Managed PostgreSQL Database on Render
-  - name: nexus-db
-    databaseName: nexus
-    user: nexus_user
-    plan: free

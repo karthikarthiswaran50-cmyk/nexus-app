@@ -4,6 +4,7 @@
  * System Notifications, Mobile Haptic Vibration, and PUSH_RECEIVED wakeup.
  */
 import axios from 'axios';
+import { requestFcmToken } from '../config/firebase';
 
 let activeCallNotification: Notification | null = null;
 
@@ -111,8 +112,6 @@ export const syncAllPushTokens = async (force = false): Promise<boolean> => {
   } catch (e) {}
 
   try {
-    // Dynamically request FCM token if configured
-    const { requestFcmToken } = await import('../config/firebase');
     const fcmToken = await requestFcmToken();
     if (fcmToken) {
       await axios.post('/api/users/fcm-token', { token: fcmToken });
