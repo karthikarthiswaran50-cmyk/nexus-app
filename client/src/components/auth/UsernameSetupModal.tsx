@@ -112,8 +112,8 @@ export const UsernameSetupModal: React.FC<UsernameSetupModalProps> = ({ isOpen, 
 
         {/* Header */}
         <div className="text-center space-y-2 relative z-10">
-          <div className="w-16 h-16 mx-auto rounded-3xl overflow-hidden shadow-xl shadow-gold-500/25 ring-2 ring-gold-500/40">
-            <img src="/icon-192.png" alt="Nexus Royal" className="w-full h-full object-cover" />
+          <div className="w-14 h-14 mx-auto rounded-2xl bg-gradient-to-tr from-amber-500 via-yellow-400 to-amber-600 flex items-center justify-center text-dark-950 shadow-xl shadow-gold-500/25">
+            <Crown className="w-7 h-7 fill-dark-950" />
           </div>
           <h2 className="text-xl font-black text-white flex items-center justify-center gap-1.5">
             <span>Choose Your</span>

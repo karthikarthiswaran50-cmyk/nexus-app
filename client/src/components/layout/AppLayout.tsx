@@ -21,8 +21,6 @@ import {
   Menu,
   X,
   Compass,
-  Smartphone,
-  Download,
   CheckCircle2,
   ShieldCheck,
   Gem,
@@ -48,17 +46,11 @@ export const AppLayout: React.FC = () => {
   const [selectedUserForChat, setSelectedUserForChat] = useState<User | null>(null);
   const [viewProfileUser, setViewProfileUser] = useState<User | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [showInstallModal, setShowInstallModal] = useState(false);
-  const [isStandalone, setIsStandalone] = useState(false);
   
   // Notification states
   const [notifPermission, setNotifPermission] = useState<'granted' | 'denied' | 'default' | 'unsupported'>('default');
   const [dismissNotifBanner, setDismissNotifBanner] = useState(false);
   const [inAppMessageToast, setInAppMessageToast] = useState<{ senderName: string; preview: string; sender?: User } | null>(null);
-
-  // PWA Install prompt state
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-  const [canInstall, setCanInstall] = useState(false);
 
   // Custom Username Onboarding Modal
   const [showUsernameSetup, setShowUsernameSetup] = useState(false);
@@ -122,37 +114,6 @@ export const AppLayout: React.FC = () => {
     return () => clearTimeout(timer);
   }, [latestMessage, currentTab, selectedUserForChat?.id, user?.id]);
 
-  useEffect(() => {
-    // Check if running as installed standalone PWA
-    const checkStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone;
-    setIsStandalone(!!checkStandalone);
-
-    const handleBeforeInstallPrompt = (e: Event) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-      setCanInstall(true);
-    };
-
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-
-    return () => {
-      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    };
-  }, []);
-
-  const handleInstallApp = async () => {
-    if (deferredPrompt) {
-      deferredPrompt.prompt();
-      const { outcome } = await deferredPrompt.userChoice;
-      if (outcome === 'accepted') {
-        setCanInstall(false);
-        setShowInstallModal(false);
-      }
-      setDeferredPrompt(null);
-    } else {
-      setShowInstallModal(true);
-    }
-  };
 
   const handleStartChatWithUser = (targetUser: User) => {
     setSelectedUserForChat(targetUser);
@@ -239,8 +200,8 @@ export const AppLayout: React.FC = () => {
             onClick={() => { setCurrentTab('chats'); setSelectedUserForChat(null); }}
             className="flex items-center gap-2 sm:gap-2.5 cursor-pointer group"
           >
-            <div className="relative w-8 h-8 sm:w-9 sm:h-9 rounded-xl overflow-hidden shadow-lg shadow-gold-500/25 ring-1 ring-gold-500/40 group-hover:scale-105 group-hover:rotate-2 transition-all shrink-0">
-              <img src="/icon-192.png" alt="Nexus Royal" className="w-full h-full object-cover" />
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-tr from-amber-600 via-yellow-500 to-amber-400 flex items-center justify-center text-dark-950 shadow-lg shadow-gold-500/30 group-hover:scale-105 group-hover:rotate-3 transition-all shrink-0">
+              <Crown className="w-4 h-4 sm:w-5 sm:h-5 fill-dark-950" />
             </div>
             <div>
               <span className="text-sm sm:text-base font-extrabold tracking-tight flex items-center gap-1.5 leading-none">
@@ -314,18 +275,6 @@ export const AppLayout: React.FC = () => {
         {/* User Status Card & Actions */}
         <div className="flex items-center gap-2 sm:gap-2.5">
           
-          {/* Mobile/Desktop Install APK Button */}
-          {!isStandalone && (
-            <button
-              type="button"
-              onClick={handleInstallApp}
-              className="flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-600 hover:from-amber-400 hover:to-yellow-300 text-dark-950 text-[11px] sm:text-xs font-black transition-all shadow-md shadow-gold-500/25 active:scale-95"
-              title="Install Royal App / APK"
-            >
-              <Download className="w-3.5 h-3.5 text-dark-950 stroke-[2.5]" />
-              <span>Install App</span>
-            </button>
-          )}
 
           <button
             type="button"
@@ -387,17 +336,6 @@ export const AppLayout: React.FC = () => {
       {/* Mobile Drawer Menu (Royal) */}
       {mobileMenuOpen && (
         <div className="md:hidden bg-dark-900 border-b border-gold-500/20 p-4 space-y-2 animate-in slide-in-from-top duration-200 z-30 shrink-0 shadow-2xl">
-          {!isStandalone && (
-            <button
-              type="button"
-              onClick={() => { handleInstallApp(); setMobileMenuOpen(false); }}
-              className="w-full px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-600 text-dark-950 font-black text-xs flex items-center justify-center gap-2 mb-2 shadow-lg shadow-gold-500/30"
-            >
-              <Download className="w-4 h-4 stroke-[2.5]" />
-              <span>👑 Install Nexus Royal App (APK) on Phone</span>
-            </button>
-          )}
-
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = currentTab === item.id;
@@ -533,75 +471,6 @@ export const AppLayout: React.FC = () => {
         </button>
       </nav>
 
-      {/* ========================================================================= */}
-      {/* 📱 Royal Mobile App (APK / PWA) Installation Modal                        */}
-      {/* ========================================================================= */}
-      {showInstallModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-dark-950/85 backdrop-blur-xl animate-in fade-in">
-          <div className="relative w-full max-w-md bg-dark-900 border border-gold-500/30 rounded-3xl p-6 shadow-2xl space-y-5 animate-in zoom-in-95 royal-card">
-            <button
-              type="button"
-              onClick={() => setShowInstallModal(false)}
-              className="absolute top-4 right-4 p-1.5 rounded-full hover:bg-dark-800 text-dark-400 hover:text-white"
-            >
-              <X className="w-5 h-5" />
-            </button>
-
-            {/* Header */}
-            <div className="text-center space-y-2">
-              <div className="w-16 h-16 mx-auto rounded-3xl overflow-hidden shadow-xl shadow-gold-500/30 ring-2 ring-gold-500/40">
-                <img src="/icon-192.png" alt="Nexus Royal" className="w-full h-full object-cover" />
-              </div>
-              <h3 className="text-lg font-extrabold gold-gradient-text">Install Nexus Royal App</h3>
-              <p className="text-xs text-dark-300 leading-relaxed max-w-xs mx-auto">
-                Experience full-screen Royal video calls, instant push notifications, and ultra-fast messaging.
-              </p>
-            </div>
-
-            {/* Options Tabs / Steps */}
-            <div className="space-y-3">
-              {/* Android Box */}
-              <div className="p-4 rounded-2xl bg-dark-850/90 border border-gold-500/25 space-y-2">
-                <div className="flex items-center gap-2 text-xs font-bold text-amber-300">
-                  <span>🤖 Android Phone (Chrome / Brave / Edge)</span>
-                </div>
-                <p className="text-xs text-dark-300">
-                  Tap the button below to install directly to your app drawer, or tap <strong className="text-white">⋮ menu</strong> &gt; <strong className="text-white">"Install App"</strong>.
-                </p>
-                <button
-                  type="button"
-                  onClick={handleInstallApp}
-                  className="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-600 hover:from-amber-400 hover:to-yellow-300 text-dark-950 font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-gold-500/25 transition-all active:scale-95"
-                >
-                  <Download className="w-4 h-4 stroke-[2.5]" />
-                  <span>Install Nexus Royal App</span>
-                </button>
-              </div>
-
-              {/* iOS Box */}
-              <div className="p-4 rounded-2xl bg-dark-850/90 border border-dark-700/80 space-y-1.5">
-                <div className="flex items-center gap-2 text-xs font-bold text-cyan-400">
-                  <span>🍏 iPhone / iPad (Safari)</span>
-                </div>
-                <p className="text-xs text-dark-300">
-                  1. Tap the <strong className="text-white">Share button (📤)</strong> at bottom of Safari.<br />
-                  2. Scroll down and tap <strong className="text-white">"Add to Home Screen"</strong>.
-                </p>
-              </div>
-            </div>
-
-            <div className="pt-1 text-center">
-              <button
-                type="button"
-                onClick={() => setShowInstallModal(false)}
-                className="text-xs text-dark-400 hover:text-white font-medium"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Custom Unique Username / Royal ID Onboarding Modal */}
       <UsernameSetupModal

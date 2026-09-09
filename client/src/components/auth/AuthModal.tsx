@@ -28,8 +28,8 @@ export const AuthModal: React.FC = () => {
 
         {/* Brand Icon */}
         <div className="relative z-10 flex flex-col items-center">
-          <div className="w-16 h-16 rounded-3xl overflow-hidden shadow-2xl shadow-gold-500/30 mb-4 ring-2 ring-gold-500/40 animate-in zoom-in-95">
-            <img src="/icon-192.png" alt="Nexus Royal" className="w-full h-full object-cover" />
+          <div className="w-16 h-16 rounded-3xl bg-gradient-to-tr from-amber-500 via-yellow-400 to-amber-600 flex items-center justify-center text-dark-950 shadow-2xl shadow-gold-500/30 mb-4 animate-in zoom-in-95">
+            <Crown className="w-8 h-8 fill-dark-950" />
           </div>
           
           <h1 className="text-2xl font-black tracking-tight text-white flex items-center gap-2">
