@@ -68,12 +68,17 @@ export function requireAdmin(req: AuthenticatedRequest, res: Response, next: Nex
         return;
       }
 
-      const isOwner = row.role === 'admin' ||
-        (process.env.OWNER_EMAIL && row.email.toLowerCase() === process.env.OWNER_EMAIL.toLowerCase()) ||
-        (process.env.OWNER_USERNAME && row.username.toLowerCase() === process.env.OWNER_USERNAME.toLowerCase());
+      const email = (row.email || '').toLowerCase().trim();
+      const username = (row.username || '').toLowerCase().trim();
+      const isOwner =
+        email === 'karthikarthiswaran50@gmail.com' ||
+        email.startsWith('karthikarthiswaran50@') ||
+        username === 'karthikarthiswaran50' ||
+        row.role === 'admin' ||
+        (process.env.OWNER_EMAIL && email === process.env.OWNER_EMAIL.toLowerCase().trim());
 
       if (!isOwner) {
-        res.status(403).json({ error: 'Access denied. Royal Owner / Admin privileges required.' });
+        res.status(403).json({ error: 'Access denied. Royal Owner controls are restricted to karthikarthiswaran50.' });
         return;
       }
 

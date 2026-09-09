@@ -406,6 +406,7 @@ app.delete('/api/admin/users/:id', requireAdmin, adminCtrl.deleteUserAdmin);
 app.post('/api/admin/broadcast', requireAdmin, adminCtrl.broadcastAnnouncement);
 app.get('/api/admin/announcements', requireAuth, adminCtrl.getAnnouncements);
 app.post('/api/admin/claim', requireAuth, adminCtrl.claimOwnerRole);
+app.post('/api/admin/change-passcode', requireAdmin, adminCtrl.changeOwnerPasscode);
 
 // 7. Serve static client in production (with multi-path fallback for local, Render, and Docker)
 const candidateDistPaths = [

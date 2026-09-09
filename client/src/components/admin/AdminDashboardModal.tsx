@@ -72,6 +72,13 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({ isOpen
   const [claimingRole, setClaimingRole] = useState(false);
   const [claimMessage, setClaimMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  // Change Passcode State
+  const [newPasscode, setNewPasscode] = useState('');
+  const [confirmPasscode, setConfirmPasscode] = useState('');
+  const [savingPasscode, setSavingPasscode] = useState(false);
+  const [passcodeSuccessMsg, setPasscodeSuccessMsg] = useState<string | null>(null);
+  const [passcodeErrorMsg, setPasscodeErrorMsg] = useState<string | null>(null);
+
   // Fetch Stats
   const fetchStats = async () => {
     try {
@@ -242,6 +249,42 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({ isOpen
       });
     } finally {
       setClaimingRole(false);
+    }
+  };
+
+  // Change Owner Passcode
+  const handleChangePasscode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasscodeSuccessMsg(null);
+    setPasscodeErrorMsg(null);
+
+    if (!newPasscode.trim()) {
+      setPasscodeErrorMsg('Please enter a new passcode.');
+      return;
+    }
+
+    if (newPasscode.trim().length < 4) {
+      setPasscodeErrorMsg('Passcode must be at least 4 characters long.');
+      return;
+    }
+
+    if (newPasscode !== confirmPasscode) {
+      setPasscodeErrorMsg('New passcodes do not match.');
+      return;
+    }
+
+    try {
+      setSavingPasscode(true);
+      const res = await axios.post('/api/admin/change-passcode', {
+        newPasscode: newPasscode.trim(),
+      });
+      setPasscodeSuccessMsg(res.data.message || 'Master Passcode updated successfully!');
+      setNewPasscode('');
+      setConfirmPasscode('');
+    } catch (err: any) {
+      setPasscodeErrorMsg(err.response?.data?.error || 'Failed to update passcode.');
+    } finally {
+      setSavingPasscode(false);
     }
   };
 
@@ -698,59 +741,92 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({ isOpen
             </div>
           )}
 
-          {/* TAB 4: OWNER ACCESS & VERIFICATION */}
+          {/* TAB 4: OWNER ACCESS & SECURITY */}
           {activeTab === 'security' && (
             <div className="space-y-6">
-              <div className="p-4 rounded-2xl bg-dark-950/70 border border-gold-500/20 space-y-2">
-                <div className="flex items-center gap-2">
-                  <Crown className="w-5 h-5 text-amber-400" />
-                  <h4 className="text-sm font-black text-white">Owner Master Key Access</h4>
+              {/* Verified Owner Card */}
+              <div className="p-4 sm:p-5 rounded-2xl bg-dark-950/70 border border-gold-500/25 space-y-3">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 rounded-xl bg-amber-500/20 text-amber-300">
+                      <Crown className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-black text-white">Authorized Royal Platform Owner</h4>
+                      <p className="text-xs text-amber-400 font-semibold mt-0.5">karthikarthiswaran50@gmail.com</p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-black uppercase px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3" />
+                    VERIFIED OWNER
+                  </span>
                 </div>
                 <p className="text-xs text-dark-300 leading-relaxed">
-                  If you are the creator or platform owner of Nexus Royal, you can verify and unlock full admin control from any account using the master passcode.
+                  Your account is permanently authorized as the sole Royal Owner. You have exclusive rights to manage users, suspend abusive accounts, broadcast global announcements, and change platform master keys.
                 </p>
               </div>
 
-              {claimMessage && (
-                <div
-                  className={`p-3.5 rounded-xl border text-xs font-bold flex items-center gap-2 animate-in fade-in ${
-                    claimMessage.type === 'success'
-                      ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
-                      : 'bg-rose-500/20 border-rose-500/40 text-rose-300'
-                  }`}
-                >
-                  {claimMessage.type === 'success' ? (
-                    <CheckCircle2 className="w-4 h-4 shrink-0" />
-                  ) : (
-                    <AlertTriangle className="w-4 h-4 shrink-0" />
-                  )}
-                  <span>{claimMessage.text}</span>
-                </div>
-              )}
-
-              <form onSubmit={handleClaimOwner} className="space-y-4 max-w-md">
+              {/* Change Master Passcode Card */}
+              <div className="p-4 sm:p-5 rounded-2xl bg-dark-950/70 border border-white/10 space-y-4">
                 <div>
-                  <label className="block text-xs font-bold text-dark-300 mb-1.5">Master Owner Passcode</label>
-                  <input
-                    type="password"
-                    value={claimPasscode}
-                    onChange={(e) => setClaimPasscode(e.target.value)}
-                    placeholder="Enter Master Owner Passcode..."
-                    required
-                    className="w-full bg-dark-950 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white placeholder-dark-500 focus:outline-none focus:border-gold-500/50"
-                  />
-                  <p className="text-[11px] text-dark-400 mt-1">Default master key: <code className="text-amber-300 font-mono">nexusroyal2026</code></p>
+                  <h4 className="text-sm font-black text-white flex items-center gap-2">
+                    <KeyRound className="w-4 h-4 text-amber-400" />
+                    <span>Change Master Owner Passcode</span>
+                  </h4>
+                  <p className="text-xs text-dark-400 mt-1">
+                    Create a private custom master password known only to you.
+                  </p>
                 </div>
 
-                <button
-                  type="submit"
-                  disabled={claimingRole}
-                  className="flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-amber-600 via-yellow-500 to-amber-500 text-dark-950 font-black text-xs shadow-lg shadow-gold-500/25 transition-all disabled:opacity-50"
-                >
-                  <Crown className="w-4 h-4" />
-                  <span>{claimingRole ? 'Verifying Crown...' : 'Claim Royal Owner Status'}</span>
-                </button>
-              </form>
+                {passcodeSuccessMsg && (
+                  <div className="p-3 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center gap-2 animate-in fade-in">
+                    <CheckCircle2 className="w-4 h-4 shrink-0" />
+                    <span>{passcodeSuccessMsg}</span>
+                  </div>
+                )}
+
+                {passcodeErrorMsg && (
+                  <div className="p-3 rounded-xl bg-rose-500/20 border border-rose-500/40 text-rose-300 text-xs font-bold flex items-center gap-2 animate-in fade-in">
+                    <AlertTriangle className="w-4 h-4 shrink-0" />
+                    <span>{passcodeErrorMsg}</span>
+                  </div>
+                )}
+
+                <form onSubmit={handleChangePasscode} className="space-y-3.5 max-w-md">
+                  <div>
+                    <label className="block text-xs font-bold text-dark-300 mb-1">New Master Passcode</label>
+                    <input
+                      type="password"
+                      value={newPasscode}
+                      onChange={(e) => setNewPasscode(e.target.value)}
+                      placeholder="Enter new secret passcode..."
+                      required
+                      className="w-full bg-dark-900 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white placeholder-dark-500 focus:outline-none focus:border-gold-500/50"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-dark-300 mb-1">Confirm New Passcode</label>
+                    <input
+                      type="password"
+                      value={confirmPasscode}
+                      onChange={(e) => setConfirmPasscode(e.target.value)}
+                      placeholder="Confirm new secret passcode..."
+                      required
+                      className="w-full bg-dark-900 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white placeholder-dark-500 focus:outline-none focus:border-gold-500/50"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={savingPasscode}
+                    className="flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-amber-600 via-yellow-500 to-amber-500 text-dark-950 font-black text-xs shadow-lg shadow-gold-500/25 transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+                  >
+                    <KeyRound className="w-4 h-4" />
+                    <span>{savingPasscode ? 'Updating Passcode...' : 'Update Master Passcode'}</span>
+                  </button>
+                </form>
+              </div>
             </div>
           )}
 

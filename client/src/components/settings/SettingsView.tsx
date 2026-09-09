@@ -382,37 +382,33 @@ export const SettingsView: React.FC = () => {
           </div>
         </div>
 
-        {/* 👑 Royal Owner & Admin Controls Card */}
-        <div className="bg-dark-900 border border-gold-500/25 rounded-3xl p-6 space-y-4 shadow-xl royal-card">
-          <h3 className="text-sm font-black text-white flex items-center justify-between border-b border-gold-500/15 pb-3">
-            <div className="flex items-center gap-2">
-              <Crown className="w-4 h-4 text-gold-400" />
-              <span>Royal Owner & Admin Controls</span>
-            </div>
-            {user?.role === 'admin' ? (
+        {/* 👑 Royal Owner & Admin Controls Card (Exclusive to karthikarthiswaran50) */}
+        {(user?.role === 'admin' || user?.email?.toLowerCase().includes('karthikarthiswaran50') || user?.username?.toLowerCase() === 'karthikarthiswaran50') && (
+          <div className="bg-dark-900 border border-gold-500/25 rounded-3xl p-6 space-y-4 shadow-xl royal-card">
+            <h3 className="text-sm font-black text-white flex items-center justify-between border-b border-gold-500/15 pb-3">
+              <div className="flex items-center gap-2">
+                <Crown className="w-4 h-4 text-gold-400" />
+                <span>Royal Owner & Admin Controls</span>
+              </div>
               <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-extrabold border border-amber-500/30">
                 👑 VERIFIED OWNER
               </span>
-            ) : (
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-dark-800 text-dark-400 font-semibold border border-white/10">
-                MEMBER
-              </span>
-            )}
-          </h3>
+            </h3>
 
-          <p className="text-xs text-dark-300 leading-relaxed">
-            Manage registered members, suspend or ban accounts, broadcast global announcements, and review real-time infrastructure analytics.
-          </p>
+            <p className="text-xs text-dark-300 leading-relaxed">
+              Manage registered members, suspend or ban accounts, broadcast global announcements, and review real-time infrastructure analytics.
+            </p>
 
-          <button
-            type="button"
-            onClick={() => setIsAdminModalOpen(true)}
-            className="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-600 via-yellow-500 to-amber-500 hover:from-amber-500 hover:to-yellow-400 text-dark-950 font-black text-xs shadow-lg shadow-gold-500/25 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95"
-          >
-            <Shield className="w-4 h-4" />
-            <span>Open Royal Command Center</span>
-          </button>
-        </div>
+            <button
+              type="button"
+              onClick={() => setIsAdminModalOpen(true)}
+              className="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-600 via-yellow-500 to-amber-500 hover:from-amber-500 hover:to-yellow-400 text-dark-950 font-black text-xs shadow-lg shadow-gold-500/25 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+            >
+              <Shield className="w-4 h-4" />
+              <span>Open Royal Command Center</span>
+            </button>
+          </div>
+        )}
 
         {/* Change Password Card */}
         <div className="bg-dark-900 border border-gold-500/15 rounded-3xl p-6 space-y-5 shadow-xl royal-card">

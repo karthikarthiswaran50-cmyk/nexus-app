@@ -245,20 +245,52 @@ export async function getAnnouncements(req: AuthenticatedRequest, res: Response)
   }
 }
 
+export function getMasterPasscode(): string {
+  try {
+    const row = db.prepare("SELECT value FROM system_settings WHERE key = 'owner_master_key'").get() as { value: string } | undefined;
+    if (row && row.value) return row.value;
+  } catch (e) {}
+  return process.env.OWNER_MASTER_KEY || 'nexusroyal2026';
+}
+
+export function setMasterPasscode(newKey: string): void {
+  db.prepare("INSERT INTO system_settings (key, value) VALUES ('owner_master_key', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(newKey);
+  if (pgPool) {
+    pgPool.query(
+      "INSERT INTO system_settings (key, value) VALUES ('owner_master_key', $1) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
+      [newKey]
+    ).catch(e => console.error('Failed to sync master passcode to PostgreSQL:', e));
+  }
+}
+
 // ----------------------------------------------------
-// 8. Claim Owner / Admin Role (with Master Passcode)
+// 8. Claim Owner / Admin Role (Exclusive to karthikarthiswaran50)
 // ----------------------------------------------------
 export async function claimOwnerRole(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
     const { passcode } = req.body;
     const userId = req.user?.userId;
+    const userEmail = (req.user?.email || '').toLowerCase().trim();
+    const username = (req.user?.username || '').toLowerCase().trim();
 
     if (!userId) {
       res.status(401).json({ error: 'Authentication required' });
       return;
     }
 
-    if (!passcode || passcode.trim() !== OWNER_MASTER_KEY.trim()) {
+    const isDesignatedOwner =
+      userEmail === 'karthikarthiswaran50@gmail.com' ||
+      userEmail.startsWith('karthikarthiswaran50@') ||
+      username === 'karthikarthiswaran50' ||
+      (process.env.OWNER_EMAIL && userEmail === process.env.OWNER_EMAIL.toLowerCase().trim());
+
+    if (!isDesignatedOwner) {
+      res.status(403).json({ error: 'Access restricted! Only karthikarthiswaran50 is authorized as Royal Owner.' });
+      return;
+    }
+
+    const currentKey = getMasterPasscode();
+    if (passcode && passcode.trim() !== currentKey.trim()) {
       res.status(403).json({ error: 'Invalid Owner Master Passcode. Access denied.' });
       return;
     }
@@ -286,10 +318,43 @@ export async function claimOwnerRole(req: AuthenticatedRequest, res: Response): 
       success: true,
       role: 'admin',
       user,
-      message: 'Crown verified! You are now the official Royal Owner / Admin.',
+      message: 'Crown verified! Welcome Royal Owner karthikarthiswaran50.',
     });
   } catch (error) {
     console.error('claimOwnerRole error:', error);
     res.status(500).json({ error: 'Failed to claim owner role' });
+  }
+}
+
+// ----------------------------------------------------
+// 9. Change Owner Master Passcode (Exclusive to karthikarthiswaran50)
+// ----------------------------------------------------
+export async function changeOwnerPasscode(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const { newPasscode } = req.body;
+    const userEmail = (req.user?.email || '').toLowerCase().trim();
+    const username = (req.user?.username || '').toLowerCase().trim();
+
+    const isDesignatedOwner =
+      userEmail === 'karthikarthiswaran50@gmail.com' ||
+      userEmail.startsWith('karthikarthiswaran50@') ||
+      username === 'karthikarthiswaran50' ||
+      (process.env.OWNER_EMAIL && userEmail === process.env.OWNER_EMAIL.toLowerCase().trim());
+
+    if (!isDesignatedOwner) {
+      res.status(403).json({ error: 'Access restricted! Only karthikarthiswaran50 can change the Master Passcode.' });
+      return;
+    }
+
+    if (!newPasscode || String(newPasscode).trim().length < 4) {
+      res.status(400).json({ error: 'New passcode must be at least 4 characters long.' });
+      return;
+    }
+
+    setMasterPasscode(String(newPasscode).trim());
+    res.json({ success: true, message: 'Master Owner Passcode updated successfully!' });
+  } catch (error) {
+    console.error('changeOwnerPasscode error:', error);
+    res.status(500).json({ error: 'Failed to update passcode' });
   }
 }

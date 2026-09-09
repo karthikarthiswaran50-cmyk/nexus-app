@@ -122,6 +122,11 @@ export function initDatabase() {
       author TEXT NOT NULL DEFAULT 'Royal Admin',
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS system_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
   `);
 
   // 4. Conversations table
@@ -376,6 +381,11 @@ async function initPostgresAndRestore() {
         type VARCHAR(50) DEFAULT 'info',
         author VARCHAR(100) DEFAULT 'Royal Admin',
         created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS system_settings (
+        key VARCHAR(100) PRIMARY KEY,
+        value TEXT NOT NULL
       );
     `);
 
