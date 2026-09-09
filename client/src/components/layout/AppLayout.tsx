@@ -34,6 +34,8 @@ import { getNotificationPermissionStatus, requestNotificationPermission, autoReg
 import { requestFcmToken } from '../../config/firebase';
 import { UsernameSetupModal } from '../auth/UsernameSetupModal';
 import { AppLockOverlay } from '../auth/AppLockOverlay';
+import { GlobalAnnouncementBanner } from '../common/GlobalAnnouncementBanner';
+import { AdminDashboardModal } from '../admin/AdminDashboardModal';
 
 export type NavTab = 'chats' | 'calls' | 'directory' | 'subscription' | 'profile' | 'settings';
 
@@ -60,6 +62,9 @@ export const AppLayout: React.FC = () => {
 
   // Custom Username Onboarding Modal
   const [showUsernameSetup, setShowUsernameSetup] = useState(false);
+
+  // Royal Admin Command Center Modal
+  const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -251,6 +256,17 @@ export const AppLayout: React.FC = () => {
             <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-400 shadow-[0_0_8px_#10b981]' : 'bg-rose-400 animate-pulse'}`} />
             <span className="hidden xs:inline font-medium text-dark-300">{isConnected ? 'Royal Gateway' : 'Connecting...'}</span>
           </div>
+
+          {user?.role === 'admin' && (
+            <button
+              type="button"
+              onClick={() => setIsAdminModalOpen(true)}
+              className="flex items-center gap-1.5 text-[10px] sm:text-[11px] px-2.5 py-1 rounded-full bg-gradient-to-r from-amber-500/20 via-yellow-500/15 to-amber-600/20 border border-amber-400/40 text-amber-300 font-extrabold shadow-sm hover:scale-105 transition-all cursor-pointer"
+            >
+              <Crown className="w-3 h-3 text-amber-400" />
+              <span>👑 Owner Panel</span>
+            </button>
+          )}
         </div>
 
         {/* Desktop Navigation Tabs (Royal Glass) */}
@@ -591,6 +607,15 @@ export const AppLayout: React.FC = () => {
       <UsernameSetupModal
         isOpen={showUsernameSetup}
         onClose={() => setShowUsernameSetup(false)}
+      />
+
+      {/* Global Royal Announcements Banner */}
+      <GlobalAnnouncementBanner />
+
+      {/* Royal Admin Command Center Modal */}
+      <AdminDashboardModal
+        isOpen={isAdminModalOpen}
+        onClose={() => setIsAdminModalOpen(false)}
       />
 
     </div>

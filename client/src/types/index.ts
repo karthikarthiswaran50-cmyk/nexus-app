@@ -16,6 +16,8 @@ export interface User {
   plan_id?: SubscriptionPlanId;
   subscription_status?: SubscriptionStatus;
   subscription_expires_at?: string;
+  role?: 'user' | 'admin';
+  is_banned?: boolean | number;
 }
 
 export interface UserSettings {

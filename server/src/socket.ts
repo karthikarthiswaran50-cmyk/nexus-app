@@ -25,9 +25,34 @@ interface PendingCall {
   timeoutId: NodeJS.Timeout;
 }
 
+let activeIo: Server | null = null;
+const userSockets = new Map<string, Set<string>>();
+
+export function getOnlineUsersCount(): number {
+  return userSockets.size;
+}
+
+export function disconnectUserSockets(userId: string) {
+  const socketIds = userSockets.get(userId);
+  if (socketIds && activeIo) {
+    for (const sid of socketIds) {
+      const s = activeIo.sockets.sockets.get(sid);
+      if (s) {
+        s.emit('auth:banned', { reason: 'Your account has been suspended by Royal Admin.' });
+        s.disconnect(true);
+      }
+    }
+  }
+}
+
+export function broadcastAnnouncementSocket(announcement: any) {
+  if (activeIo) {
+    activeIo.emit('system:announcement', announcement);
+  }
+}
+
 export function setupSocket(io: Server) {
-  // Map: userId -> Set of socket IDs
-  const userSockets = new Map<string, Set<string>>();
+  activeIo = io;
   // Map: socketId -> userId
   const socketUsers = new Map<string, string>();
   // Map: active call pairs (to track in-progress calls)

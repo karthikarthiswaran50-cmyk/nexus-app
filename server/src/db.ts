@@ -105,6 +105,25 @@ export function initDatabase() {
     db.exec(`ALTER TABLE user_settings ADD COLUMN fcm_token TEXT;`);
   } catch (e) {}
 
+  try {
+    db.exec(`ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'user';`);
+  } catch (e) {}
+
+  try {
+    db.exec(`ALTER TABLE users ADD COLUMN is_banned INTEGER DEFAULT 0;`);
+  } catch (e) {}
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS system_announcements (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      message TEXT NOT NULL,
+      type TEXT NOT NULL DEFAULT 'info',
+      author TEXT NOT NULL DEFAULT 'Royal Admin',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+
   // 4. Conversations table
   db.exec(`
     CREATE TABLE IF NOT EXISTS conversations (
@@ -346,6 +365,18 @@ async function initPostgresAndRestore() {
         started_at TIMESTAMPTZ DEFAULT NOW(),
         ended_at TIMESTAMPTZ
       );
+
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(20) DEFAULT 'user';
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS is_banned INT DEFAULT 0;
+
+      CREATE TABLE IF NOT EXISTS system_announcements (
+        id VARCHAR(100) PRIMARY KEY,
+        title VARCHAR(255) NOT NULL,
+        message TEXT NOT NULL,
+        type VARCHAR(50) DEFAULT 'info',
+        author VARCHAR(100) DEFAULT 'Royal Admin',
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
     `);
 
     // 2. Perform requested 1-time wipe on PostgreSQL if pending
@@ -357,8 +388,8 @@ async function initPostgresAndRestore() {
       console.log(`📥 Restoring ${res.rows.length} persistent users from PostgreSQL into local cache...`);
       
       const insertUser = db.prepare(`
-        INSERT OR REPLACE INTO users (id, email, username, password_hash, full_name, avatar_url, bio, status, country, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT OR REPLACE INTO users (id, email, username, password_hash, full_name, avatar_url, bio, status, country, role, is_banned, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
 
       for (const row of res.rows) {
@@ -372,6 +403,8 @@ async function initPostgresAndRestore() {
           row.bio || '',
           row.status || '',
           row.country || 'Global',
+          row.role || 'user',
+          row.is_banned ? 1 : 0,
           new Date(row.created_at).toISOString(),
           new Date(row.updated_at).toISOString()
         );
@@ -442,19 +475,23 @@ export function persistUserToPg(user: {
   bio?: string;
   status?: string;
   country?: string;
+  role?: string;
+  is_banned?: number;
 }) {
   if (!pgPool) return;
   pgPool.query(
-    `INSERT INTO users (id, email, username, password_hash, full_name, avatar_url, bio, status, country)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    `INSERT INTO users (id, email, username, password_hash, full_name, avatar_url, bio, status, country, role, is_banned)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
      ON CONFLICT (id) DO UPDATE SET
        username = EXCLUDED.username,
-       password_hash = EXCLUDED.password_hash,
+       password_hash = CASE WHEN EXCLUDED.password_hash != '' THEN EXCLUDED.password_hash ELSE users.password_hash END,
        full_name = EXCLUDED.full_name,
        avatar_url = EXCLUDED.avatar_url,
        bio = EXCLUDED.bio,
        status = EXCLUDED.status,
        country = EXCLUDED.country,
+       role = COALESCE(EXCLUDED.role, users.role),
+       is_banned = COALESCE(EXCLUDED.is_banned, users.is_banned),
        updated_at = NOW()`,
     [
       user.id,
@@ -466,6 +503,8 @@ export function persistUserToPg(user: {
       user.bio || '',
       user.status || '',
       user.country || 'Global',
+      user.role || 'user',
+      user.is_banned || 0,
     ]
   ).catch(err => console.error('Error persisting user to PostgreSQL:', err.message));
 }

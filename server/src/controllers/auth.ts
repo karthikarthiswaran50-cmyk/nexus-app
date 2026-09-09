@@ -69,11 +69,15 @@ export async function register(req: Request, res: Response): Promise<void> {
     const userBio = sanitizeText(bio || 'Hello! I am new here on Nexus.');
     const userCountry = sanitizeText(country || 'Global');
 
+    const userCountRow = db.prepare('SELECT COUNT(*) as count FROM users').get() as { count: number } | undefined;
+    const isFirstUser = (userCountRow?.count || 0) === 0;
+    const initialRole = isFirstUser ? 'admin' : 'user';
+
     // Insert user
     db.prepare(`
-      INSERT INTO users (id, email, username, password_hash, full_name, avatar_url, bio, status, country, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(userId, cleanEmail, cleanUsername, passwordHash, full_name, avatar, userBio, 'Online on Nexus', userCountry, now, now);
+      INSERT INTO users (id, email, username, password_hash, full_name, avatar_url, bio, status, country, role, is_banned, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+    `).run(userId, cleanEmail, cleanUsername, passwordHash, full_name, avatar, userBio, 'Online on Nexus', userCountry, initialRole, now, now);
 
     // Insert default free subscription
     db.prepare(`
@@ -98,6 +102,8 @@ export async function register(req: Request, res: Response): Promise<void> {
       bio: userBio,
       status: 'Online on Nexus',
       country: userCountry,
+      role: initialRole,
+      is_banned: 0,
     });
     persistSubscriptionToPg({
       id: `sub_${userId}`,
@@ -160,6 +166,11 @@ export async function login(req: Request, res: Response): Promise<void> {
       return;
     }
 
+    if (user.is_banned) {
+      res.status(403).json({ error: 'Your account has been suspended by Royal Admin.' });
+      return;
+    }
+
     const token = jwt.sign(
       { userId: user.id, email: user.email, username: user.username },
       JWT_SECRET,
@@ -185,6 +196,11 @@ export async function getMe(req: AuthenticatedRequest, res: Response): Promise<v
     const user = getUserWithPlan(userId);
     if (!user) {
       res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    if (user.is_banned) {
+      res.status(403).json({ error: 'Your account has been suspended by Royal Admin.' });
       return;
     }
 
@@ -263,7 +279,10 @@ export async function updatePassword(req: AuthenticatedRequest, res: Response): 
 
 export function getUserWithPlan(userId: string): UserWithPlan | null {
   const row = db.prepare(`
-    SELECT u.id, u.email, u.username, u.full_name, u.avatar_url, u.bio, u.status, u.country, u.created_at, u.updated_at,
+    SELECT u.id, u.email, u.username, u.full_name, u.avatar_url, u.bio, u.status, u.country,
+           COALESCE(u.role, 'user') as role,
+           COALESCE(u.is_banned, 0) as is_banned,
+           u.created_at, u.updated_at,
            COALESCE(s.plan_id, 'free') as plan_id,
            COALESCE(s.status, 'active') as subscription_status,
            s.current_period_end as subscription_expires_at

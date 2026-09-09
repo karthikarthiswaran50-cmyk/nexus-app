@@ -40,3 +40,47 @@ export function requireAuth(req: AuthenticatedRequest, res: Response, next: Next
     res.status(401).json({ error: 'Invalid or expired token.' });
   }
 }
+
+export function requireAdmin(req: AuthenticatedRequest, res: Response, next: NextFunction): void {
+  requireAuth(req, res, () => {
+    const userId = req.user?.userId;
+    if (!userId) {
+      res.status(401).json({ error: 'Authentication required.' });
+      return;
+    }
+
+    // Import db dynamically to avoid circular import issues
+    import('../db.js').then(({ db }) => {
+      const row = db.prepare('SELECT role, email, username, is_banned FROM users WHERE id = ?').get(userId) as {
+        role?: string;
+        email: string;
+        username: string;
+        is_banned?: number;
+      } | undefined;
+
+      if (!row) {
+        res.status(404).json({ error: 'User not found.' });
+        return;
+      }
+
+      if (row.is_banned) {
+        res.status(403).json({ error: 'Your account has been suspended by Royal Admin.' });
+        return;
+      }
+
+      const isOwner = row.role === 'admin' ||
+        (process.env.OWNER_EMAIL && row.email.toLowerCase() === process.env.OWNER_EMAIL.toLowerCase()) ||
+        (process.env.OWNER_USERNAME && row.username.toLowerCase() === process.env.OWNER_USERNAME.toLowerCase());
+
+      if (!isOwner) {
+        res.status(403).json({ error: 'Access denied. Royal Owner / Admin privileges required.' });
+        return;
+      }
+
+      next();
+    }).catch(err => {
+      console.error('Error verifying admin permissions:', err);
+      res.status(500).json({ error: 'Server error during admin verification.' });
+    });
+  });
+}

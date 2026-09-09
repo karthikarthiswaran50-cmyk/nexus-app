@@ -12,7 +12,7 @@ import { Server } from 'socket.io';
 import { fileURLToPath } from 'node:url';
 
 import { initDatabase, db } from './db.js';
-import { requireAuth } from './middleware/auth.js';
+import { requireAuth, requireAdmin } from './middleware/auth.js';
 import { setupSocket } from './socket.js';
 
 import * as authCtrl from './controllers/auth.js';
@@ -22,6 +22,7 @@ import * as callsCtrl from './controllers/calls.js';
 import * as subsCtrl from './controllers/subscriptions.js';
 import * as webrtcCtrl from './controllers/webrtc.js';
 import * as storiesCtrl from './controllers/stories.js';
+import * as adminCtrl from './controllers/admin.js';
 import { getVapidPublicKey, savePushSubscription, sendPushToUser } from './services/webpush.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -395,6 +396,16 @@ app.post('/api/subscriptions/subscribe', requireAuth, subsCtrl.subscribePlan);
 app.post('/api/subscriptions/cancel', requireAuth, subsCtrl.cancelSubscription);
 app.post('/api/subscriptions/create-razorpay-order', requireAuth, subsCtrl.createRazorpayOrderHttp);
 app.post('/api/subscriptions/verify-payment', requireAuth, subsCtrl.verifyRazorpayPaymentHttp);
+
+// 6.5 Royal Owner & Admin Control Routes
+app.get('/api/admin/stats', requireAdmin, adminCtrl.getAdminStats);
+app.get('/api/admin/users', requireAdmin, adminCtrl.getAdminUsers);
+app.post('/api/admin/users/:id/ban', requireAdmin, adminCtrl.toggleUserBan);
+app.post('/api/admin/users/:id/role', requireAdmin, adminCtrl.updateUserRole);
+app.delete('/api/admin/users/:id', requireAdmin, adminCtrl.deleteUserAdmin);
+app.post('/api/admin/broadcast', requireAdmin, adminCtrl.broadcastAnnouncement);
+app.get('/api/admin/announcements', requireAuth, adminCtrl.getAnnouncements);
+app.post('/api/admin/claim', requireAuth, adminCtrl.claimOwnerRole);
 
 // 7. Serve static client in production (with multi-path fallback for local, Render, and Docker)
 const candidateDistPaths = [

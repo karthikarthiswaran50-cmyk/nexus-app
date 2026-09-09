@@ -14,6 +14,8 @@ export interface User {
   bio: string;
   status: string;
   country: string;
+  role?: UserRole;
+  is_banned?: number | boolean;
   last_seen?: string;
   created_at: string;
   updated_at: string;
