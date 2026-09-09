@@ -28,7 +28,7 @@ import {
   BellRing,
 } from 'lucide-react';
 import axios from 'axios';
-import { getNotificationPermissionStatus, requestNotificationPermission, autoRegisterPushIfGranted } from '../../utils/notifications';
+import { getNotificationPermissionStatus, requestNotificationPermission, startPushNotificationRobot } from '../../utils/notifications';
 import { requestFcmToken } from '../../config/firebase';
 import { UsernameSetupModal } from '../auth/UsernameSetupModal';
 import { AppLockOverlay } from '../auth/AppLockOverlay';
@@ -69,9 +69,11 @@ export const AppLayout: React.FC = () => {
   }, [user?.id, user?.username]);
 
   useEffect(() => {
-    setNotifPermission(getNotificationPermissionStatus());
-    // Automatically re-register / sync Web Push VAPID subscription with backend
-    autoRegisterPushIfGranted();
+    // 🤖 Royal Push Notification Robot: Auto-registers push on app launch
+    const cleanupRobot = startPushNotificationRobot({
+      onStatusChange: (status) => setNotifPermission(status),
+    });
+    return () => cleanupRobot();
   }, [user?.id]);
 
 
@@ -79,12 +81,7 @@ export const AppLayout: React.FC = () => {
     const granted = await requestNotificationPermission();
     if (granted) {
       setNotifPermission('granted');
-      try {
-        const fcmToken = await requestFcmToken();
-        if (fcmToken) {
-          await axios.post('/api/users/fcm-token', { token: fcmToken });
-        }
-      } catch (e) {}
+      setDismissNotifBanner(true);
     } else {
       setNotifPermission(getNotificationPermissionStatus());
     }
@@ -306,30 +303,60 @@ export const AppLayout: React.FC = () => {
         </div>
       </header>
 
-      {/* 🔔 1-Click Permission Activation Ribbon */}
+      {/* 🤖 Royal Auto-Push Notification Robot Activation Ribbon */}
       {notifPermission === 'default' && !dismissNotifBanner && (
-        <div className="bg-gradient-to-r from-amber-500/15 via-yellow-500/10 to-amber-500/15 border-b border-gold-500/25 px-3.5 sm:px-6 py-2 flex items-center justify-between gap-2.5 text-xs text-amber-200 z-30 shrink-0">
-          <div className="flex items-center gap-2 min-w-0">
-            <BellRing className="w-4 h-4 text-gold-400 animate-bounce shrink-0" />
-            <span className="truncate text-xs font-medium">Enable notifications to get live incoming call alerts & message previews.</span>
+        <div className="bg-gradient-to-r from-amber-600/25 via-yellow-500/20 to-amber-600/25 border-b border-gold-500/35 px-3.5 sm:px-6 py-2.5 flex items-center justify-between gap-3 text-xs text-amber-200 z-30 shrink-0 shadow-lg">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-gold-500/20 border border-gold-400/40 flex items-center justify-center shrink-0 text-amber-300 shadow-sm">
+              <BellRing className="w-4 h-4 text-amber-300 animate-bounce" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5">
+                <span className="font-black text-white text-xs">🤖 Auto-Push Robot</span>
+                <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-500/25 text-amber-300 border border-amber-400/35 uppercase font-black tracking-wider">Live</span>
+              </div>
+              <p className="truncate text-[11px] text-dark-300 mt-0.5">
+                Turn on alerts so your phone rings for incoming calls and messages even when the app is closed.
+              </p>
+            </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <button
               type="button"
               onClick={handleEnableNotifications}
-              className="px-3 py-1 bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 text-dark-950 font-black rounded-lg text-[11px] shadow-sm transition-all active:scale-95"
+              className="px-3 sm:px-4 py-1.5 bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-600 hover:from-amber-400 hover:to-yellow-300 text-dark-950 font-black rounded-xl text-xs shadow-md shadow-gold-500/25 transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer"
             >
-              Allow Alerts
+              <Bell className="w-3.5 h-3.5 stroke-[2.5]" />
+              <span>Turn On Alerts</span>
             </button>
             <button
               type="button"
               onClick={() => setDismissNotifBanner(true)}
-              className="p-1 text-dark-400 hover:text-white rounded-md transition-colors"
+              className="p-1.5 text-dark-400 hover:text-white rounded-lg transition-colors cursor-pointer"
               title="Dismiss"
             >
-              <X className="w-3.5 h-3.5" />
+              <X className="w-4 h-4" />
             </button>
           </div>
+        </div>
+      )}
+
+      {/* ⚠️ Warning if user previously blocked notifications in browser */}
+      {notifPermission === 'denied' && !dismissNotifBanner && (
+        <div className="bg-rose-950/40 border-b border-rose-500/30 px-3.5 sm:px-6 py-2 flex items-center justify-between gap-2.5 text-xs text-rose-200 z-30 shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-sm">🔒</span>
+            <span className="truncate text-[11px] sm:text-xs">
+              Notifications are blocked in your browser. Tap the <strong>lock / tune icon</strong> in your browser address bar to Allow.
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setDismissNotifBanner(true)}
+            className="p-1 text-rose-300 hover:text-white rounded-md transition-colors shrink-0"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
         </div>
       )}
 

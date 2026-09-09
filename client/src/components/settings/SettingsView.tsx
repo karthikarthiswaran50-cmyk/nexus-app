@@ -479,12 +479,18 @@ export const SettingsView: React.FC = () => {
         <div className="bg-dark-900 border border-gold-500/15 rounded-3xl p-6 space-y-5 shadow-xl royal-card md:col-span-2">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gold-500/15 pb-4">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-gold-500/10 border border-gold-500/30 flex items-center justify-center text-gold-400">
+              <div className="w-9 h-9 rounded-xl bg-gold-500/15 border border-gold-500/35 flex items-center justify-center text-gold-400">
                 <BellRing className="w-4 h-4" />
               </div>
               <div>
-                <h3 className="text-sm font-black text-white">Background Push Notifications</h3>
-                <p className="text-[11px] text-dark-300">Get call & message alerts even when app is closed</p>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-black text-white">Background Push Notifications</h3>
+                  <span className="text-[9px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-black uppercase tracking-wider flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    🤖 Robot Active
+                  </span>
+                </div>
+                <p className="text-[11px] text-dark-300">Auto-Push Robot automatically syncs your device on app open</p>
               </div>
             </div>
 
@@ -504,6 +510,23 @@ export const SettingsView: React.FC = () => {
               }`}>
                 {pushSubCount === null ? '⏳ Checking...' : (pushSubCount > 0 ? `✓ ${pushSubCount} Device Registered` : '✗ Not Registered')}
               </span>
+            </div>
+          </div>
+
+          {/* 🤖 Auto-Push Robot Status Ribbon */}
+          <div className="p-3.5 rounded-2xl bg-dark-850/80 border border-gold-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2.5">
+              <span className="text-base">🤖</span>
+              <div>
+                <p className="font-bold text-white text-xs">Auto-Push Robot is Running</p>
+                <p className="text-[11px] text-dark-300">
+                  App open ஆனதும் notification தானாகவே register ஆகிவிடும். Settings-ல் எதுவும் செய்யத் தேவையில்லை.
+                </p>
+              </div>
+            </div>
+            <div className="shrink-0 flex items-center gap-1.5 text-[11px] font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-xl border border-emerald-500/20">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span>Auto-Sync on Launch</span>
             </div>
           </div>
 

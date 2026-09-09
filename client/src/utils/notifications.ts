@@ -45,7 +45,18 @@ export const subscribeToWebPush = async (force = false): Promise<boolean> => {
   _subscribeInFlight = true;
 
   try {
-    const registration = await navigator.serviceWorker.ready;
+    // Ensure service worker is registered
+    try {
+      await navigator.serviceWorker.register('/sw.js');
+    } catch (e) {}
+
+    // Wait for service worker with timeout fallback
+    const registration = await Promise.race([
+      navigator.serviceWorker.ready,
+      new Promise<ServiceWorkerRegistration>((_, reject) =>
+        setTimeout(() => reject(new Error('SW ready timeout')), 6000)
+      ),
+    ]);
 
     // Fetch current VAPID public key from server
     const res = await axios.get('/api/notifications/vapid-public-key', { timeout: 10000 });
@@ -61,7 +72,9 @@ export const subscribeToWebPush = async (force = false): Promise<boolean> => {
 
     // Force-unsubscribe if requested (e.g. after user clicks Allow Alerts)
     if (subscription && force) {
-      await subscription.unsubscribe();
+      try {
+        await subscription.unsubscribe();
+      } catch (e) {}
       subscription = null;
     }
 
@@ -78,10 +91,10 @@ export const subscribeToWebPush = async (force = false): Promise<boolean> => {
       subscription: subscription.toJSON(),
     }, { timeout: 10000 });
 
-    console.log('📱 Web Push subscription registered!', subscription.endpoint.slice(0, 60) + '...');
+    console.log('🤖 [Push Robot] Device Web Push registered with server!', subscription.endpoint.slice(0, 55) + '...');
     return true;
   } catch (err: any) {
-    console.warn('⚠️ Web Push subscription error:', err?.message || err);
+    console.warn('⚠️ Web Push subscription note:', err?.message || err);
     return false;
   } finally {
     _subscribeInFlight = false;
@@ -89,8 +102,30 @@ export const subscribeToWebPush = async (force = false): Promise<boolean> => {
 };
 
 /**
- * Request browser notification permission, then subscribe to Web Push.
- * Triggered by user clicking "Allow Alerts" button.
+ * Sync both Web Push VAPID and FCM token (if available) with server.
+ */
+export const syncAllPushTokens = async (force = false): Promise<boolean> => {
+  let webPushSuccess = false;
+  try {
+    webPushSuccess = await subscribeToWebPush(force);
+  } catch (e) {}
+
+  try {
+    // Dynamically request FCM token if configured
+    const { requestFcmToken } = await import('../config/firebase');
+    const fcmToken = await requestFcmToken();
+    if (fcmToken) {
+      await axios.post('/api/users/fcm-token', { token: fcmToken });
+      console.log('🤖 [Push Robot] FCM Push Token synchronized!');
+    }
+  } catch (e) {}
+
+  return webPushSuccess;
+};
+
+/**
+ * Request browser notification permission, then subscribe to Web Push & FCM.
+ * Triggered by 1-tap activation or user interaction.
  */
 export const requestNotificationPermission = async (): Promise<boolean> => {
   if (typeof window === 'undefined' || !('Notification' in window)) {
@@ -101,7 +136,7 @@ export const requestNotificationPermission = async (): Promise<boolean> => {
     const result = await Notification.requestPermission();
     if (result === 'granted') {
       // Force-refresh subscription on explicit user grant
-      await subscribeToWebPush(true);
+      await syncAllPushTokens(true);
       return true;
     }
     return false;
@@ -120,10 +155,107 @@ export const autoRegisterPushIfGranted = (): void => {
   if (Notification.permission !== 'granted') return;
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
 
-  // Wait for service worker to activate before subscribing
   setTimeout(() => {
-    subscribeToWebPush(false).catch(() => {});
-  }, 2000);
+    syncAllPushTokens(false).catch(() => {});
+  }, 1000);
+};
+
+let _robotInitialized = false;
+let _lastSyncTimestamp = 0;
+
+/**
+ * 🤖 Royal Auto-Push Robot
+ * Automatically turns on notifications on app open:
+ * 1. Checks current permission.
+ * 2. If 'granted' -> auto-syncs Web Push and FCM immediately with server.
+ * 3. If 'default' -> attempts auto-request, and attaches 1-touch auto-trigger to first user click/tap.
+ * 4. Syncs on visibilitychange (when phone is unlocked or user switches back to app tab).
+ * 5. Heartbeat every 10 minutes to prevent subscription expiration.
+ */
+export const startPushNotificationRobot = (options?: {
+  onStatusChange?: (status: 'granted' | 'denied' | 'default' | 'unsupported') => void;
+}): (() => void) => {
+  if (typeof window === 'undefined') return () => {};
+
+  const currentStatus = getNotificationPermissionStatus();
+  if (options?.onStatusChange) {
+    options.onStatusChange(currentStatus);
+  }
+
+  const triggerRobotSync = async (force = false) => {
+    const now = Date.now();
+    if (!force && now - _lastSyncTimestamp < 25000) return; // Prevent excessive spam
+    _lastSyncTimestamp = now;
+
+    if (Notification.permission === 'granted') {
+      console.log('🤖 [Royal Push Robot] Running auto-registration...');
+      await syncAllPushTokens(force);
+      localStorage.setItem('nexus_push_robot_last_sync', String(now));
+      if (options?.onStatusChange) {
+        options.onStatusChange('granted');
+      }
+    }
+  };
+
+  // 1. Immediately run on app open
+  if (currentStatus === 'granted') {
+    triggerRobotSync(false).catch(() => {});
+  } else if (currentStatus === 'default') {
+    // Attempt silent browser prompt on startup
+    try {
+      Notification.requestPermission().then((res) => {
+        if (options?.onStatusChange) options.onStatusChange(res);
+        if (res === 'granted') {
+          triggerRobotSync(true).catch(() => {});
+        }
+      }).catch(() => {});
+    } catch (e) {}
+
+    // Attach 1-Touch Auto-Activator: The first time user touches or clicks anywhere, trigger permission prompt!
+    const onFirstUserTouch = async () => {
+      window.removeEventListener('click', onFirstUserTouch, true);
+      window.removeEventListener('touchstart', onFirstUserTouch, true);
+      window.removeEventListener('pointerdown', onFirstUserTouch, true);
+
+      if (Notification.permission === 'default') {
+        try {
+          console.log('🤖 [Royal Push Robot] User interaction detected -> requesting permission...');
+          const res = await Notification.requestPermission();
+          if (options?.onStatusChange) options.onStatusChange(res);
+          if (res === 'granted') {
+            await triggerRobotSync(true);
+          }
+        } catch (e) {}
+      }
+    };
+
+    window.addEventListener('click', onFirstUserTouch, { capture: true, once: true });
+    window.addEventListener('touchstart', onFirstUserTouch, { capture: true, once: true });
+    window.addEventListener('pointerdown', onFirstUserTouch, { capture: true, once: true });
+  }
+
+  if (_robotInitialized) return () => {};
+  _robotInitialized = true;
+
+  // 2. Re-sync when user returns to app (visibility change)
+  const handleVisibility = () => {
+    if (document.visibilityState === 'visible' && Notification.permission === 'granted') {
+      triggerRobotSync(false).catch(() => {});
+    }
+  };
+  document.addEventListener('visibilitychange', handleVisibility);
+
+  // 3. Periodic robot heartbeat every 10 minutes
+  const intervalId = setInterval(() => {
+    if (Notification.permission === 'granted') {
+      triggerRobotSync(false).catch(() => {});
+    }
+  }, 10 * 60 * 1000);
+
+  return () => {
+    document.removeEventListener('visibilitychange', handleVisibility);
+    clearInterval(intervalId);
+  };
 };
 
 // ============================================================
