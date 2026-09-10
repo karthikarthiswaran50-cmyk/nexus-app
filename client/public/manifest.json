@@ -1,7 +1,7 @@
 {
   "short_name": "Nexus",
-  "name": "Nexus Royal - Video & Chat",
-  "description": "High-Definition 4K Video Calling, Encrypted Audio Calls, Real-Time Messaging & Stories",
+  "name": "Nexus - Real-Time Video & Chat",
+  "description": "High-Definition Video Calling, Audio Calls, Messaging & Subscriptions",
   "icons": [
     {
       "src": "/icon-192.png",
@@ -16,13 +16,10 @@
       "purpose": "any maskable"
     }
   ],
-  "id": "com.nexusroyal.app",
   "start_url": "/",
-  "scope": "/",
+  "background_color": "#030712",
+  "theme_color": "#6366f1",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#030712",
-  "theme_color": "#090d16",
-  "lang": "en",
-  "categories": ["social", "communication", "entertainment"]
+  "scope": "/"
 }

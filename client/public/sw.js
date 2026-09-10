@@ -48,8 +48,8 @@ self.addEventListener('push', (event) => {
 
   const options = {
     body,
-    icon: notification.icon || data.callerAvatar || '/icon-192.svg',
-    badge: '/icon-192.svg',
+    icon: notification.icon || data.callerAvatar || '/icon-192.png',
+    badge: '/icon-192.png',
     vibrate: isCall ? [800, 300, 800, 300, 800, 300, 800, 300, 800] : [250, 100, 250],
     tag: isCall ? 'nexus-incoming-call' : tag,
     renotify: true,
