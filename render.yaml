@@ -15,6 +15,10 @@ services:
         sync: false
       - key: JWT_SECRET
         generateValue: true
+      - key: VAPID_PUBLIC_KEY
+        value: "BPmah1vTqW0sc6Q16Kr9EyX9v1fNoPUnKVkn-q24MVLK3B6BRqbM-Bz87lxvumx_W0r6hIKe3rxtOZQBo1Yqw_g"
+      - key: VAPID_PRIVATE_KEY
+        value: "Lu3cxCY1K0-WdsdMXenIefq4xaPC7Gr29A4SHPuOcXU"
       - key: RAZORPAY_KEY_ID
         sync: false
       - key: RAZORPAY_KEY_SECRET

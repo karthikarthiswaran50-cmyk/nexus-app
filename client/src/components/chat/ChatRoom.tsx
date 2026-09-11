@@ -355,7 +355,17 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       audioStreamRef.current = stream;
-      const mediaRecorder = new MediaRecorder(stream);
+
+      const mimeType = typeof MediaRecorder.isTypeSupported === 'function' && MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : typeof MediaRecorder.isTypeSupported === 'function' && MediaRecorder.isTypeSupported('audio/webm')
+        ? 'audio/webm'
+        : typeof MediaRecorder.isTypeSupported === 'function' && MediaRecorder.isTypeSupported('audio/mp4')
+        ? 'audio/mp4'
+        : '';
+      const options = mimeType ? { mimeType } : undefined;
+
+      const mediaRecorder = new MediaRecorder(stream, options);
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
 
@@ -384,11 +394,15 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
     clearInterval(recordingIntervalRef.current);
     setIsRecording(false);
 
-    mediaRecorderRef.current.onstop = async () => {
-      const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+    const activeRecorder = mediaRecorderRef.current;
+
+    activeRecorder.onstop = async () => {
+      const selectedMime = activeRecorder.mimeType || 'audio/webm';
+      const ext = selectedMime.includes('mp4') ? 'mp4' : 'webm';
+      const audioBlob = new Blob(audioChunksRef.current, { type: selectedMime });
       if (audioBlob.size < 100) return;
 
-      const audioFile = new File([audioBlob], `voice_${Date.now()}.webm`, { type: 'audio/webm' });
+      const audioFile = new File([audioBlob], `voice_${Date.now()}.${ext}`, { type: selectedMime });
       const formData = new FormData();
       formData.append('file', audioFile);
 

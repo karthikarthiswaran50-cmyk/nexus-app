@@ -112,7 +112,9 @@ export const ActiveCallOverlay: React.FC = () => {
             <Avatar src={peer.avatar_url} name={peer.full_name} size="xs" planId={peer.plan_id} />
             <div className="min-w-0">
               <h4 className="text-xs font-bold text-white truncate">{peer.full_name}</h4>
-              <span className="text-[10px] text-amber-300 font-mono font-semibold">{formattedDuration}</span>
+              <span className="text-[10px] text-amber-300 font-mono font-semibold">
+                {callStatus === 'ended' ? 'Call Ended' : formattedDuration}
+              </span>
             </div>
           </div>
           <button
@@ -213,9 +215,9 @@ export const ActiveCallOverlay: React.FC = () => {
               <PlanBadge planId={peer.plan_id} size="sm" />
             </div>
             <div className="flex items-center gap-2 mt-1">
-              <span className={`w-2 h-2 rounded-full ${callStatus === 'connected' ? 'bg-emerald-400 shadow-[0_0_8px_#10b981]' : 'bg-gold-400 animate-pulse'}`} />
+              <span className={`w-2 h-2 rounded-full ${callStatus === 'connected' ? 'bg-emerald-400 shadow-[0_0_8px_#10b981]' : callStatus === 'ended' ? 'bg-rose-500' : 'bg-gold-400 animate-pulse'}`} />
               <span className="text-xs text-amber-200/90 font-mono font-medium">
-                {callStatus === 'ringing' ? 'Royal Ringing...' : callStatus === 'connecting' ? 'Establishing 4K Quantum WebRTC...' : formattedDuration}
+                {callStatus === 'ringing' ? 'Royal Ringing...' : callStatus === 'connecting' ? 'Establishing 4K Quantum WebRTC...' : callStatus === 'ended' ? 'Call Ended' : formattedDuration}
               </span>
               {peerMicMuted && (
                 <span className="text-[10px] px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 flex items-center gap-1 border border-rose-500/30">

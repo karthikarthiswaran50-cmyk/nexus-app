@@ -251,43 +251,7 @@ app.post('/api/stories', requireAuth, uploadLimiter, upload.single('media'), sto
 app.post('/api/stories/:id/view', requireAuth, storiesCtrl.viewStory);
 app.delete('/api/stories/:id', requireAuth, storiesCtrl.deleteStory);
 
-// WebRTC ICE Configuration Endpoint
-app.get('/api/webrtc/config', (_req, res) => {
-  res.json({
-    iceServers: [
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' },
-      { urls: 'stun:stun2.l.google.com:19302' },
-      { urls: 'stun:stun3.l.google.com:19302' },
-      { urls: 'stun:stun4.l.google.com:19302' },
-      { urls: 'stun:stun.services.mozilla.com' },
-      { urls: 'stun:global.stun.twilio.com:3478' },
-      {
-        urls: [
-          'turn:openrelay.metered.ca:80',
-          'turn:openrelay.metered.ca:80?transport=tcp',
-          'turn:openrelay.metered.ca:443',
-          'turns:openrelay.metered.ca:443?transport=tcp',
-          'turns:openrelay.metered.ca:5349',
-        ],
-        username: 'openrelayproject',
-        credential: 'openrelayproject',
-      },
-      {
-        urls: [
-          'turn:global.relay.metered.ca:80',
-          'turn:global.relay.metered.ca:80?transport=tcp',
-          'turn:global.relay.metered.ca:443',
-          'turns:global.relay.metered.ca:443?transport=tcp',
-        ],
-        username: 'openrelayproject',
-        credential: 'openrelayproject',
-      },
-    ],
-    iceCandidatePoolSize: 10,
-    bundlePolicy: 'max-bundle',
-  });
-});
+
 
 // Push Notification & VAPID Endpoints
 app.get('/api/notifications/vapid-public-key', (_req, res) => {

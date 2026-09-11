@@ -345,9 +345,17 @@ export function setupSocket(io: Server) {
         return;
       }
 
+      // Clean up any stale active calls (> 60s without connection or older than 90s)
+      const now = Date.now();
+      for (const [key, call] of activeCalls.entries()) {
+        if (now - call.startedAt > 60000) {
+          activeCalls.delete(key);
+        }
+      }
+
       // Check if receiver is already in an active call
       const isReceiverBusy = Array.from(activeCalls.values()).some(
-        c => c.callerId === receiverId || c.receiverId === receiverId
+        c => (c.callerId === receiverId || c.receiverId === receiverId) && (now - c.startedAt < 60000)
       );
 
       if (isReceiverBusy) {
@@ -365,8 +373,8 @@ export function setupSocket(io: Server) {
           notification: {
             title: `📞 Incoming ${callType === 'video' ? 'Video' : 'Audio'} Call`,
             body: `${caller.full_name} is calling you on Nexus Royal... Tap to answer!`,
-            icon: caller.avatar_url || '/icon-192.svg',
-            badge: '/icon-192.svg',
+            icon: caller.avatar_url || '/icon-192.png',
+            badge: '/icon-192.png',
           },
           data: {
             type: 'call',
@@ -389,10 +397,55 @@ export function setupSocket(io: Server) {
         startedAt: Date.now(),
       });
 
+      // Clear any previous pending call timer for receiver
+      if (pendingCalls.has(receiverId)) {
+        clearTimeout(pendingCalls.get(receiverId)!.timeoutId);
+        pendingCalls.delete(receiverId);
+      }
+
+      // 45-second universal ringing timeout (works for both online & background/sleeping devices)
+      const timeoutId = setTimeout(() => {
+        if (pendingCalls.has(receiverId)) {
+          pendingCalls.delete(receiverId);
+          activeCalls.delete(`${userId}-${receiverId}`);
+          recordCallLog({
+            callerId: userId,
+            receiverId,
+            callType,
+            status: 'missed',
+            duration: 0,
+          });
+
+          // Inform caller that call was not answered
+          socket.emit('call:user_offline', {
+            receiverId,
+            message: `${receiver.full_name} did not answer. Missed call recorded.`,
+          });
+
+          // Stop ringing on any receiver sockets
+          const currentReceiverSockets = getSocketsForUser(receiverId);
+          currentReceiverSockets.forEach((sId) => {
+            io.to(sId).emit('call:ended', { fromUserId: userId, duration: 0 });
+          });
+        }
+      }, 45000);
+
+      // Register in pendingCalls so if receiver's device wakes up or reconnects, call is delivered
+      pendingCalls.set(receiverId, {
+        callerId: userId,
+        receiverId,
+        caller,
+        callType,
+        sdpOffer,
+        createdAt: Date.now(),
+        expiresAt: Date.now() + 45000,
+        timeoutId,
+      });
+
       const receiverSockets = getSocketsForUser(receiverId);
 
       if (receiverSockets.length > 0) {
-        // Forward incoming call signal directly to active receiver sockets
+        // Forward incoming call signal directly to all active receiver sockets
         receiverSockets.forEach((sId) => {
           io.to(sId).emit('call:incoming', {
             caller,
@@ -400,48 +453,17 @@ export function setupSocket(io: Server) {
             sdpOffer,
           });
         });
-        socket.emit('call:ringing', { receiverId, status: 'ringing' });
-      } else {
-        // Recipient is not actively in socket (phone screen locked, background PWA, or data on)
-        // DO NOT ABORT! Put into pending call state with 45s ringing timer (WhatsApp style)
-        if (pendingCalls.has(receiverId)) {
-          clearTimeout(pendingCalls.get(receiverId)!.timeoutId);
-        }
-
-        const timeoutId = setTimeout(() => {
-          if (pendingCalls.has(receiverId)) {
-            pendingCalls.delete(receiverId);
-            activeCalls.delete(`${userId}-${receiverId}`);
-            recordCallLog({
-              callerId: userId,
-              receiverId,
-              callType,
-              status: 'missed',
-              duration: 0,
-            });
-            socket.emit('call:user_offline', {
-              receiverId,
-              message: `${receiver.full_name} is not answering. Missed call recorded.`,
-            });
-          }
-        }, 45000);
-
-        pendingCalls.set(receiverId, {
-          callerId: userId,
+        socket.emit('call:ringing', {
           receiverId,
-          caller,
-          callType,
-          sdpOffer,
-          createdAt: Date.now(),
-          expiresAt: Date.now() + 45000,
-          timeoutId,
+          status: 'ringing',
+          message: `Ringing ${receiver.full_name}...`,
         });
-
+      } else {
         // Inform caller device to keep ringing and showing "Ringing mobile..."
         socket.emit('call:ringing', {
           receiverId,
           status: 'ringing',
-          message: `Ringing ${receiver.full_name}'s phone...`,
+          message: `Ringing ${receiver.full_name}'s mobile device...`,
         });
       }
     });

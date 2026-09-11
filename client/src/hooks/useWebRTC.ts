@@ -127,6 +127,16 @@ export function useWebRTC(session: ActiveCallSession | null) {
     };
   }, [callStatus]);
 
+  // 1.5 Auto-dismiss overlay cleanly when call ends
+  useEffect(() => {
+    if (callStatus === 'ended') {
+      const dismissTimer = setTimeout(() => {
+        endActiveCall();
+      }, 1500);
+      return () => clearTimeout(dismissTimer);
+    }
+  }, [callStatus, endActiveCall]);
+
   // 2. Queueing helper for ICE candidates
   const addOrQueueCandidate = useCallback(async (candidate: RTCIceCandidateInit) => {
     const pc = peerConnectionRef.current;
@@ -178,6 +188,10 @@ export function useWebRTC(session: ActiveCallSession | null) {
       try {
         const wantsVideo = session!.callType === 'video';
 
+        if (!navigator?.mediaDevices?.getUserMedia) {
+          throw new Error('Microphone and camera access requires a modern browser and secure HTTPS connection.');
+        }
+
         // Robust mobile & desktop audio constraints
         const audioConstraints: MediaTrackConstraints = {
           echoCancellation: true,
@@ -187,19 +201,29 @@ export function useWebRTC(session: ActiveCallSession | null) {
 
         let stream: MediaStream;
         try {
+          // Attempt optimal HD resolution
           stream = await navigator.mediaDevices.getUserMedia({
             audio: audioConstraints,
             video: wantsVideo ? { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' } : false,
           });
         } catch (mediaErr) {
-          console.warn('Primary media constraints failed, fallback to standard audio:', mediaErr);
+          console.warn('Primary HD media constraints failed, attempting standard video:', mediaErr);
           try {
-            stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-          } catch (audioOnlyErr) {
-            console.error('Failed to get any audio stream:', audioOnlyErr);
-            throw new Error('Microphone permission denied or device not found.');
+            // Attempt standard video without strict resolution constraints
+            stream = await navigator.mediaDevices.getUserMedia({
+              audio: true,
+              video: wantsVideo ? true : false,
+            });
+          } catch (standardVideoErr) {
+            console.warn('Standard video failed, falling back to crystal-clear voice audio:', standardVideoErr);
+            try {
+              stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+              setIsCameraOff(true);
+            } catch (audioOnlyErr) {
+              console.error('Failed to get any media stream:', audioOnlyErr);
+              throw new Error('Microphone permission denied. Please allow microphone in browser settings.');
+            }
           }
-          setIsCameraOff(true);
         }
 
         if (isCleanedUp) {
@@ -405,19 +429,25 @@ export function useWebRTC(session: ActiveCallSession | null) {
     const handleAccepted = async (data: { receiverId: string; sdpAnswer: any }) => {
       soundEffects.stopOutgoingRing();
       setCallStatus('connecting');
-      if (peerConnectionRef.current) {
-        await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(data.sdpAnswer));
-        await processPendingIceCandidates();
+      if (peerConnectionRef.current && data?.sdpAnswer) {
+        try {
+          if (peerConnectionRef.current.signalingState === 'have-local-offer') {
+            await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(data.sdpAnswer));
+            await processPendingIceCandidates();
 
-        // Process any candidates buffered while ringing
-        const preBuffered = getBufferedCandidates();
-        for (const item of preBuffered) {
-          if (item.candidate) {
-            await addOrQueueCandidate(item.candidate);
+            // Process any candidates buffered while ringing
+            const preBuffered = getBufferedCandidates();
+            for (const item of preBuffered) {
+              if (item.candidate) {
+                await addOrQueueCandidate(item.candidate);
+              }
+            }
+
+            socket?.emit('call:get_buffered_candidates');
           }
+        } catch (setDescErr) {
+          console.error('Error setting remote description on accepted call:', setDescErr);
         }
-
-        socket?.emit('call:get_buffered_candidates');
       }
     };
 

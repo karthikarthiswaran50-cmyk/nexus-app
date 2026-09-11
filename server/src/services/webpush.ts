@@ -51,6 +51,10 @@ interface VapidKeys {
   privateKey: string;
 }
 
+// Permanent fallback VAPID keypair so subscriptions stay valid across Render cold restarts
+const DEFAULT_VAPID_PUBLIC = 'BPmah1vTqW0sc6Q16Kr9EyX9v1fNoPUnKVkn-q24MVLK3B6BRqbM-Bz87lxvumx_W0r6hIKe3rxtOZQBo1Yqw_g';
+const DEFAULT_VAPID_PRIVATE = 'Lu3cxCY1K0-WdsdMXenIefq4xaPC7Gr29A4SHPuOcXU';
+
 let vapidKeys: VapidKeys = {
   publicKey: process.env.VAPID_PUBLIC_KEY || '',
   privateKey: process.env.VAPID_PRIVATE_KEY || '',
@@ -67,18 +71,17 @@ if (!vapidKeys.publicKey || !vapidKeys.privateKey) {
   }
 
   if (!vapidKeys.publicKey || !vapidKeys.privateKey) {
-    // Generate new VAPID keys on first launch
-    const generated = webpush.generateVAPIDKeys();
+    // Use stable default keypair so registered clients never lose notification access
     vapidKeys = {
-      publicKey: generated.publicKey,
-      privateKey: generated.privateKey,
+      publicKey: DEFAULT_VAPID_PUBLIC,
+      privateKey: DEFAULT_VAPID_PRIVATE,
     };
     try {
       if (!fs.existsSync(dataDir)) {
         fs.mkdirSync(dataDir, { recursive: true });
       }
       fs.writeFileSync(keysFile, JSON.stringify(vapidKeys, null, 2), 'utf8');
-      console.log('🔑 New VAPID Keys generated and saved for Web Push notifications!');
+      console.log('🔑 Permanent VAPID Keys saved for Web Push notifications!');
     } catch (e) {
       console.warn('Could not persist VAPID keys to disk:', e);
     }
