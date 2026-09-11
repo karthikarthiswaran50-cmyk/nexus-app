@@ -31,11 +31,12 @@ jobs:
         run: |
           mkdir android-build
           cd android-build
-          bubblewrap init --manifest="https://nexus-platform-76j4.onrender.com/manifest.json" --skip-questions || true
-          bubblewrap build || true
+          bubblewrap init --manifest="https://nexus-platform-76j4.onrender.com/manifest.json" --skip-questions
+          bubblewrap build
 
       - name: Upload APK Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: nexus-royal-android
           path: android-build/**/*.apk
+          if-no-files-found: error

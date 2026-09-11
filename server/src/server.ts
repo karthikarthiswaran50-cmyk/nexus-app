@@ -148,7 +148,7 @@ const upload = multer({
   fileFilter: (_req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
     if (!ALLOWED_MIME_TYPES.has(file.mimetype) || !ALLOWED_EXTENSIONS.has(ext)) {
-      return cb(new Error('Security violation: Dangerous or unauthorized file format detected.'));
+      return cb(Object.assign(new Error('Unsupported file format. Choose an image, audio, or video file.'), { status: 415 }));
     }
     cb(null, true);
   },
@@ -398,6 +398,19 @@ if (clientDistDir) {
   });
   console.warn('⚠️ Warning: client/dist not found. Please run `npm run build:client`.');
 }
+
+app.use((error: any, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (res.headersSent) return next(error);
+  if (error instanceof multer.MulterError) {
+    res.status(error.code === 'LIMIT_FILE_SIZE' ? 413 : 400).json({
+      error: error.code === 'LIMIT_FILE_SIZE' ? 'File is too large. Maximum upload size is 10 MB.' : 'Invalid file upload.',
+    });
+    return;
+  }
+  const status = [400, 413, 415].includes(error.status) ? error.status : 500;
+  if (status === 500) console.error('Request failed:', error);
+  res.status(status).json({ error: status === 500 ? 'Something went wrong. Please try again.' : error.message });
+});
 
 // 8. Server Protocol Setup (HTTPS or HTTP)
 const isHttps = process.env.HTTPS_ENABLED === 'true';

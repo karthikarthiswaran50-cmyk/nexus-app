@@ -221,6 +221,7 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
           <div className="h-full flex flex-col">
             <div className="flex-1 h-full min-h-0">
               <ChatRoom
+            key={`${user?.id}:${selectedUser.id}`}
                 otherUser={selectedUser}
                 onBack={() => setSelectedUser(null)}
                 onViewProfile={onViewProfile}

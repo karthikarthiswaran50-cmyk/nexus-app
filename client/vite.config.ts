@@ -7,10 +7,10 @@ export default defineConfig({
   build: {
     // Strip console.log and debugger statements from production bundle
     minify: 'esbuild',
-    esbuildOptions: {
-      drop: ['debugger'],
-      pure: ['console.log', 'console.debug', 'console.warn'],
-    },
+  },
+  esbuild: {
+    drop: ['debugger'],
+    pure: ['console.log', 'console.debug'],
   },
   server: {
     port: 5173,
