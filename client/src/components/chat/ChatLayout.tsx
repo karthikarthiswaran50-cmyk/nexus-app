@@ -65,12 +65,38 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
     }
   }, [initialSelectedUser]);
 
-  // Update conversations on new incoming message (only from others — own messages already update via message_sent)
+  // Update conversation list optimistically when a new message arrives
   useEffect(() => {
-    if (latestMessage && latestMessage.sender_id !== user?.id) {
-      fetchConversations();
-    }
-  }, [latestMessage]);
+    if (!latestMessage) return;
+    const now = latestMessage.created_at || new Date().toISOString();
+    setConversations(prev => {
+      const otherId = latestMessage.sender_id === user?.id
+        ? latestMessage.receiver_id
+        : latestMessage.sender_id;
+
+      const existingIdx = prev.findIndex(c =>
+        c.other_user?.id === otherId
+      );
+
+      if (existingIdx === -1) {
+        // New conversation — do a full fetch to pick up the new entry
+        fetchConversations();
+        return prev;
+      }
+
+      // Update existing conversation in place and bubble it to the top
+      const updated = [...prev];
+      const conv = { ...updated[existingIdx] };
+      conv.last_message = latestMessage;
+      conv.last_message_at = now;
+      if (latestMessage.sender_id !== user?.id) {
+        conv.unread_count = (conv.unread_count || 0) + 1;
+      }
+      updated.splice(existingIdx, 1);
+      updated.unshift(conv);
+      return updated;
+    });
+  }, [latestMessage, user?.id]);
 
   const filteredConversations = conversations.filter((c) => {
     if (!searchQuery) return true;
@@ -168,7 +194,13 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
                 <button
                   key={conv.id}
                   type="button"
-                  onClick={() => setSelectedUser(other)}
+                  onClick={() => {
+                    setSelectedUser(other);
+                    // Clear unread badge immediately on selection
+                    setConversations(prev => prev.map(c =>
+                      c.id === conv.id ? { ...c, unread_count: 0 } : c
+                    ));
+                  }}
                   className={`w-full p-3 rounded-2xl flex items-center gap-3 text-left transition-all group ${
                     isSelected
                       ? 'bg-gradient-to-r from-amber-500/20 via-yellow-500/15 to-transparent border border-gold-400/40 shadow-inner'

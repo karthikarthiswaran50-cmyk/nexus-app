@@ -49,7 +49,9 @@ export const AppLayout: React.FC = () => {
   
   // Notification states
   const [notifPermission, setNotifPermission] = useState<'granted' | 'denied' | 'default' | 'unsupported'>('default');
-  const [dismissNotifBanner, setDismissNotifBanner] = useState(false);
+  const [dismissNotifBanner, setDismissNotifBanner] = useState(() =>
+    localStorage.getItem('nexus_notif_banner_dismissed') === 'true'
+  );
   const [inAppMessageToast, setInAppMessageToast] = useState<{ senderName: string; preview: string; sender?: User } | null>(null);
 
   // Custom Username Onboarding Modal
@@ -81,10 +83,11 @@ export const AppLayout: React.FC = () => {
     const granted = await requestNotificationPermission();
     if (granted) {
       setNotifPermission('granted');
-      setDismissNotifBanner(true);
     } else {
       setNotifPermission(getNotificationPermissionStatus());
     }
+    localStorage.setItem('nexus_notif_banner_dismissed', 'true');
+    setDismissNotifBanner(true);
   };
 
   // Listen to incoming messages for in-app floating banner
@@ -331,7 +334,7 @@ export const AppLayout: React.FC = () => {
             </button>
             <button
               type="button"
-              onClick={() => setDismissNotifBanner(true)}
+              onClick={() => { localStorage.setItem('nexus_notif_banner_dismissed', 'true'); setDismissNotifBanner(true); }}
               className="p-1.5 text-dark-400 hover:text-white rounded-lg transition-colors cursor-pointer"
               title="Dismiss"
             >

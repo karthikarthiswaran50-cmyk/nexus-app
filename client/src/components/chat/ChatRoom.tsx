@@ -225,9 +225,17 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
 
   useEffect(() => {
     setLoading(true);
+    setMessages([]); // Clear messages immediately to prevent stale flash when switching chats
     setReplyingTo(null);
     fetchMessages();
   }, [otherUser.id]);
+
+  // Re-send read receipt if socket reconnects mid-conversation
+  useEffect(() => {
+    if (socket && !loading) {
+      socket.emit('chat:read', { senderId: otherUser.id });
+    }
+  }, [socket, otherUser.id]);
 
   // Real-time new message
   useEffect(() => {
@@ -474,7 +482,46 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
   };
 
   const handleCopyText = (content: string) => {
-    navigator.clipboard.writeText(content);
+    const copyText = () => {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(content)
+          .then(() => showToast('Message copied!'))
+          .catch(() => {
+            // Fallback for mobile Safari / old browsers
+            const el = document.createElement('textarea');
+            el.value = content;
+            el.style.position = 'fixed';
+            el.style.top = '-9999px';
+            document.body.appendChild(el);
+            el.focus();
+            el.select();
+            try {
+              document.execCommand('copy');
+              showToast('Message copied!');
+            } catch {
+              showToast('Copy not supported on this browser');
+            }
+            document.body.removeChild(el);
+          });
+      } else {
+        // Legacy fallback
+        const el = document.createElement('textarea');
+        el.value = content;
+        el.style.position = 'fixed';
+        el.style.top = '-9999px';
+        document.body.appendChild(el);
+        el.focus();
+        el.select();
+        try {
+          document.execCommand('copy');
+          showToast('Message copied!');
+        } catch {
+          showToast('Copy not supported on this browser');
+        }
+        document.body.removeChild(el);
+      }
+    };
+    copyText();
     setActiveMenuMessageId(null);
   };
 
@@ -492,7 +539,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
       
       {/* Toast notification */}
       {toastMessage && (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-xl bg-dark-900/95 border border-gold-500/30 text-amber-200 text-xs font-semibold shadow-lg backdrop-blur-sm animate-in fade-in slide-in-from-top-2 duration-200">
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[200] px-4 py-2 rounded-xl bg-dark-900/95 border border-gold-500/30 text-amber-200 text-xs font-semibold shadow-lg backdrop-blur-sm animate-in fade-in slide-in-from-top-2 duration-200 pointer-events-none whitespace-nowrap">
           {toastMessage}
         </div>
       )}

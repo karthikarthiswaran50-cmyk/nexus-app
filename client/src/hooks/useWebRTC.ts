@@ -267,7 +267,6 @@ export function useWebRTC(session: ActiveCallSession | null) {
 
         // Dedicated remote track handler with direct <audio> pipeline
         pc.ontrack = (event) => {
-          console.log('WebRTC ontrack event:', event.track.kind, event.streams);
 
           if (event.track.kind === 'audio') {
             event.track.enabled = true;
@@ -334,7 +333,6 @@ export function useWebRTC(session: ActiveCallSession | null) {
 
         // Connection state
         pc.onconnectionstatechange = () => {
-          console.log('PeerConnection state:', pc.connectionState);
           if (pc.connectionState === 'connected') {
             soundEffects.stopOutgoingRing();
             soundEffects.playConnectedTone();
@@ -347,12 +345,10 @@ export function useWebRTC(session: ActiveCallSession | null) {
 
         // ICE connection state monitor
         pc.oniceconnectionstatechange = () => {
-          console.log('ICE connection state:', pc.iceConnectionState);
           if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
             remoteAudioRef.current?.play().catch(() => {});
           } else if (pc.iceConnectionState === 'failed') {
             if (session?.role === 'caller' && typeof (pc as any).restartIce === 'function') {
-              console.log('Restarting ICE connection...');
               (pc as any).restartIce();
             }
           }

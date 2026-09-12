@@ -64,11 +64,19 @@ export const StoriesBar: React.FC = () => {
                 ? 'bg-gradient-to-tr from-amber-400 via-yellow-300 to-amber-500 p-[2px]'
                 : 'border-2 border-dashed border-gold-500/40 hover:border-gold-400'
             }`}>
-              <img
-                src={user?.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'}
-                alt="My profile"
-                className="w-11 h-11 rounded-full object-cover bg-dark-800"
-              />
+              {user?.avatar_url ? (
+                <img
+                  src={user.avatar_url}
+                  alt="My profile"
+                  referrerPolicy="no-referrer"
+                  className="w-11 h-11 rounded-full object-cover bg-dark-800"
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                />
+              ) : (
+                <div className="w-11 h-11 rounded-full bg-gradient-to-br from-amber-600 to-yellow-500 flex items-center justify-center text-dark-950 font-black text-sm">
+                  {user?.full_name?.[0]?.toUpperCase() || '?'}
+                </div>
+              )}
             </div>
             <button
               type="button"
@@ -102,11 +110,23 @@ export const StoriesBar: React.FC = () => {
                   ? 'bg-gradient-to-tr from-amber-500 via-yellow-400 to-amber-300 animate-pulse'
                   : 'bg-dark-700 border border-white/10'
               }`}>
-                <img
-                  src={group.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'}
-                  alt={group.full_name}
-                  className="w-11 h-11 rounded-full object-cover bg-dark-800 border-2 border-dark-900"
-                />
+                {group.avatar_url ? (
+                  <img
+                    src={group.avatar_url}
+                    alt={group.full_name}
+                    referrerPolicy="no-referrer"
+                    className="w-11 h-11 rounded-full object-cover bg-dark-800 border-2 border-dark-900"
+                    onError={(e) => {
+                      const el = e.target as HTMLImageElement;
+                      el.style.display = 'none';
+                      el.parentElement!.innerHTML = `<div class="w-11 h-11 rounded-full bg-gradient-to-br from-dark-600 to-dark-700 flex items-center justify-center text-white font-black text-sm border-2 border-dark-900">${group.full_name?.[0]?.toUpperCase() || '?'}</div>`;
+                    }}
+                  />
+                ) : (
+                  <div className="w-11 h-11 rounded-full bg-gradient-to-br from-dark-600 to-dark-700 flex items-center justify-center text-white font-black text-sm border-2 border-dark-900">
+                    {group.full_name?.[0]?.toUpperCase() || '?'}
+                  </div>
+                )}
               </div>
               <span className="text-[10px] font-medium text-dark-300 group-hover:text-white truncate max-w-[54px]">
                 {group.username}
