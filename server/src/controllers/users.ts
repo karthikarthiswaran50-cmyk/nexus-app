@@ -22,10 +22,21 @@ export async function getUsers(req: AuthenticatedRequest, res: Response): Promis
 
     const rawQuery = (req.query.q as string || '').trim();
 
-
-    // Instagram style: Only return profiles if user actively searches
     if (!rawQuery) {
-      res.json({ users: [] });
+      // Return active/suggested community members so Directory is never a blank dead screen
+      const sql = `
+        SELECT u.id, '' as email, u.username, u.full_name, u.avatar_url, u.bio, u.status, u.country, u.created_at, u.updated_at,
+               COALESCE(s.plan_id, 'free') as plan_id,
+               COALESCE(s.status, 'active') as subscription_status,
+               s.current_period_end as subscription_expires_at
+        FROM users u
+        LEFT JOIN subscriptions s ON u.id = s.user_id
+        WHERE COALESCE(u.is_banned, 0) = 0
+        ORDER BY u.created_at DESC
+        LIMIT 30
+      `;
+      const users = (db.prepare(sql).all() as unknown) as UserWithPlan[];
+      res.json({ users });
       return;
     }
 
@@ -38,23 +49,24 @@ export async function getUsers(req: AuthenticatedRequest, res: Response): Promis
              s.current_period_end as subscription_expires_at
       FROM users u
       LEFT JOIN subscriptions s ON u.id = s.user_id
-      WHERE u.id != ? AND (lower(u.username) LIKE ? OR lower(u.full_name) LIKE ?)
+      WHERE COALESCE(u.is_banned, 0) = 0 AND (lower(u.username) LIKE ? OR lower(u.full_name) LIKE ?)
       ORDER BY 
         CASE 
           WHEN lower(u.username) = ? THEN 1
           WHEN lower(u.username) LIKE ? THEN 2
-          ELSE 3
+          WHEN lower(u.full_name) LIKE ? THEN 3
+          ELSE 4
         END,
         u.created_at DESC
-      LIMIT 25
+      LIMIT 30
     `;
 
     const users = (db.prepare(sql).all(
-      currentUserId,
       `%${query}%`,
       `%${query}%`,
       query,
-      `${query}%`
+      `${query}%`,
+      `%${query}%`
     ) as unknown) as UserWithPlan[];
 
     res.json({ users });

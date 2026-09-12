@@ -117,13 +117,14 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({ isOpen
 
   useEffect(() => {
     if (isOpen) {
-      if (currentUser?.role === 'admin') {
-        fetchStats();
-        fetchUsers();
-        fetchAnnouncements();
+      fetchStats();
+      fetchUsers();
+      fetchAnnouncements();
+      if (refreshUser) {
+        refreshUser();
       }
     }
-  }, [isOpen, currentUser?.role]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 

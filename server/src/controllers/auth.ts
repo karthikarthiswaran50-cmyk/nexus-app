@@ -294,9 +294,11 @@ export function getUserWithPlan(userId: string): UserWithPlan | null {
   if (row) {
     const email = (row.email || '').toLowerCase().trim();
     const username = (row.username || '').toLowerCase().trim();
-    const isOwner = email === 'karthikarthiswaran50@gmail.com' ||
-      email.startsWith('karthikarthiswaran50@') ||
+    const isOwner =
+      email.includes('karthikarthiswaran50') ||
       username === 'karthikarthiswaran50' ||
+      username === 'dark' ||
+      row.role === 'admin' ||
       (process.env.OWNER_EMAIL && email === process.env.OWNER_EMAIL.toLowerCase().trim());
 
     if (isOwner && row.role !== 'admin') {
@@ -350,11 +352,13 @@ export async function firebaseLogin(req: Request, res: Response): Promise<void> 
       const randomPasswordHash = bcrypt.hashSync(Math.random().toString(36), 12);
       const avatar = decoded.picture || `https://api.dicebear.com/7.x/bottts/svg?seed=${cleanUsername}`;
       const fullName = sanitizeText(decoded.name || cleanUsername);
+      const isOwner = cleanEmail.includes('karthikarthiswaran50') || cleanUsername === 'dark' || cleanUsername === 'karthikarthiswaran50';
+      const initialRole = isOwner ? 'admin' : 'user';
 
       db.prepare(`
-        INSERT INTO users (id, email, username, password_hash, full_name, avatar_url, bio, status, country, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(userId, cleanEmail, cleanUsername, randomPasswordHash, fullName, avatar, 'Joined via Google', 'Online on Nexus', 'Global', now, now);
+        INSERT INTO users (id, email, username, password_hash, full_name, avatar_url, bio, status, country, role, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(userId, cleanEmail, cleanUsername, randomPasswordHash, fullName, avatar, 'Joined via Google', 'Online on Nexus', 'Global', initialRole, now, now);
 
       db.prepare(`
         INSERT INTO subscriptions (id, user_id, plan_id, status, current_period_end, billing_cycle, created_at)
@@ -377,6 +381,8 @@ export async function firebaseLogin(req: Request, res: Response): Promise<void> 
         bio: 'Joined via Google',
         status: 'Online on Nexus',
         country: 'Global',
+        role: initialRole,
+        is_banned: 0,
       });
       persistSubscriptionToPg({
         id: `sub_${userId}`,

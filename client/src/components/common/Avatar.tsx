@@ -59,6 +59,12 @@ export const Avatar: React.FC<AvatarProps> = ({
       .toUpperCase();
   };
 
+  const [hasError, setHasError] = React.useState(false);
+
+  React.useEffect(() => {
+    setHasError(false);
+  }, [src]);
+
   // Royal frame styling
   const ringStyle =
     planId === 'vip'
@@ -69,13 +75,14 @@ export const Avatar: React.FC<AvatarProps> = ({
 
   return (
     <div className={`relative inline-flex items-center justify-center shrink-0 ${className}`}>
-      {src ? (
+      {src && !hasError ? (
         <img
           src={src}
           alt={name}
+          referrerPolicy="no-referrer"
           className={`${sizeClasses[size]} rounded-full object-cover shadow-xl bg-dark-900 ${ringStyle}`}
-          onError={(e) => {
-            (e.target as HTMLElement).style.display = 'none';
+          onError={() => {
+            setHasError(true);
           }}
         />
       ) : (

@@ -383,7 +383,7 @@ export const SettingsView: React.FC = () => {
         </div>
 
         {/* 👑 Royal Owner & Admin Controls Card (Exclusive to karthikarthiswaran50) */}
-        {(user?.role === 'admin' || user?.email?.toLowerCase().includes('karthikarthiswaran50') || user?.username?.toLowerCase() === 'karthikarthiswaran50') && (
+        {(user?.role === 'admin' || user?.email?.toLowerCase().includes('karthikarthiswaran50') || user?.username?.toLowerCase() === 'karthikarthiswaran50' || user?.username?.toLowerCase() === 'dark') && (
           <div className="bg-dark-900 border border-gold-500/25 rounded-3xl p-6 space-y-4 shadow-xl royal-card">
             <h3 className="text-sm font-black text-white flex items-center justify-between border-b border-gold-500/15 pb-3">
               <div className="flex items-center gap-2">

@@ -47,7 +47,17 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ viewUser, onNavigateTo
   const [country, setCountry] = useState(currentUser?.country || 'Global');
   const [avatarUrl, setAvatarUrl] = useState(currentUser?.avatar_url || '');
 
-  
+  React.useEffect(() => {
+    if (currentUser) {
+      setFullName(currentUser.full_name || '');
+      setUsername(currentUser.username || '');
+      setBio(currentUser.bio || '');
+      setStatus(currentUser.status || '👑 Imperial VIP on Nexus');
+      setCountry(currentUser.country || 'Global');
+      setAvatarUrl(currentUser.avatar_url || '');
+    }
+  }, [currentUser]);
+
   // Photo modal & upload states
   const [showPhotoModal, setShowPhotoModal] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
