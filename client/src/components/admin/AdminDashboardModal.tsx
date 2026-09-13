@@ -21,10 +21,27 @@ import {
   PhoneCall,
   MessageSquare,
   Flame,
+  Activity,
+  Eye,
+  Clock,
+  ArrowRight,
+  ExternalLink,
+  FileText,
+  Filter,
+  Check,
+  Image as ImageIcon,
+  Mic,
+  Volume2,
+  Video,
+  Play,
+  Pause,
+  Calendar,
+  MessageCircle,
 } from 'lucide-react';
 import axios from 'axios';
 import { useAuth } from '../../context/AuthContext';
 import { User } from '../../types';
+import { Avatar } from '../common/Avatar';
 
 interface AdminStats {
   totalUsers: number;
@@ -38,12 +55,82 @@ interface AdminStats {
   dbType: string;
 }
 
+export interface AdminConversation {
+  id: string;
+  user1: User;
+  user2: User;
+  last_message_at: string;
+  created_at: string;
+  total_messages: number;
+  last_message: {
+    id: string;
+    sender_id: string;
+    receiver_id: string;
+    content: string;
+    type: string;
+    media_url?: string;
+    created_at: string;
+  } | null;
+}
+
+export interface AdminMessageItem {
+  id: string;
+  conversation_id: string;
+  sender_id: string;
+  receiver_id: string;
+  content: string;
+  type: string;
+  media_url?: string;
+  is_read: boolean;
+  reactions?: Record<string, string[]>;
+  reply_to_id?: string;
+  reply_to_content?: string;
+  reply_to_sender?: string;
+  is_deleted_for_all: boolean;
+  created_at: string;
+  sender?: User;
+  receiver?: User;
+}
+
+export interface AdminActivityItem {
+  id: string;
+  user_id: string;
+  user?: User;
+  action: string;
+  title: string;
+  description: string;
+  details?: any;
+  created_at: string;
+}
+
+export interface UserInspectionData {
+  user: User;
+  stats: {
+    messagesSent: number;
+    messagesReceived: number;
+    totalMessages: number;
+    callsMade: number;
+    callsReceived: number;
+    totalCallDurationSeconds: number;
+    storiesCreated: number;
+    conversationsCount: number;
+  };
+  conversations: Array<{
+    id: string;
+    other_user: User;
+    last_message_at: string;
+    total_messages: number;
+    last_message?: any;
+  }>;
+  recentMessages: AdminMessageItem[];
+}
+
 interface AdminDashboardModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
-type TabType = 'overview' | 'users' | 'broadcast' | 'security';
+type TabType = 'overview' | 'chats' | 'activities' | 'users' | 'broadcast' | 'security';
 
 export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({ isOpen, onClose }) => {
   const { user: currentUser, refreshUser } = useAuth();
@@ -105,6 +192,28 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({ isOpen
     }
   };
 
+  // Chats State
+  const [conversations, setConversations] = useState<AdminConversation[]>([]);
+  const [loadingConversations, setLoadingConversations] = useState(false);
+  const [chatSearchQuery, setChatSearchQuery] = useState('');
+  const [chatSubView, setChatSubView] = useState<'conversations' | 'recent_messages'>('conversations');
+  const [selectedConvId, setSelectedConvId] = useState<string | null>(null);
+  const [conversationDetail, setConversationDetail] = useState<{ conversation: any; messages: AdminMessageItem[] } | null>(null);
+  const [loadingMessages, setLoadingMessages] = useState(false);
+  const [recentMessages, setRecentMessages] = useState<AdminMessageItem[]>([]);
+  const [loadingRecentMessages, setLoadingRecentMessages] = useState(false);
+
+  // Activities State
+  const [activities, setActivities] = useState<AdminActivityItem[]>([]);
+  const [loadingActivities, setLoadingActivities] = useState(false);
+  const [activityActionFilter, setActivityActionFilter] = useState('all');
+  const [activityUserFilter, setActivityUserFilter] = useState<string>('');
+
+  // User Inspection State
+  const [inspectingUserId, setInspectingUserId] = useState<string | null>(null);
+  const [inspectionData, setInspectionData] = useState<UserInspectionData | null>(null);
+  const [loadingInspection, setLoadingInspection] = useState(false);
+
   // Fetch Announcements
   const fetchAnnouncements = async () => {
     try {
@@ -115,16 +224,115 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({ isOpen
     }
   };
 
+  // Fetch Conversations
+  const fetchConversations = async (query = '') => {
+    try {
+      setLoadingConversations(true);
+      const res = await axios.get(`/api/admin/conversations?q=${encodeURIComponent(query)}`);
+      setConversations(res.data.conversations || []);
+    } catch (err) {
+      console.error('Failed to load conversations:', err);
+    } finally {
+      setLoadingConversations(false);
+    }
+  };
+
+  // Fetch Conversation Transcript
+  const fetchConversationMessages = async (convId: string) => {
+    try {
+      setSelectedConvId(convId);
+      setLoadingMessages(true);
+      const res = await axios.get(`/api/admin/conversations/${convId}/messages`);
+      setConversationDetail(res.data);
+    } catch (err) {
+      console.error('Failed to load conversation messages:', err);
+      alert('Failed to load conversation transcript.');
+    } finally {
+      setLoadingMessages(false);
+    }
+  };
+
+  // Fetch Recent Messages across whole app
+  const fetchRecentMessages = async (query = '') => {
+    try {
+      setLoadingRecentMessages(true);
+      const res = await axios.get(`/api/admin/messages/recent?q=${encodeURIComponent(query)}`);
+      setRecentMessages(res.data.messages || []);
+    } catch (err) {
+      console.error('Failed to load recent messages:', err);
+    } finally {
+      setLoadingRecentMessages(false);
+    }
+  };
+
+  // Delete message as Admin
+  const handleDeleteMessage = async (msgId: string) => {
+    if (!window.confirm('Permanently purge this message as Royal Admin?')) return;
+    try {
+      await axios.delete(`/api/admin/messages/${msgId}`);
+      if (conversationDetail) {
+        setConversationDetail({
+          ...conversationDetail,
+          messages: conversationDetail.messages.filter(m => m.id !== msgId),
+        });
+      }
+      setRecentMessages(prev => prev.filter(m => m.id !== msgId));
+      if (stats) {
+        setStats({ ...stats, totalMessages: Math.max(0, stats.totalMessages - 1) });
+      }
+    } catch (err) {
+      console.error('Failed to delete message:', err);
+      alert('Failed to delete message.');
+    }
+  };
+
+  // Fetch Activities
+  const fetchActivities = async (userFilter = activityUserFilter, actionFilter = activityActionFilter) => {
+    try {
+      setLoadingActivities(true);
+      const params = new URLSearchParams();
+      if (userFilter) params.set('userId', userFilter);
+      if (actionFilter && actionFilter !== 'all') params.set('action', actionFilter);
+      const res = await axios.get(`/api/admin/activities?${params.toString()}`);
+      setActivities(res.data.activities || []);
+    } catch (err) {
+      console.error('Failed to load user activities:', err);
+    } finally {
+      setLoadingActivities(false);
+    }
+  };
+
+  // Inspect User
+  const handleInspectUser = async (userId: string) => {
+    try {
+      setInspectingUserId(userId);
+      setLoadingInspection(true);
+      const res = await axios.get(`/api/admin/users/${userId}/inspection`);
+      setInspectionData(res.data);
+    } catch (err) {
+      console.error('Failed to inspect user:', err);
+      alert('Failed to inspect user profile.');
+    } finally {
+      setLoadingInspection(false);
+    }
+  };
+
   useEffect(() => {
     if (isOpen) {
       fetchStats();
       fetchUsers();
       fetchAnnouncements();
+      if (activeTab === 'chats') {
+        fetchConversations(chatSearchQuery);
+        fetchRecentMessages(chatSearchQuery);
+      } else if (activeTab === 'activities') {
+        fetchActivities();
+      }
       if (refreshUser) {
         refreshUser();
       }
     }
-  }, [isOpen]);
+  }, [isOpen, activeTab]);
 
   if (!isOpen) return null;
 
@@ -354,6 +562,45 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({ isOpen
 
           <button
             type="button"
+            onClick={() => {
+              setActiveTab('chats');
+              fetchConversations(chatSearchQuery);
+              fetchRecentMessages(chatSearchQuery);
+            }}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl transition-all whitespace-nowrap ${
+              activeTab === 'chats'
+                ? 'bg-gradient-to-r from-amber-500/20 via-yellow-500/15 to-amber-600/20 text-amber-300 border border-gold-500/30 shadow-sm'
+                : 'text-dark-400 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            <MessageSquare className="w-4 h-4" />
+            <span>User Chats & Messages</span>
+            {stats && stats.totalMessages > 0 && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-extrabold">
+                {stats.totalMessages}
+              </span>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('activities');
+              fetchActivities();
+            }}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl transition-all whitespace-nowrap ${
+              activeTab === 'activities'
+                ? 'bg-gradient-to-r from-amber-500/20 via-yellow-500/15 to-amber-600/20 text-amber-300 border border-gold-500/30 shadow-sm'
+                : 'text-dark-400 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            <Activity className="w-4 h-4 text-emerald-400" />
+            <span>User Activities</span>
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          </button>
+
+          <button
+            type="button"
             onClick={() => setActiveTab('users')}
             className={`flex items-center gap-2 px-3.5 py-2 rounded-xl transition-all whitespace-nowrap ${
               activeTab === 'users'
@@ -479,7 +726,379 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({ isOpen
             </div>
           )}
 
-          {/* TAB 2: USER MANAGEMENT */}
+          {/* TAB 2: USER CHATS & MESSAGES */}
+          {activeTab === 'chats' && (
+            <div className="space-y-4">
+              {/* Header & Sub-View Switcher */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setChatSubView('conversations')}
+                    className={`px-3.5 py-1.5 rounded-xl text-xs font-bold border transition-all ${
+                      chatSubView === 'conversations'
+                        ? 'bg-amber-500/20 text-amber-300 border-amber-400/40 shadow-sm'
+                        : 'text-dark-400 hover:text-white border-white/5 bg-dark-950'
+                    }`}
+                  >
+                    <span>All User Conversations ({conversations.length})</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setChatSubView('recent_messages')}
+                    className={`px-3.5 py-1.5 rounded-xl text-xs font-bold border transition-all ${
+                      chatSubView === 'recent_messages'
+                        ? 'bg-amber-500/20 text-amber-300 border-amber-400/40 shadow-sm'
+                        : 'text-dark-400 hover:text-white border-white/5 bg-dark-950'
+                    }`}
+                  >
+                    <span>Live Messages Feed ({recentMessages.length})</span>
+                  </button>
+                </div>
+
+                {/* Search & Refresh */}
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1 sm:w-64">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-dark-400" />
+                    <input
+                      type="text"
+                      value={chatSearchQuery}
+                      onChange={(e) => {
+                        setChatSearchQuery(e.target.value);
+                        fetchConversations(e.target.value);
+                        fetchRecentMessages(e.target.value);
+                      }}
+                      placeholder="Search users or messages..."
+                      className="w-full bg-dark-950 border border-white/10 rounded-xl pl-9 pr-4 py-2 text-xs text-white placeholder-dark-500 focus:outline-none focus:border-gold-500/50"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      fetchConversations(chatSearchQuery);
+                      fetchRecentMessages(chatSearchQuery);
+                    }}
+                    disabled={loadingConversations || loadingRecentMessages}
+                    className="p-2 rounded-xl text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30"
+                    title="Refresh messages"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${loadingConversations || loadingRecentMessages ? 'animate-spin' : ''}`} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Sub-View 1: Conversations List */}
+              {chatSubView === 'conversations' && (
+                <div className="space-y-2.5">
+                  {loadingConversations ? (
+                    <div className="text-center py-12 text-dark-400 text-xs">
+                      <RefreshCw className="w-5 h-5 mx-auto animate-spin mb-2 text-amber-400" />
+                      Loading conversations...
+                    </div>
+                  ) : conversations.length === 0 ? (
+                    <div className="text-center py-12 text-dark-400 text-xs bg-dark-950/40 rounded-2xl border border-white/5 p-6">
+                      <MessageSquare className="w-8 h-8 text-dark-600 mx-auto mb-2" />
+                      No chat conversations found matching your search.
+                    </div>
+                  ) : (
+                    conversations.map((conv) => (
+                      <div
+                        key={conv.id}
+                        className="p-4 rounded-2xl bg-dark-950/70 border border-white/5 hover:border-gold-500/30 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 group"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          {/* User 1 */}
+                          <div className="flex items-center gap-2">
+                            <Avatar
+                              src={conv.user1?.avatar_url}
+                              name={conv.user1?.full_name || ''}
+                              size="sm"
+                              planId={conv.user1?.plan_id}
+                            />
+                            <div className="min-w-0">
+                              <p className="text-xs font-bold text-white truncate max-w-[110px] sm:max-w-[140px]">
+                                {conv.user1?.full_name || `@${conv.user1?.username}`}
+                              </p>
+                              <p className="text-[10px] text-amber-400/80 font-mono truncate">@{conv.user1?.username}</p>
+                            </div>
+                          </div>
+
+                          {/* Arrow / Exchange Badge */}
+                          <div className="flex flex-col items-center px-1 shrink-0">
+                            <div className="px-2 py-0.5 rounded-full bg-dark-850 border border-gold-500/20 text-[10px] font-black text-amber-300 flex items-center gap-1">
+                              <span>⇄</span>
+                              <span>{conv.total_messages} msgs</span>
+                            </div>
+                          </div>
+
+                          {/* User 2 */}
+                          <div className="flex items-center gap-2">
+                            <Avatar
+                              src={conv.user2?.avatar_url}
+                              name={conv.user2?.full_name || ''}
+                              size="sm"
+                              planId={conv.user2?.plan_id}
+                            />
+                            <div className="min-w-0">
+                              <p className="text-xs font-bold text-white truncate max-w-[110px] sm:max-w-[140px]">
+                                {conv.user2?.full_name || `@${conv.user2?.username}`}
+                              </p>
+                              <p className="text-[10px] text-amber-400/80 font-mono truncate">@{conv.user2?.username}</p>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Right Side: Last message snippet & Open transcript button */}
+                        <div className="flex items-center justify-between sm:justify-end gap-3 min-w-0 sm:max-w-xs">
+                          <div className="text-left sm:text-right min-w-0">
+                            <p className="text-[11px] text-dark-300 truncate max-w-[180px]">
+                              {conv.last_message ? (
+                                conv.last_message.type === 'audio' ? '🎤 Voice Note' :
+                                conv.last_message.type === 'image' ? '📷 Shared Photo' :
+                                conv.last_message.content
+                              ) : 'No messages yet'}
+                            </p>
+                            <p className="text-[10px] text-dark-500 font-mono">
+                              {conv.last_message_at ? new Date(conv.last_message_at).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}
+                            </p>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => fetchConversationMessages(conv.id)}
+                            className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500/20 to-yellow-500/20 hover:from-amber-500 hover:to-yellow-400 text-amber-300 hover:text-dark-950 border border-amber-400/30 text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all shrink-0 cursor-pointer"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>View Chat</span>
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+
+              {/* Sub-View 2: Live Global Messages Feed */}
+              {chatSubView === 'recent_messages' && (
+                <div className="space-y-2.5">
+                  {loadingRecentMessages ? (
+                    <div className="text-center py-12 text-dark-400 text-xs">
+                      <RefreshCw className="w-5 h-5 mx-auto animate-spin mb-2 text-amber-400" />
+                      Loading messages feed...
+                    </div>
+                  ) : recentMessages.length === 0 ? (
+                    <div className="text-center py-12 text-dark-400 text-xs bg-dark-950/40 rounded-2xl border border-white/5 p-6">
+                      <MessageSquare className="w-8 h-8 text-dark-600 mx-auto mb-2" />
+                      No messages found.
+                    </div>
+                  ) : (
+                    recentMessages.map((msg) => (
+                      <div
+                        key={msg.id}
+                        className="p-3.5 rounded-2xl bg-dark-950/70 border border-white/5 hover:border-gold-500/20 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                      >
+                        {/* Sender & Receiver Info */}
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <Avatar src={msg.sender?.avatar_url} name={msg.sender?.full_name || ''} size="xs" />
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap text-xs">
+                              <span className="font-bold text-white">{msg.sender?.full_name || `@${msg.sender?.username}`}</span>
+                              <span className="text-dark-400 text-[10px]">➔</span>
+                              <span className="font-bold text-amber-300">{msg.receiver?.full_name || `@${msg.receiver?.username}`}</span>
+                            </div>
+                            <span className="text-[10px] text-dark-500 font-mono">
+                              {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' })}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Message Content Preview */}
+                        <div className="flex-1 min-w-0 px-2">
+                          {msg.type === 'audio' && msg.media_url ? (
+                            <div className="flex items-center gap-2 bg-dark-900 px-3 py-1.5 rounded-xl border border-white/10 max-w-sm">
+                              <Mic className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                              <audio controls src={msg.media_url} className="h-7 w-full max-w-[200px]" />
+                            </div>
+                          ) : msg.type === 'image' && msg.media_url ? (
+                            <a href={msg.media_url} target="_blank" rel="noopener noreferrer" className="inline-block">
+                              <img src={msg.media_url} alt="" className="w-16 h-16 rounded-xl object-cover border border-white/10 hover:opacity-80" />
+                            </a>
+                          ) : (
+                            <p className="text-xs text-dark-200 break-words bg-dark-900/60 p-2 rounded-xl border border-white/5">
+                              {msg.is_deleted_for_all ? <span className="text-rose-400 italic">🚫 Message deleted</span> : msg.content}
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Actions */}
+                        <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => fetchConversationMessages(msg.conversation_id)}
+                            className="p-1.5 rounded-xl text-amber-300 hover:bg-amber-500/10 border border-amber-500/20 text-xs font-semibold flex items-center gap-1"
+                            title="View full conversation"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span className="hidden sm:inline">Thread</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteMessage(msg.id)}
+                            className="p-1.5 rounded-xl text-dark-500 hover:text-rose-400 hover:bg-rose-500/10 border border-transparent hover:border-rose-500/30 transition-all"
+                            title="Delete message"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 3: USER ACTIVITIES */}
+          {activeTab === 'activities' && (
+            <div className="space-y-4">
+              {/* Filter Toolbar */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                {/* Action Chips */}
+                <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
+                  {[
+                    { id: 'all', label: 'All Activities' },
+                    { id: 'chat_sent', label: '💬 Messages' },
+                    { id: 'call', label: '📞 Calls' },
+                    { id: 'login', label: '🔑 Logins' },
+                    { id: 'story', label: '📖 Stories' },
+                    { id: 'profile', label: '👤 Profiles' },
+                  ].map((chip) => (
+                    <button
+                      key={chip.id}
+                      type="button"
+                      onClick={() => {
+                        setActivityActionFilter(chip.id);
+                        fetchActivities(activityUserFilter, chip.id);
+                      }}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap border transition-all ${
+                        activityActionFilter === chip.id
+                          ? 'bg-gradient-to-r from-amber-500/20 via-yellow-500/15 to-amber-600/20 text-amber-300 border-gold-500/40 shadow-sm'
+                          : 'text-dark-400 hover:text-white border-white/5 bg-dark-950'
+                      }`}
+                    >
+                      {chip.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* User Filter & Refresh */}
+                <div className="flex items-center gap-2">
+                  <select
+                    value={activityUserFilter}
+                    onChange={(e) => {
+                      setActivityUserFilter(e.target.value);
+                      fetchActivities(e.target.value, activityActionFilter);
+                    }}
+                    className="bg-dark-950 border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-gold-500/50"
+                  >
+                    <option value="">All Members</option>
+                    {usersList.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.full_name} (@{u.username})
+                      </option>
+                    ))}
+                  </select>
+
+                  <button
+                    type="button"
+                    onClick={() => fetchActivities(activityUserFilter, activityActionFilter)}
+                    disabled={loadingActivities}
+                    className="p-2 rounded-xl text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30"
+                    title="Refresh activities"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${loadingActivities ? 'animate-spin' : ''}`} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Activity Feed List */}
+              <div className="space-y-2.5">
+                {loadingActivities ? (
+                  <div className="text-center py-12 text-dark-400 text-xs">
+                    <RefreshCw className="w-5 h-5 mx-auto animate-spin mb-2 text-amber-400" />
+                    Loading user activities...
+                  </div>
+                ) : activities.length === 0 ? (
+                  <div className="text-center py-12 text-dark-400 text-xs bg-dark-950/40 rounded-2xl border border-white/5 p-6">
+                    <Activity className="w-8 h-8 text-dark-600 mx-auto mb-2" />
+                    No activities recorded for this filter.
+                  </div>
+                ) : (
+                  activities.map((act) => (
+                    <div
+                      key={act.id}
+                      className="p-3.5 sm:p-4 rounded-2xl bg-dark-950/70 border border-white/5 hover:border-gold-500/20 transition-all flex items-start gap-3.5 group"
+                    >
+                      {/* User Avatar */}
+                      <div className="relative shrink-0">
+                        <Avatar
+                          src={act.user?.avatar_url}
+                          name={act.user?.full_name || ''}
+                          size="sm"
+                          planId={act.user?.plan_id}
+                        />
+                      </div>
+
+                      {/* Content Details */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2 flex-wrap mb-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-black text-white">{act.title}</span>
+                            {act.user?.username && (
+                              <span className="text-[10px] text-amber-400/80 font-mono">@{act.user.username}</span>
+                            )}
+                          </div>
+                          <span className="text-[10px] text-dark-400 font-mono shrink-0">
+                            {new Date(act.created_at).toLocaleString([], {
+                              month: 'short',
+                              day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </span>
+                        </div>
+
+                        {act.description && (
+                          <p className="text-xs text-dark-300 break-words mb-1">
+                            {act.description}
+                          </p>
+                        )}
+
+                        {/* Details Tags */}
+                        <div className="flex items-center gap-2 flex-wrap text-[10px] text-dark-400 mt-1">
+                          <span className="px-2 py-0.5 rounded-full bg-dark-850 border border-white/5 uppercase font-mono">
+                            {act.action}
+                          </span>
+                          {act.user && (
+                            <button
+                              type="button"
+                              onClick={() => handleInspectUser(act.user_id)}
+                              className="text-amber-400 hover:text-amber-300 font-bold hover:underline cursor-pointer"
+                            >
+                              Inspect Profile ➔
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 4: USER MANAGEMENT */}
           {activeTab === 'users' && (
             <div className="space-y-4">
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
@@ -577,58 +1196,102 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({ isOpen
                         </div>
 
                         {/* Actions */}
-                        {!isSelf && (
-                          <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
-                            {/* Role Toggle */}
-                            <button
-                              type="button"
-                              onClick={() => handleToggleRole(u)}
-                              disabled={actionLoadingId === u.id}
-                              className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
-                                isAdmin
-                                  ? 'bg-white/5 hover:bg-white/10 text-dark-300 border-white/10'
-                                  : 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border-amber-500/30'
-                              }`}
-                            >
-                              {isAdmin ? 'Demote' : 'Make Admin'}
-                            </button>
+                        <div className="flex items-center gap-1.5 self-end sm:self-center shrink-0 flex-wrap">
+                          {/* Quick Chats */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveTab('chats');
+                              setChatSearchQuery(u.username);
+                              fetchConversations(u.username);
+                              fetchRecentMessages(u.username);
+                            }}
+                            className="px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-1 transition-all"
+                            title="View all chats of this user"
+                          >
+                            <MessageSquare className="w-3 h-3" />
+                            <span>Chats</span>
+                          </button>
 
-                            {/* Ban Toggle */}
-                            <button
-                              type="button"
-                              onClick={() => handleToggleBan(u)}
-                              disabled={actionLoadingId === u.id}
-                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
-                                isBanned
-                                  ? 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
-                                  : 'bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border-rose-500/30'
-                              }`}
-                            >
-                              {isBanned ? (
-                                <>
-                                  <UserCheck className="w-3.5 h-3.5" />
-                                  <span>Unban</span>
-                                </>
-                              ) : (
-                                <>
-                                  <UserX className="w-3.5 h-3.5" />
-                                  <span>Ban</span>
-                                </>
-                              )}
-                            </button>
+                          {/* Quick Activity */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveTab('activities');
+                              setActivityUserFilter(u.id);
+                              fetchActivities(u.id);
+                            }}
+                            className="px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1 transition-all"
+                            title="View activity timeline of this user"
+                          >
+                            <Activity className="w-3 h-3" />
+                            <span>Activity</span>
+                          </button>
 
-                            {/* Delete User */}
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteUser(u)}
-                              disabled={actionLoadingId === u.id}
-                              className="p-1.5 rounded-xl text-dark-500 hover:text-rose-400 hover:bg-rose-500/10 border border-transparent hover:border-rose-500/30 transition-all"
-                              title="Delete user account"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        )}
+                          {/* Quick Inspect */}
+                          <button
+                            type="button"
+                            onClick={() => handleInspectUser(u.id)}
+                            className="px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-white/5 hover:bg-white/10 text-dark-200 border border-white/10 flex items-center gap-1 transition-all"
+                            title="360 profile inspection"
+                          >
+                            <Eye className="w-3 h-3" />
+                            <span>Inspect</span>
+                          </button>
+
+                          {!isSelf && (
+                            <>
+                              {/* Role Toggle */}
+                              <button
+                                type="button"
+                                onClick={() => handleToggleRole(u)}
+                                disabled={actionLoadingId === u.id}
+                                className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
+                                  isAdmin
+                                    ? 'bg-white/5 hover:bg-white/10 text-dark-300 border-white/10'
+                                    : 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border-amber-500/30'
+                                }`}
+                              >
+                                {isAdmin ? 'Demote' : 'Admin'}
+                              </button>
+
+                              {/* Ban Toggle */}
+                              <button
+                                type="button"
+                                onClick={() => handleToggleBan(u)}
+                                disabled={actionLoadingId === u.id}
+                                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
+                                  isBanned
+                                    ? 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                                    : 'bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border-rose-500/30'
+                                }`}
+                              >
+                                {isBanned ? (
+                                  <>
+                                    <UserCheck className="w-3 h-3" />
+                                    <span>Unban</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <UserX className="w-3 h-3" />
+                                    <span>Ban</span>
+                                  </>
+                                )}
+                              </button>
+
+                              {/* Delete User */}
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteUser(u)}
+                                disabled={actionLoadingId === u.id}
+                                className="p-1.5 rounded-xl text-dark-500 hover:text-rose-400 hover:bg-rose-500/10 border border-transparent hover:border-rose-500/30 transition-all"
+                                title="Delete user account"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </>
+                          )}
+                        </div>
                       </div>
                     );
                   })
@@ -832,6 +1495,291 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({ isOpen
           )}
 
         </div>
+
+        {/* ========================================================================= */}
+        {/* MODAL 1: FULL CONVERSATION TRANSCRIPT INSPECTOR */}
+        {/* ========================================================================= */}
+        {conversationDetail && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-2 sm:p-4 bg-dark-950/90 backdrop-blur-md animate-in fade-in duration-200">
+            <div className="relative w-full max-w-2xl bg-dark-900 border border-gold-500/40 rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[88vh] royal-card">
+              {/* Header */}
+              <div className="p-4 border-b border-white/10 bg-dark-950/90 flex items-center justify-between">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="flex items-center -space-x-3">
+                    <Avatar src={conversationDetail.conversation?.user1?.avatar_url} name={conversationDetail.conversation?.user1?.full_name || ''} size="sm" />
+                    <Avatar src={conversationDetail.conversation?.user2?.avatar_url} name={conversationDetail.conversation?.user2?.full_name || ''} size="sm" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5 text-xs sm:text-sm font-black text-white truncate">
+                      <span>{conversationDetail.conversation?.user1?.full_name || `@${conversationDetail.conversation?.user1?.username}`}</span>
+                      <span className="text-amber-400">⇄</span>
+                      <span>{conversationDetail.conversation?.user2?.full_name || `@${conversationDetail.conversation?.user2?.username}`}</span>
+                    </div>
+                    <p className="text-[10px] text-dark-400">
+                      Total {conversationDetail.messages.length} messages • Chat ID: <span className="font-mono">{conversationDetail.conversation?.id}</span>
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setConversationDetail(null)}
+                  className="p-2 rounded-xl text-dark-400 hover:text-white hover:bg-dark-800 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Messages Body */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-dark-950/50">
+                {conversationDetail.messages.length === 0 ? (
+                  <div className="text-center py-12 text-dark-500 text-xs">
+                    No messages in this conversation.
+                  </div>
+                ) : (
+                  conversationDetail.messages.map((m) => {
+                    const isUser1 = m.sender_id === conversationDetail.conversation?.user1?.id;
+                    const sender = isUser1 ? conversationDetail.conversation?.user1 : conversationDetail.conversation?.user2;
+
+                    return (
+                      <div
+                        key={m.id}
+                        className={`flex gap-2.5 max-w-[85%] ${isUser1 ? 'mr-auto' : 'ml-auto flex-row-reverse'}`}
+                      >
+                        <Avatar src={sender?.avatar_url} name={sender?.full_name || ''} size="xs" />
+                        <div
+                          className={`p-3 rounded-2xl border text-xs space-y-1 relative group ${
+                            isUser1
+                              ? 'bg-dark-900 border-gold-500/20 text-white rounded-tl-xs'
+                              : 'bg-gradient-to-br from-amber-600/20 to-yellow-600/15 border-amber-400/30 text-white rounded-tr-xs'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2 text-[10px] text-amber-300/80 font-bold mb-0.5">
+                            <span>{sender?.full_name || `@${sender?.username}`}</span>
+                            <span className="text-dark-500 font-mono font-normal">
+                              {new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+
+                          {/* Voice Note Player */}
+                          {m.type === 'audio' && m.media_url ? (
+                            <div className="flex items-center gap-2 bg-dark-950/80 p-2 rounded-xl border border-white/10">
+                              <Mic className="w-4 h-4 text-amber-400 shrink-0" />
+                              <audio controls src={m.media_url} className="h-7 w-48" />
+                            </div>
+                          ) : m.type === 'image' && m.media_url ? (
+                            <div>
+                              <a href={m.media_url} target="_blank" rel="noopener noreferrer">
+                                <img
+                                  src={m.media_url}
+                                  alt="Shared"
+                                  className="max-h-56 rounded-xl object-cover border border-white/10 hover:opacity-90"
+                                />
+                              </a>
+                            </div>
+                          ) : (
+                            <p className="break-words whitespace-pre-wrap leading-relaxed text-dark-100">
+                              {m.is_deleted_for_all ? (
+                                <span className="text-rose-400 italic">🚫 This message was deleted</span>
+                              ) : (
+                                m.content
+                              )}
+                            </p>
+                          )}
+
+                          {/* Admin Quick Delete Action */}
+                          <div className="pt-1 flex items-center justify-end">
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteMessage(m.id)}
+                              className="text-[10px] text-dark-500 hover:text-rose-400 flex items-center gap-1 opacity-60 hover:opacity-100 transition-opacity"
+                              title="Delete message from system"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                              <span>Delete</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="p-3 border-t border-white/10 bg-dark-950 flex items-center justify-between text-xs text-dark-400">
+                <span>Total messages: {conversationDetail.messages.length}</span>
+                <button
+                  type="button"
+                  onClick={() => setConversationDetail(null)}
+                  className="px-4 py-1.5 rounded-xl bg-dark-800 hover:bg-dark-700 text-white font-bold transition-colors"
+                >
+                  Close Transcript
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* MODAL 2: USER 360 FULL PROFILE & ACTIVITY INSPECTION */}
+        {/* ========================================================================= */}
+        {inspectionData && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-2 sm:p-4 bg-dark-950/90 backdrop-blur-md animate-in fade-in duration-200">
+            <div className="relative w-full max-w-2xl bg-dark-900 border border-gold-500/40 rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh] royal-card">
+              {/* Header */}
+              <div className="p-4 sm:p-5 border-b border-white/10 bg-dark-950/90 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Avatar
+                    src={inspectionData.user?.avatar_url}
+                    name={inspectionData.user?.full_name || ''}
+                    size="md"
+                    planId={inspectionData.user?.plan_id}
+                  />
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-base font-black text-white">{inspectionData.user?.full_name}</h4>
+                      <span className="text-xs text-amber-400 font-mono">@{inspectionData.user?.username}</span>
+                    </div>
+                    <p className="text-xs text-dark-400">
+                      📧 {inspectionData.user?.email || 'N/A'} • Joined: {new Date(inspectionData.user?.created_at).toLocaleDateString()}
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setInspectionData(null)}
+                  className="p-2 rounded-xl text-dark-400 hover:text-white hover:bg-dark-800 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-5 bg-dark-950/50">
+                {/* Stats Grid */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                  <div className="p-3 rounded-2xl bg-dark-900 border border-white/5 space-y-0.5">
+                    <p className="text-[10px] text-dark-400 font-bold uppercase">Messages Sent</p>
+                    <p className="text-base font-black text-amber-300">{inspectionData.stats?.messagesSent || 0}</p>
+                  </div>
+                  <div className="p-3 rounded-2xl bg-dark-900 border border-white/5 space-y-0.5">
+                    <p className="text-[10px] text-dark-400 font-bold uppercase">Messages Received</p>
+                    <p className="text-base font-black text-white">{inspectionData.stats?.messagesReceived || 0}</p>
+                  </div>
+                  <div className="p-3 rounded-2xl bg-dark-900 border border-white/5 space-y-0.5">
+                    <p className="text-[10px] text-dark-400 font-bold uppercase">Calls Made</p>
+                    <p className="text-base font-black text-emerald-400">{inspectionData.stats?.callsMade || 0}</p>
+                  </div>
+                  <div className="p-3 rounded-2xl bg-dark-900 border border-white/5 space-y-0.5">
+                    <p className="text-[10px] text-dark-400 font-bold uppercase">Call Duration</p>
+                    <p className="text-base font-black text-cyan-400">
+                      {Math.floor((inspectionData.stats?.totalCallDurationSeconds || 0) / 60)}m {(inspectionData.stats?.totalCallDurationSeconds || 0) % 60}s
+                    </p>
+                  </div>
+                </div>
+
+                {/* User's Conversations */}
+                <div className="space-y-2">
+                  <h5 className="text-xs font-black text-white flex items-center gap-1.5">
+                    <MessageSquare className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Conversations ({inspectionData.conversations?.length || 0})</span>
+                  </h5>
+
+                  {inspectionData.conversations?.length === 0 ? (
+                    <p className="text-xs text-dark-500 italic p-3 bg-dark-900 rounded-xl">No conversations initiated yet.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {inspectionData.conversations?.map((c) => (
+                        <div
+                          key={c.id}
+                          className="p-3 rounded-xl bg-dark-900 border border-white/5 flex items-center justify-between gap-3"
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <Avatar src={c.other_user?.avatar_url} name={c.other_user?.full_name || ''} size="xs" />
+                            <div className="min-w-0">
+                              <p className="text-xs font-bold text-white truncate">
+                                {c.other_user?.full_name || `@${c.other_user?.username}`}
+                              </p>
+                              <p className="text-[10px] text-dark-400 truncate">
+                                {c.last_message?.content || 'Conversation open'}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-dark-850 text-amber-300 font-mono">
+                              {c.total_messages} msgs
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setInspectionData(null);
+                                fetchConversationMessages(c.id);
+                              }}
+                              className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-xs font-bold transition-colors"
+                            >
+                              Open Chat
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* User's Recent Messages */}
+                <div className="space-y-2">
+                  <h5 className="text-xs font-black text-white flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Recent Messages Exchanged ({inspectionData.recentMessages?.length || 0})</span>
+                  </h5>
+
+                  {inspectionData.recentMessages?.length === 0 ? (
+                    <p className="text-xs text-dark-500 italic p-3 bg-dark-900 rounded-xl">No message history.</p>
+                  ) : (
+                    <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+                      {inspectionData.recentMessages?.slice(0, 30).map((m) => {
+                        const isSent = m.sender_id === inspectionData.user?.id;
+                        return (
+                          <div
+                            key={m.id}
+                            className="p-2.5 rounded-xl bg-dark-900/80 border border-white/5 text-xs flex items-center justify-between gap-2"
+                          >
+                            <div className="min-w-0 flex-1">
+                              <span className={`text-[10px] font-black uppercase tracking-wider px-1.5 py-0.2 rounded mr-1.5 ${isSent ? 'bg-amber-500/20 text-amber-300' : 'bg-cyan-500/20 text-cyan-300'}`}>
+                                {isSent ? 'Sent' : 'Received'}
+                              </span>
+                              <span className="text-dark-200">
+                                {m.type === 'audio' ? '🎤 Voice Note' : m.type === 'image' ? '📷 Photo' : m.content}
+                              </span>
+                            </div>
+                            <span className="text-[10px] text-dark-500 font-mono shrink-0">
+                              {new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="p-3.5 border-t border-white/10 bg-dark-950 flex items-center justify-end">
+                <button
+                  type="button"
+                  onClick={() => setInspectionData(null)}
+                  className="px-4 py-1.5 rounded-xl bg-dark-800 hover:bg-dark-700 text-white font-bold text-xs transition-colors"
+                >
+                  Close Inspection
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
       </div>
     </div>
   );

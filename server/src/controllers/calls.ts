@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { db } from '../db.js';
+import { db, recordActivity } from '../db.js';
 import { AuthenticatedRequest } from '../middleware/auth.js';
 import { getUserWithPlan } from './auth.js';
 import { CallLog } from '../types.js';
@@ -50,6 +50,22 @@ export function recordCallLog(params: {
     INSERT INTO call_logs (id, caller_id, receiver_id, call_type, status, duration, started_at, ended_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `).run(id, callerId, receiverId, callType, status, duration, start, end);
+
+  // Record activities for both caller and receiver
+  recordActivity(callerId, 'call_initiated', {
+    peer_id: receiverId,
+    call_type: callType,
+    status,
+    duration,
+  });
+  if (receiverId) {
+    recordActivity(receiverId, 'call_received', {
+      peer_id: callerId,
+      call_type: callType,
+      status,
+      duration,
+    });
+  }
 
   return {
     id,

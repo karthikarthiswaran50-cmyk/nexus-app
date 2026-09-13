@@ -371,6 +371,13 @@ app.post('/api/admin/broadcast', requireAdmin, adminCtrl.broadcastAnnouncement);
 app.get('/api/admin/announcements', requireAuth, adminCtrl.getAnnouncements);
 app.post('/api/admin/claim', requireAuth, adminCtrl.claimOwnerRole);
 app.post('/api/admin/change-passcode', requireAdmin, adminCtrl.changeOwnerPasscode);
+app.get('/api/admin/conversations', requireAdmin, adminCtrl.getAdminConversations);
+app.get('/api/admin/conversations/:id/messages', requireAdmin, adminCtrl.getAdminConversationMessages);
+app.get('/api/admin/messages/recent', requireAdmin, adminCtrl.getAdminRecentMessages);
+app.delete('/api/admin/messages/:id', requireAdmin, adminCtrl.deleteAdminMessage);
+app.get('/api/admin/activities', requireAdmin, adminCtrl.getAdminUserActivities);
+app.get('/api/admin/users/:id/inspection', requireAdmin, adminCtrl.getAdminUserInspection);
+
 
 // 7. Serve static client in production (with multi-path fallback for local, Render, and Docker)
 const candidateDistPaths = [

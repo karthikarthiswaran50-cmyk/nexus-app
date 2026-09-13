@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { db, persistMessageToPg } from '../db.js';
+import { db, persistMessageToPg, recordActivity } from '../db.js';
 import { AuthenticatedRequest } from '../middleware/auth.js';
 import { getUserWithPlan } from './auth.js';
 import { Conversation, Message } from '../types.js';
@@ -198,6 +198,14 @@ export function saveMessage(params: {
     type,
     media_url: mediaUrl || undefined,
     is_read: 0,
+  });
+
+  // Record user activity log
+  recordActivity(senderId, 'chat_sent', {
+    receiver_id: receiverId,
+    content: cleanContent ? cleanContent.slice(0, 150) : '',
+    type,
+    media_url: mediaUrl || undefined,
   });
 
   const message: Message = {

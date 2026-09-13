@@ -1,5 +1,5 @@
 import { Response } from 'express';
-import { db } from '../db.js';
+import { db, recordActivity } from '../db.js';
 import crypto from 'node:crypto';
 import { AuthenticatedRequest } from '../middleware/auth.js';
 import { sanitizeText } from '../utils/sanitize.js';
@@ -98,6 +98,11 @@ export async function createStory(req: AuthenticatedRequest, res: Response) {
       INSERT INTO stories (id, user_id, media_url, content, background_color, created_at, expires_at)
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(id, userId, mediaUrl || null, content.trim(), background_color, createdAt, expiresAt);
+
+    recordActivity(userId, 'story_created', {
+      content: content ? content.slice(0, 100) : '',
+      media_url: mediaUrl || undefined,
+    });
 
     const createdStory = {
       id,

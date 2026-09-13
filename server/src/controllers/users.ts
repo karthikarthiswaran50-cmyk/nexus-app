@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { db, persistUserToPg, persistSettingsToPg } from '../db.js';
+import { db, persistUserToPg, persistSettingsToPg, recordActivity } from '../db.js';
 import { AuthenticatedRequest } from '../middleware/auth.js';
 import { getUserWithPlan } from './auth.js';
 import { UserWithPlan, UserSettings } from '../types.js';
@@ -176,6 +176,13 @@ export async function updateProfile(req: AuthenticatedRequest, res: Response): P
       full_name: updatedName,
       avatar_url: updatedAvatar,
       bio: updatedBio,
+      status: updatedStatus,
+      country: updatedCountry,
+    });
+
+    recordActivity(userId, 'profile_updated', {
+      full_name: updatedName,
+      username: updatedUsername,
       status: updatedStatus,
       country: updatedCountry,
     });

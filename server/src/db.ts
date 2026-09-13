@@ -230,6 +230,19 @@ export function initDatabase() {
     );
   `);
 
+  // 10. User Activities Table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS user_activities (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      action TEXT NOT NULL,
+      details TEXT DEFAULT '{}',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_user_activities_user ON user_activities(user_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_user_activities_action ON user_activities(action, created_at);
+  `);
+
   // If PostgreSQL is configured, initialize remote tables and restore all saved users!
   if (pgPool) {
     initPostgresAndRestore();
@@ -335,6 +348,14 @@ async function initPostgresAndRestore() {
       CREATE TABLE IF NOT EXISTS system_settings (
         key VARCHAR(100) PRIMARY KEY,
         value TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS user_activities (
+        id VARCHAR(100) PRIMARY KEY,
+        user_id VARCHAR(100) NOT NULL,
+        action VARCHAR(100) NOT NULL,
+        details TEXT DEFAULT '{}',
+        created_at TIMESTAMPTZ DEFAULT NOW()
       );
     `);
 
@@ -619,4 +640,27 @@ export function purgeDemoData() {
     console.warn('purgeDemoData note:', err.message);
   }
 }
+
+export function recordActivity(userId: string, action: string, details: Record<string, any> = {}) {
+  try {
+    if (!userId) return;
+    const id = 'act_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 7);
+    const now = new Date().toISOString();
+    const detailsJson = typeof details === 'string' ? details : JSON.stringify(details || {});
+    db.prepare(`
+      INSERT INTO user_activities (id, user_id, action, details, created_at)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(id, userId, action, detailsJson, now);
+
+    if (pgPool) {
+      pgPool.query(
+        'INSERT INTO user_activities (id, user_id, action, details, created_at) VALUES ($1, $2, $3, $4, NOW()) ON CONFLICT (id) DO NOTHING',
+        [id, userId, action, detailsJson]
+      ).catch(() => {});
+    }
+  } catch (err) {
+    console.warn('recordActivity non-fatal error:', err);
+  }
+}
+
 

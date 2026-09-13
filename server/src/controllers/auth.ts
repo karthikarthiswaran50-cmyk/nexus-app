@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { db, persistUserToPg, persistSubscriptionToPg, persistSettingsToPg } from '../db.js';
+import { db, persistUserToPg, persistSubscriptionToPg, persistSettingsToPg, recordActivity } from '../db.js';
 import { JWT_SECRET, AuthenticatedRequest } from '../middleware/auth.js';
 import { User, UserWithPlan, Subscription } from '../types.js';
 import { sanitizeText, sanitizeUsername, sanitizeEmail, validatePasswordStrength } from '../utils/sanitize.js';
@@ -129,6 +129,12 @@ export async function register(req: Request, res: Response): Promise<void> {
       { expiresIn: '30d' }
     );
 
+    recordActivity(userId, 'register', {
+      username: cleanUsername,
+      email: cleanEmail,
+      full_name,
+    });
+
     const user = getUserWithPlan(userId);
     res.status(201).json({ token, user });
   } catch (error) {
@@ -176,6 +182,12 @@ export async function login(req: Request, res: Response): Promise<void> {
       JWT_SECRET,
       { expiresIn: '30d' }
     );
+
+    recordActivity(user.id, 'login', {
+      method: 'credentials',
+      username: user.username,
+      email: user.email,
+    });
 
     const fullUser = getUserWithPlan(user.id);
     res.json({ token, user: fullUser });
@@ -411,6 +423,12 @@ export async function firebaseLogin(req: Request, res: Response): Promise<void> 
       { expiresIn: '30d' }
     );
 
+    recordActivity(user.id, 'login', {
+      method: 'google',
+      username: user.username,
+      email: user.email,
+    });
+
     const userWithPlan = getUserWithPlan(user.id);
     res.json({ token, user: userWithPlan });
   } catch (error) {
@@ -447,6 +465,10 @@ export async function setUsername(req: AuthenticatedRequest, res: Response): Pro
     }
 
     db.prepare('UPDATE users SET username = ?, updated_at = datetime(\'now\') WHERE id = ?').run(cleanUsername, userId);
+
+    recordActivity(userId, 'username_changed', {
+      new_username: cleanUsername,
+    });
 
     const user = getUserWithPlan(userId);
     if (!user) {
