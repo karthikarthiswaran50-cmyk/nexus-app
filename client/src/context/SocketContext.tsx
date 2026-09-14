@@ -31,8 +31,8 @@ interface SocketContextType {
   latestMessage: Message | null;
   reactionUpdate: { messageId: string; reactions: Record<string, string[]>; conversationId: string } | null;
   deletedMessage: { messageId: string; isDeletedForAll: boolean; deletedForUsers: string[]; conversationId: string } | null;
-  sendReaction: (messageId: string, emoji: string, receiverId: string) => void;
-  deleteMessage: (messageId: string, deleteType: 'for_everyone' | 'for_me', receiverId: string) => void;
+  sendReaction: (messageId: string, emoji: string, receiverId?: string) => void;
+  deleteMessage: (messageId: string, deleteType: 'for_everyone' | 'for_me', receiverId?: string) => void;
   typingMap: Record<string, boolean>; // userId -> isTyping
   sendTyping: (receiverId: string, isTyping: boolean) => void;
   callBannerMessage: string | null;
@@ -396,13 +396,13 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   }, [socket]);
 
-  const sendReaction = useCallback((messageId: string, emoji: string, receiverId: string) => {
+  const sendReaction = useCallback((messageId: string, emoji: string, receiverId?: string) => {
     if (socket) {
       socket.emit('chat:reaction', { messageId, emoji, receiverId });
     }
   }, [socket]);
 
-  const deleteMessage = useCallback((messageId: string, deleteType: 'for_everyone' | 'for_me', receiverId: string) => {
+  const deleteMessage = useCallback((messageId: string, deleteType: 'for_everyone' | 'for_me', receiverId?: string) => {
     if (socket) {
       socket.emit('chat:delete_message', { messageId, deleteType, receiverId });
     }

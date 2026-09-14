@@ -6,7 +6,6 @@ import { Avatar } from '../common/Avatar';
 import { ChatLayout } from '../chat/ChatLayout';
 import { CallsView } from '../calls/CallsView';
 import { DirectoryView } from '../directory/DirectoryView';
-import { SubscriptionView } from '../subscription/SubscriptionView';
 import { ProfileView } from '../profile/ProfileView';
 import { SettingsView } from '../settings/SettingsView';
 import { IncomingCallModal } from '../call/IncomingCallModal';
@@ -27,6 +26,7 @@ import {
   Bell,
   BellRing,
   Smartphone,
+  Search,
 } from 'lucide-react';
 import axios from 'axios';
 import { getNotificationPermissionStatus, requestNotificationPermission, startPushNotificationRobot } from '../../utils/notifications';
@@ -35,10 +35,12 @@ import { UsernameSetupModal } from '../auth/UsernameSetupModal';
 import { AppLockOverlay } from '../auth/AppLockOverlay';
 import { GlobalAnnouncementBanner } from '../common/GlobalAnnouncementBanner';
 import { AdminDashboardModal } from '../admin/AdminDashboardModal';
+import { GlobalSearchModal } from '../common/GlobalSearchModal';
 import { usePWAInstall } from '../../hooks/usePWAInstall';
 import { InstallModal } from '../pwa/InstallModal';
+import { Group } from '../../types';
 
-export type NavTab = 'chats' | 'calls' | 'directory' | 'subscription' | 'profile' | 'settings';
+export type NavTab = 'chats' | 'calls' | 'directory' | 'profile' | 'settings';
 
 
 export const AppLayout: React.FC = () => {
@@ -63,12 +65,26 @@ export const AppLayout: React.FC = () => {
   // Royal Admin Command Center Modal
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
 
+  // Universal Global Search Modal
+  const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState(false);
+
   // 📲 PWA Standalone Install State
   const pwaState = usePWAInstall();
   const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
   const [dismissInstallBanner, setDismissInstallBanner] = useState(() =>
     localStorage.getItem('nexus_install_banner_dismissed') === 'true'
   );
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        setIsGlobalSearchOpen(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   useEffect(() => {
     if (user) {
@@ -217,7 +233,7 @@ export const AppLayout: React.FC = () => {
               <span className="text-sm sm:text-base font-extrabold tracking-tight flex items-center gap-1.5 leading-none">
                 <span className="gold-gradient-text tracking-wide font-black">NEXUS</span>
                 <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-gradient-to-r from-amber-500/25 via-yellow-400/20 to-amber-600/25 text-amber-300 border border-amber-400/40 shadow-xs tracking-widest uppercase">
-                  ROYAL
+                  FREE FOREVER ♾️
                 </span>
               </span>
             </div>
@@ -284,6 +300,20 @@ export const AppLayout: React.FC = () => {
 
         {/* User Status Card & Actions */}
         <div className="flex items-center gap-2 sm:gap-2.5">
+          {/* Universal Global Search Trigger */}
+          <button
+            type="button"
+            onClick={() => setIsGlobalSearchOpen(true)}
+            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-dark-850 hover:bg-dark-800 border border-gold-500/20 hover:border-gold-500/40 text-dark-300 hover:text-amber-200 text-xs font-bold transition-all shadow-inner cursor-pointer"
+            title="Global Search (Ctrl + K)"
+          >
+            <Search className="w-3.5 h-3.5 text-gold-400" />
+            <span className="hidden sm:inline">Search</span>
+            <kbd className="hidden md:inline text-[9px] px-1 py-0.2 rounded bg-dark-900 border border-white/10 text-dark-400 font-mono">
+              ⌘K
+            </kbd>
+          </button>
+
           {!pwaState.isStandalone && (
             <button
               type="button"
@@ -312,7 +342,7 @@ export const AppLayout: React.FC = () => {
             />
             <div className="hidden lg:block">
               <p className="text-xs font-extrabold text-white leading-tight truncate max-w-[120px] group-hover:text-amber-200 transition-colors">{user?.full_name}</p>
-              <p className="text-[10px] text-gold-400/80 uppercase font-bold tracking-wider">👑 Royal Member</p>
+              <p className="text-[10px] text-gold-400/80 uppercase font-bold tracking-wider">Free Forever ♾️</p>
             </div>
           </button>
 
@@ -489,7 +519,6 @@ export const AppLayout: React.FC = () => {
             <ChatLayout
               initialSelectedUser={selectedUserForChat}
               onNavigateToDirectory={() => setCurrentTab('directory')}
-              onNavigateToSubscription={() => setCurrentTab('subscription')}
               onViewProfile={handleViewProfile}
             />
           </div>
@@ -513,17 +542,10 @@ export const AppLayout: React.FC = () => {
           </div>
         )}
 
-        {currentTab === 'subscription' && (
-          <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 pb-20 md:pb-6">
-            <SubscriptionView />
-          </div>
-        )}
-
         {currentTab === 'profile' && (
           <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 pb-20 md:pb-6">
             <ProfileView
               viewUser={viewProfileUser}
-              onNavigateToSubscription={() => setCurrentTab('subscription')}
             />
           </div>
         )}
@@ -603,6 +625,20 @@ export const AppLayout: React.FC = () => {
         isOpen={isInstallModalOpen}
         onClose={() => setIsInstallModalOpen(false)}
         pwaState={pwaState}
+      />
+
+      {/* 🔍 Universal Global Search Modal */}
+      <GlobalSearchModal
+        isOpen={isGlobalSearchOpen}
+        onClose={() => setIsGlobalSearchOpen(false)}
+        onSelectUser={(u) => {
+          setSelectedUserForChat(u);
+          setCurrentTab('chats');
+        }}
+        onSelectGroup={() => {
+          setSelectedUserForChat(null);
+          setCurrentTab('chats');
+        }}
       />
 
     </div>

@@ -16,18 +16,62 @@ export async function getAdminStats(req: AuthenticatedRequest, res: Response): P
     const adminRow = db.prepare("SELECT COUNT(*) as count FROM users WHERE role = 'admin'").get() as { count: number };
     const messageRow = db.prepare('SELECT COUNT(*) as count FROM messages').get() as { count: number };
     const callRow = db.prepare('SELECT COUNT(*) as count FROM call_logs').get() as { count: number };
-    const storyRow = db.prepare('SELECT COUNT(*) as count FROM stories').get() as { count: number };
+    const convRow = db.prepare('SELECT COUNT(*) as count FROM conversations').get() as { count: number };
+    const pendingReportsRow = db.prepare("SELECT COUNT(*) as count FROM user_reports WHERE status = 'pending'").get() as { count: number };
+
+    // Active users in last 7 days
+    const activeUsersRow = db.prepare(`
+      SELECT COUNT(*) as count FROM users 
+      WHERE last_seen >= datetime('now', '-7 days') OR updated_at >= datetime('now', '-7 days')
+    `).get() as { count: number };
+
+    // New users in last 24h
+    const newUsersTodayRow = db.prepare(`
+      SELECT COUNT(*) as count FROM users 
+      WHERE created_at >= datetime('now', '-1 day')
+    `).get() as { count: number };
+
+    // Daily breakdown for last 7 days
+    const dailyRegistrations = (db.prepare(`
+      SELECT date(created_at) as date, COUNT(*) as count
+      FROM users
+      WHERE created_at >= datetime('now', '-7 days')
+      GROUP BY date(created_at)
+      ORDER BY date ASC
+    `).all() as any[]) || [];
+
+    const dailyMessages = (db.prepare(`
+      SELECT date(created_at) as date, COUNT(*) as count
+      FROM messages
+      WHERE created_at >= datetime('now', '-7 days')
+      GROUP BY date(created_at)
+      ORDER BY date ASC
+    `).all() as any[]) || [];
+
+    const dailyCalls = (db.prepare(`
+      SELECT date(started_at) as date, COUNT(*) as count
+      FROM call_logs
+      WHERE started_at >= datetime('now', '-7 days')
+      GROUP BY date(started_at)
+      ORDER BY date ASC
+    `).all() as any[]) || [];
 
     res.json({
       totalUsers: userCountRow?.count || 0,
+      activeUsers: activeUsersRow?.count || userCountRow?.count || 0,
+      newUsersToday: newUsersTodayRow?.count || 0,
       bannedUsers: bannedRow?.count || 0,
       adminCount: adminRow?.count || 0,
       totalMessages: messageRow?.count || 0,
       totalCalls: callRow?.count || 0,
-      totalStories: storyRow?.count || 0,
+      activeConversations: convRow?.count || 0,
+      pendingReports: pendingReportsRow?.count || 0,
       onlineUsers: getOnlineUsersCount(),
       serverUptimeSeconds: Math.floor(process.uptime()),
       dbType: pgPool ? 'PostgreSQL (Cloud / Supabase)' : 'SQLite (Local High-Performance)',
+      dailyRegistrations,
+      dailyMessages,
+      dailyCalls,
     });
   } catch (error) {
     console.error('getAdminStats error:', error);
@@ -818,6 +862,65 @@ export async function getAdminUserInspection(req: AuthenticatedRequest, res: Res
   } catch (error) {
     console.error('getAdminUserInspection error:', error);
     res.status(500).json({ error: 'Failed to inspect user' });
+  }
+}
+
+// ----------------------------------------------------
+// User Reports Management
+// ----------------------------------------------------
+export async function getAdminReports(_req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const rows = (db.prepare(`
+      SELECT r.*,
+             u1.username as reporter_username, u1.full_name as reporter_name, u1.avatar_url as reporter_avatar,
+             u2.username as reported_username, u2.full_name as reported_name, u2.avatar_url as reported_avatar, u2.is_banned as reported_is_banned
+      FROM user_reports r
+      LEFT JOIN users u1 ON r.reporter_id = u1.id
+      LEFT JOIN users u2 ON r.reported_user_id = u2.id
+      ORDER BY r.created_at DESC
+      LIMIT 100
+    `).all() as any[]).map(r => ({
+      id: r.id,
+      reporter_id: r.reporter_id,
+      reported_user_id: r.reported_user_id,
+      reason: r.reason,
+      status: r.status,
+      created_at: r.created_at,
+      resolved_at: r.resolved_at,
+      reporter: {
+        id: r.reporter_id,
+        username: r.reporter_username || 'unknown',
+        full_name: r.reporter_name || 'Anonymous',
+        avatar_url: r.reporter_avatar || '',
+      },
+      reported_user: {
+        id: r.reported_user_id,
+        username: r.reported_username || 'unknown',
+        full_name: r.reported_name || 'Reported User',
+        avatar_url: r.reported_avatar || '',
+        is_banned: r.reported_is_banned,
+      },
+    }));
+
+    res.json({ reports: rows });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'Failed to fetch reports' });
+  }
+}
+
+export async function resolveAdminReport(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const { id } = req.params;
+    const { action } = req.body;
+
+    const newStatus = action === 'dismiss' ? 'dismissed' : 'resolved';
+    const now = new Date().toISOString();
+
+    db.prepare('UPDATE user_reports SET status = ?, resolved_at = ? WHERE id = ?').run(newStatus, now, id);
+
+    res.json({ success: true, message: `Report marked as ${newStatus}.` });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'Failed to resolve report' });
   }
 }
 

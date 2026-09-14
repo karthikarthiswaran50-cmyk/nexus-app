@@ -1,5 +1,4 @@
-import React from 'react';
-import { Crown } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
 import { SubscriptionPlanId } from '../../types';
 
 interface PlanBadgeProps {
@@ -28,10 +27,10 @@ export const PlanBadge: React.FC<PlanBadgeProps> = ({
 
   return (
     <span
-      className={`inline-flex items-center font-extrabold rounded-full bg-gradient-to-r from-amber-500/20 via-yellow-400/15 to-amber-600/20 text-amber-300 border border-amber-400/40 shadow-xs tracking-wider uppercase ${sizeClasses[size]} ${className}`}
+      className={`inline-flex items-center font-extrabold rounded-full bg-gradient-to-r from-amber-500/15 via-yellow-400/10 to-amber-600/15 text-amber-300 border border-amber-400/30 shadow-xs tracking-wider uppercase ${sizeClasses[size]} ${className}`}
     >
-      {showIcon && <Crown className={`${iconSizes[size]} text-amber-300 fill-amber-400/40`} />}
-      <span>ROYAL</span>
+      {showIcon && <Sparkles className={`${iconSizes[size]} text-amber-300`} />}
+      <span>MEMBER</span>
     </span>
   );
 };

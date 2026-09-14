@@ -196,14 +196,64 @@ export function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_call_logs_users ON call_logs(caller_id, receiver_id);
   `);
 
-  // Migrations for new features: reactions, reply_to, delete, and last_seen
+  // Migrations for new features: reactions, reply_to, delete, last_seen, and editing
   try { db.exec(`ALTER TABLE messages ADD COLUMN reactions TEXT DEFAULT '{}';`); } catch (e) {}
   try { db.exec(`ALTER TABLE messages ADD COLUMN reply_to_id TEXT;`); } catch (e) {}
   try { db.exec(`ALTER TABLE messages ADD COLUMN reply_to_content TEXT;`); } catch (e) {}
   try { db.exec(`ALTER TABLE messages ADD COLUMN reply_to_sender TEXT;`); } catch (e) {}
   try { db.exec(`ALTER TABLE messages ADD COLUMN is_deleted_for_all INTEGER DEFAULT 0;`); } catch (e) {}
   try { db.exec(`ALTER TABLE messages ADD COLUMN deleted_for_users TEXT DEFAULT '[]';`); } catch (e) {}
+  try { db.exec(`ALTER TABLE messages ADD COLUMN edited_at TEXT;`); } catch (e) {}
+  try { db.exec(`ALTER TABLE messages ADD COLUMN group_id TEXT;`); } catch (e) {}
+  try { db.exec(`ALTER TABLE messages ADD COLUMN file_name TEXT;`); } catch (e) {}
+  try { db.exec(`ALTER TABLE messages ADD COLUMN file_size INTEGER;`); } catch (e) {}
   try { db.exec(`ALTER TABLE users ADD COLUMN last_seen TEXT DEFAULT (datetime('now'));`); } catch (e) {}
+  try { db.exec(`ALTER TABLE user_settings ADD COLUMN who_can_call_me TEXT DEFAULT 'everyone';`); } catch (e) {}
+  try { db.exec(`ALTER TABLE user_settings ADD COLUMN who_can_see_last_seen TEXT DEFAULT 'everyone';`); } catch (e) {}
+
+  // 11. Groups & Group Members Table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS groups (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT DEFAULT '',
+      avatar_url TEXT DEFAULT '',
+      created_by TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS group_members (
+      id TEXT PRIMARY KEY,
+      group_id TEXT NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      role TEXT NOT NULL DEFAULT 'member',
+      joined_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(group_id, user_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_group_members_group ON group_members(group_id);
+    CREATE INDEX IF NOT EXISTS idx_group_members_user ON group_members(user_id);
+    CREATE INDEX IF NOT EXISTS idx_messages_group ON messages(group_id, created_at);
+
+    CREATE TABLE IF NOT EXISTS blocked_users (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      blocked_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(user_id, blocked_user_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_blocked_users_pair ON blocked_users(user_id, blocked_user_id);
+
+    CREATE TABLE IF NOT EXISTS user_reports (
+      id TEXT PRIMARY KEY,
+      reporter_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      reported_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      reason TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      resolved_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_reports_status ON user_reports(status, created_at);
+  `);
 
   // 8. Stories Table
   db.exec(`
@@ -335,6 +385,48 @@ async function initPostgresAndRestore() {
 
       ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(20) DEFAULT 'user';
       ALTER TABLE users ADD COLUMN IF NOT EXISTS is_banned INT DEFAULT 0;
+      ALTER TABLE messages ADD COLUMN IF NOT EXISTS group_id VARCHAR(100);
+      ALTER TABLE messages ADD COLUMN IF NOT EXISTS edited_at TIMESTAMPTZ;
+      ALTER TABLE messages ADD COLUMN IF NOT EXISTS file_name VARCHAR(255);
+      ALTER TABLE messages ADD COLUMN IF NOT EXISTS file_size INT;
+      ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS who_can_call_me VARCHAR(50) DEFAULT 'everyone';
+      ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS who_can_see_last_seen VARCHAR(50) DEFAULT 'everyone';
+
+      CREATE TABLE IF NOT EXISTS groups (
+        id VARCHAR(100) PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        description TEXT DEFAULT '',
+        avatar_url TEXT DEFAULT '',
+        created_by VARCHAR(100) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS group_members (
+        id VARCHAR(100) PRIMARY KEY,
+        group_id VARCHAR(100) NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+        user_id VARCHAR(100) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        role VARCHAR(50) DEFAULT 'member',
+        joined_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(group_id, user_id)
+      );
+
+      CREATE TABLE IF NOT EXISTS blocked_users (
+        id VARCHAR(100) PRIMARY KEY,
+        user_id VARCHAR(100) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        blocked_user_id VARCHAR(100) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(user_id, blocked_user_id)
+      );
+
+      CREATE TABLE IF NOT EXISTS user_reports (
+        id VARCHAR(100) PRIMARY KEY,
+        reporter_id VARCHAR(100) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        reported_user_id VARCHAR(100) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        reason TEXT NOT NULL,
+        status VARCHAR(50) DEFAULT 'pending',
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        resolved_at TIMESTAMPTZ
+      );
 
       CREATE TABLE IF NOT EXISTS system_announcements (
         id VARCHAR(100) PRIMARY KEY,
@@ -534,21 +626,108 @@ export function persistSettingsToPg(st: {
 
 export function persistMessageToPg(msg: {
   id: string;
-  conversation_id: string;
+  conversation_id?: string | null;
+  group_id?: string | null;
   sender_id: string;
-  receiver_id: string;
+  receiver_id?: string | null;
   content: string;
   type?: string;
-  media_url?: string;
+  media_url?: string | null;
+  file_name?: string | null;
+  file_size?: number | null;
   is_read?: number;
+  edited_at?: string | null;
 }) {
   if (!pgPool) return;
   pgPool.query(
-    `INSERT INTO messages (id, conversation_id, sender_id, receiver_id, content, type, media_url, is_read)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-     ON CONFLICT (id) DO NOTHING`,
-    [msg.id, msg.conversation_id, msg.sender_id, msg.receiver_id, msg.content, msg.type || 'text', msg.media_url || null, msg.is_read || 0]
+    `INSERT INTO messages (id, conversation_id, group_id, sender_id, receiver_id, content, type, media_url, file_name, file_size, is_read, edited_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+     ON CONFLICT (id) DO UPDATE SET
+       content = EXCLUDED.content,
+       edited_at = EXCLUDED.edited_at,
+       is_read = EXCLUDED.is_read`,
+    [
+      msg.id,
+      msg.conversation_id || null,
+      msg.group_id || null,
+      msg.sender_id,
+      msg.receiver_id || null,
+      msg.content,
+      msg.type || 'text',
+      msg.media_url || null,
+      msg.file_name || null,
+      msg.file_size || null,
+      msg.is_read || 0,
+      msg.edited_at ? new Date(msg.edited_at) : null,
+    ]
   ).catch(err => console.error('Error persisting message to PostgreSQL:', err.message));
+}
+
+export function persistGroupToPg(group: {
+  id: string;
+  name: string;
+  description?: string;
+  avatar_url?: string;
+  created_by: string;
+}) {
+  if (!pgPool) return;
+  pgPool.query(
+    `INSERT INTO groups (id, name, description, avatar_url, created_by)
+     VALUES ($1, $2, $3, $4, $5)
+     ON CONFLICT (id) DO UPDATE SET
+       name = EXCLUDED.name,
+       description = EXCLUDED.description,
+       avatar_url = EXCLUDED.avatar_url`,
+    [group.id, group.name, group.description || '', group.avatar_url || '', group.created_by]
+  ).catch(err => console.error('Error persisting group to PostgreSQL:', err.message));
+}
+
+export function persistGroupMemberToPg(member: {
+  id: string;
+  group_id: string;
+  user_id: string;
+  role?: string;
+}) {
+  if (!pgPool) return;
+  pgPool.query(
+    `INSERT INTO group_members (id, group_id, user_id, role)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (group_id, user_id) DO UPDATE SET
+       role = EXCLUDED.role`,
+    [member.id, member.group_id, member.user_id, member.role || 'member']
+  ).catch(err => console.error('Error persisting group member to PostgreSQL:', err.message));
+}
+
+export function persistBlockToPg(block: {
+  id: string;
+  user_id: string;
+  blocked_user_id: string;
+}) {
+  if (!pgPool) return;
+  pgPool.query(
+    `INSERT INTO blocked_users (id, user_id, blocked_user_id)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (user_id, blocked_user_id) DO NOTHING`,
+    [block.id, block.user_id, block.blocked_user_id]
+  ).catch(err => console.error('Error persisting block to PostgreSQL:', err.message));
+}
+
+export function persistReportToPg(report: {
+  id: string;
+  reporter_id: string;
+  reported_user_id: string;
+  reason: string;
+  status: string;
+}) {
+  if (!pgPool) return;
+  pgPool.query(
+    `INSERT INTO user_reports (id, reporter_id, reported_user_id, reason, status)
+     VALUES ($1, $2, $3, $4, $5)
+     ON CONFLICT (id) DO UPDATE SET
+       status = EXCLUDED.status,
+       resolved_at = CASE WHEN EXCLUDED.status != 'pending' THEN NOW() ELSE NULL END`,
+    [report.id, report.reporter_id, report.reported_user_id, report.reason, report.status]
+  ).catch(err => console.error('Error persisting report to PostgreSQL:', err.message));
 }
 
 export function persistCallLogToPg(call: {

@@ -65,13 +65,8 @@ export const Avatar: React.FC<AvatarProps> = ({
     setHasError(false);
   }, [src]);
 
-  // Royal frame styling
-  const ringStyle =
-    planId === 'vip'
-      ? 'ring-2 ring-amber-400/80 shadow-[0_0_15px_rgba(245,158,11,0.35)]'
-      : planId === 'pro'
-      ? 'ring-2 ring-brand-400/80 shadow-[0_0_15px_rgba(99,102,241,0.3)]'
-      : 'ring-1 ring-white/10';
+  // Clean avatar ring styling
+  const ringStyle = 'ring-1 ring-gold-500/20 shadow-md';
 
   return (
     <div className={`relative inline-flex items-center justify-center shrink-0 ${className}`}>
@@ -87,11 +82,7 @@ export const Avatar: React.FC<AvatarProps> = ({
         />
       ) : (
         <div
-          className={`${sizeClasses[size]} rounded-full ${
-            planId === 'vip'
-              ? 'bg-gradient-to-tr from-amber-600 via-yellow-500 to-amber-400 text-dark-950 font-extrabold'
-              : 'bg-gradient-to-tr from-brand-600 to-accent-violet text-white font-bold'
-          } flex items-center justify-center shadow-xl ${ringStyle}`}
+          className={`${sizeClasses[size]} rounded-full bg-gradient-to-tr from-amber-600/90 via-amber-500 to-yellow-500 text-dark-950 font-extrabold flex items-center justify-center shadow-xl ${ringStyle}`}
         >
           {getInitials(name || 'Nexus')}
         </div>
@@ -109,26 +100,6 @@ export const Avatar: React.FC<AvatarProps> = ({
           }`}
           title={isOnline ? 'Active Now' : isReachable ? 'Available on Mobile' : 'Offline'}
         />
-      )}
-
-      {/* Royal VIP Crown Badge */}
-      {planId === 'vip' && (
-        <div
-          className={`absolute -top-1.5 -right-1.5 ${badgeSizes[size]} rounded-full bg-gradient-to-tr from-amber-500 via-yellow-300 to-amber-600 p-0.5 text-dark-950 shadow-lg shadow-amber-500/30 flex items-center justify-center ring-2 ring-dark-950`}
-          title="Imperial VIP Member"
-        >
-          <Crown className="w-full h-full fill-dark-950" />
-        </div>
-      )}
-
-      {/* Pro Badge */}
-      {planId === 'pro' && (
-        <div
-          className={`absolute -top-1.5 -right-1.5 ${badgeSizes[size]} rounded-full bg-gradient-to-tr from-brand-500 to-accent-violet p-0.5 text-white shadow-lg shadow-brand-500/30 flex items-center justify-center ring-2 ring-dark-950`}
-          title="Pro Member"
-        >
-          <Sparkles className="w-full h-full fill-white" />
-        </div>
       )}
     </div>
   );

@@ -18,9 +18,13 @@ import {
   RefreshCw,
   Wifi,
   WifiOff,
-  Download,
   Sparkles,
+  UserX,
+  Trash2,
+  Users,
+  Download,
 } from 'lucide-react';
+import { BlockedUser } from '../../types';
 import axios from 'axios';
 import {
   getNotificationPermissionStatus,
@@ -42,9 +46,23 @@ export const SettingsView: React.FC = () => {
   const pwaState = usePWAInstall();
   const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
 
-  const [allowCallsFrom, setAllowCallsFrom] = useState(settings?.allow_calls_from || 'everyone');
+  const [allowCallsFrom, setAllowCallsFrom] = useState<'everyone' | 'contacts' | 'nobody'>(
+    (settings?.who_can_call_me || settings?.allow_calls_from || 'everyone') as any
+  );
+  const [whoCanSeeLastSeen, setWhoCanSeeLastSeen] = useState<'everyone' | 'nobody'>(
+    settings?.who_can_see_last_seen || 'everyone'
+  );
   const [notificationSound, setNotificationSound] = useState(settings?.notification_sound ?? true);
   const [readReceipts, setReadReceipts] = useState(settings?.read_receipts ?? true);
+
+  // Blocked users & account actions
+  const [blockedUsers, setBlockedUsers] = useState<BlockedUser[]>([]);
+  const [loadingBlocks, setLoadingBlocks] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [deletingAccount, setDeletingAccount] = useState(false);
+  const [loggingOutAll, setLoggingOutAll] = useState(false);
+  const [accountActionMsg, setAccountActionMsg] = useState<{ text: string; isError?: boolean } | null>(null);
 
   // System push notification state
   const [notifPermission, setNotifPermission] = useState(getNotificationPermissionStatus());
@@ -64,9 +82,59 @@ export const SettingsView: React.FC = () => {
     }
   };
 
+  const fetchBlockedUsers = async () => {
+    setLoadingBlocks(true);
+    try {
+      const res = await axios.get('/api/users/blocks/list');
+      setBlockedUsers(res.data.blocks || []);
+    } catch (e) {
+      console.error('Fetch blocked users failed:', e);
+    } finally {
+      setLoadingBlocks(false);
+    }
+  };
+
+  const handleUnblockUser = async (blockedUserId: string) => {
+    try {
+      await axios.delete(`/api/users/block/${blockedUserId}`);
+      setBlockedUsers(prev => prev.filter(b => b.blocked_user_id !== blockedUserId));
+    } catch (e) {
+      console.error('Unblock user failed:', e);
+    }
+  };
+
+  const handleLogoutAll = async () => {
+    if (!window.confirm('Are you sure you want to log out from all devices? You will need to log back in.')) return;
+    setLoggingOutAll(true);
+    try {
+      await axios.post('/api/users/logout-all');
+      logout();
+    } catch (e) {
+      setAccountActionMsg({ text: 'Failed to log out all devices', isError: true });
+      setTimeout(() => setAccountActionMsg(null), 3000);
+      setLoggingOutAll(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (deleteConfirmText.trim().toLowerCase() !== 'delete') {
+      return;
+    }
+    setDeletingAccount(true);
+    try {
+      await axios.delete('/api/users/account');
+      logout();
+    } catch (e) {
+      setAccountActionMsg({ text: 'Failed to delete account', isError: true });
+      setTimeout(() => setAccountActionMsg(null), 3000);
+      setDeletingAccount(false);
+    }
+  };
+
   useEffect(() => {
     setNotifPermission(getNotificationPermissionStatus());
     fetchPushSubStatus();
+    fetchBlockedUsers();
   }, []);
 
   // STEP 1+2: Request permission → Subscribe push → save to server
@@ -179,7 +247,9 @@ export const SettingsView: React.FC = () => {
     setSettingsError(null);
     try {
       await updateSettings({
-        allow_calls_from: allowCallsFrom as any,
+        allow_calls_from: allowCallsFrom,
+        who_can_call_me: allowCallsFrom,
+        who_can_see_last_seen: whoCanSeeLastSeen,
         notification_sound: notificationSound,
         read_receipts: readReceipts,
       });
@@ -271,9 +341,21 @@ export const SettingsView: React.FC = () => {
                 onChange={(e) => setAllowCallsFrom(e.target.value as any)}
                 className="w-full px-4 py-2.5 bg-dark-850 border border-gold-500/20 rounded-xl text-xs text-white focus:outline-none focus:border-gold-400"
               >
-                <option value="everyone">Everyone (Open Realm)</option>
+                <option value="everyone">Everyone</option>
                 <option value="contacts">Contacts / Active Chats Only</option>
-                <option value="subscribers">Subscribers Only</option>
+                <option value="nobody">Nobody</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-dark-300 mb-2">Who can see your last seen status?</label>
+              <select
+                value={whoCanSeeLastSeen}
+                onChange={(e) => setWhoCanSeeLastSeen(e.target.value as any)}
+                className="w-full px-4 py-2.5 bg-dark-850 border border-gold-500/20 rounded-xl text-xs text-white focus:outline-none focus:border-gold-400"
+              >
+                <option value="everyone">Everyone</option>
+                <option value="nobody">Nobody (Hide Status)</option>
               </select>
             </div>
 
@@ -710,7 +792,149 @@ export const SettingsView: React.FC = () => {
           )}
         </div>
 
+        {/* 🚫 Blocked Users Card */}
+        <div className="bg-dark-900 border border-gold-500/15 rounded-3xl p-6 space-y-4 shadow-xl royal-card">
+          <h3 className="text-sm font-black text-white flex items-center justify-between border-b border-gold-500/15 pb-3">
+            <div className="flex items-center gap-2">
+              <UserX className="w-4 h-4 text-gold-400" />
+              <span>Blocked Users</span>
+            </div>
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-dark-800 text-dark-300 font-bold border border-gold-500/20">
+              {blockedUsers.length} Blocked
+            </span>
+          </h3>
+
+          <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+            {loadingBlocks ? (
+              <p className="text-xs text-dark-400 text-center py-4">Loading blocked users...</p>
+            ) : blockedUsers.length === 0 ? (
+              <p className="text-xs text-dark-400 text-center py-6">You have not blocked any users.</p>
+            ) : (
+              blockedUsers.map((b) => (
+                <div
+                  key={b.id}
+                  className="flex items-center justify-between p-2.5 rounded-2xl bg-dark-850 border border-gold-500/10"
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-8 h-8 rounded-xl bg-dark-800 border border-gold-500/20 flex items-center justify-center font-bold text-xs text-gold-400 shrink-0">
+                      {b.blocked_user?.full_name?.charAt(0) || 'U'}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-white truncate">
+                        {b.blocked_user?.full_name || 'User'}
+                      </p>
+                      <p className="text-[10px] text-dark-400 truncate font-mono">
+                        @{b.blocked_user?.username || 'user'}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleUnblockUser(b.blocked_user_id)}
+                    className="px-2.5 py-1 rounded-lg bg-gold-500/15 hover:bg-gold-500/25 text-amber-300 border border-gold-500/30 text-[11px] font-bold transition-all active:scale-95 shrink-0 cursor-pointer"
+                  >
+                    Unblock
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* 🛡️ Account & Sessions Management Card */}
+        <div className="bg-dark-900 border border-rose-500/20 rounded-3xl p-6 space-y-4 shadow-xl royal-card">
+          <h3 className="text-sm font-black text-white flex items-center justify-between border-b border-gold-500/15 pb-3">
+            <div className="flex items-center gap-2 text-rose-400">
+              <Shield className="w-4 h-4" />
+              <span className="text-white">Account & Sessions</span>
+            </div>
+          </h3>
+
+          <p className="text-xs text-dark-300 leading-relaxed">
+            Log out across all devices or permanently delete your account and messages.
+          </p>
+
+          {accountActionMsg && (
+            <div className={`p-2.5 rounded-xl text-xs font-bold ${
+              accountActionMsg.isError ? 'bg-rose-500/15 text-rose-300 border border-rose-500/30' : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+            }`}>
+              {accountActionMsg.text}
+            </div>
+          )}
+
+          <div className="space-y-3 pt-2">
+            <button
+              type="button"
+              onClick={handleLogoutAll}
+              disabled={loggingOutAll}
+              className="w-full py-2.5 rounded-xl bg-dark-850 hover:bg-dark-800 text-amber-300 border border-gold-500/30 font-bold text-xs flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+            >
+              <LogOut className="w-4 h-4" />
+              <span>{loggingOutAll ? 'Logging out...' : 'Log Out All Devices'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setDeleteConfirmText('');
+                setIsDeleteModalOpen(true);
+              }}
+              className="w-full py-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 font-bold text-xs flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span>Delete Account Permanently</span>
+            </button>
+          </div>
+        </div>
+
       </div>
+
+      {/* ⚠️ Delete Account Confirmation Modal */}
+      {isDeleteModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in">
+          <div className="w-full max-w-md bg-dark-900 border border-rose-500/40 rounded-3xl p-6 shadow-2xl space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-rose-400 shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-white">Delete Account</h3>
+                <p className="text-xs text-dark-400">This action is permanent and cannot be undone.</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-dark-300 leading-relaxed">
+              All your conversations, messages, groups, media, and profile data will be permanently removed. To confirm, please type <span className="font-bold text-rose-400 font-mono">DELETE</span> below:
+            </p>
+
+            <input
+              type="text"
+              value={deleteConfirmText}
+              onChange={(e) => setDeleteConfirmText(e.target.value)}
+              placeholder="Type DELETE to confirm"
+              className="w-full px-4 py-2.5 bg-dark-850 border border-rose-500/30 rounded-xl text-xs text-white placeholder:text-dark-600 focus:outline-none focus:border-rose-400 font-mono"
+            />
+
+            <div className="flex items-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setIsDeleteModalOpen(false)}
+                className="flex-1 py-2.5 rounded-xl bg-dark-850 hover:bg-dark-800 text-dark-300 font-bold text-xs transition-all cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteAccount}
+                disabled={deleteConfirmText.trim().toLowerCase() !== 'delete' || deletingAccount}
+                className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-black text-xs transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-lg shadow-rose-600/30 cursor-pointer"
+              >
+                {deletingAccount ? 'Deleting...' : 'Confirm Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <AdminDashboardModal
         isOpen={isAdminModalOpen}

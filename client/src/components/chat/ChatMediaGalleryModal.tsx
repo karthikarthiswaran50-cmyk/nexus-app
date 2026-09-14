@@ -7,7 +7,7 @@ interface ChatMediaGalleryModalProps {
   isOpen: boolean;
   onClose: () => void;
   messages: Message[];
-  otherUser: User;
+  otherUser?: User | null;
   onSelectMedia: (url: string, senderName?: string) => void;
 }
 
@@ -52,7 +52,7 @@ export const ChatMediaGalleryModal: React.FC<ChatMediaGalleryModalProps> = ({
             <h3 className="text-base font-black text-white flex items-center gap-2">
               <span className="gold-gradient-text">Shared Media & Files</span>
             </h3>
-            <p className="text-xs text-dark-400 mt-0.5">Shared with {otherUser.full_name}</p>
+            <p className="text-xs text-dark-400 mt-0.5">{otherUser ? `Shared with ${otherUser.full_name}` : 'Shared Media'}</p>
           </div>
           <button
             type="button"
@@ -119,7 +119,7 @@ export const ChatMediaGalleryModal: React.FC<ChatMediaGalleryModalProps> = ({
                 {photos.map((item) => (
                   <div
                     key={item.id}
-                    onClick={() => onSelectMedia(item.media_url!, otherUser.full_name)}
+                    onClick={() => onSelectMedia(item.media_url!, otherUser?.full_name || 'Member')}
                     className="group relative aspect-square rounded-2xl overflow-hidden bg-dark-950 border border-gold-500/20 cursor-pointer shadow-lg hover:border-gold-400 transition-all hover:scale-[1.02]"
                   >
                     <img src={item.media_url} alt="" className="w-full h-full object-cover" />

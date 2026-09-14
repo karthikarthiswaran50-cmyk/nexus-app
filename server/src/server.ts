@@ -113,6 +113,11 @@ const ALLOWED_MIME_TYPES = new Set([
   'audio/aac',   // iOS Safari alternative
   'video/webm',
   'video/mp4',
+  'application/pdf',
+  'text/plain',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/zip',
 ]);
 
 const ALLOWED_EXTENSIONS = new Set([
@@ -127,6 +132,11 @@ const ALLOWED_EXTENSIONS = new Set([
   '.wav',
   '.mp4',
   '.aac',
+  '.pdf',
+  '.txt',
+  '.doc',
+  '.docx',
+  '.zip',
 ]);
 
 // Multer storage
@@ -243,6 +253,12 @@ app.put('/api/users/settings', requireAuth, usersCtrl.updateSettings);
 app.put('/api/users/profile', requireAuth, usersCtrl.updateProfile);
 app.post('/api/users/avatar', requireAuth, uploadLimiter, upload.single('avatar'), usersCtrl.uploadAvatar);
 app.post('/api/users/fcm-token', requireAuth, usersCtrl.updateFcmToken);
+app.post('/api/users/block/:id', requireAuth, usersCtrl.blockUser);
+app.delete('/api/users/block/:id', requireAuth, usersCtrl.unblockUser);
+app.get('/api/users/blocks/list', requireAuth, usersCtrl.getBlockedUsers);
+app.post('/api/users/report', requireAuth, usersCtrl.reportUser);
+app.delete('/api/users/account', requireAuth, usersCtrl.deleteAccount);
+app.post('/api/users/logout-all', requireAuth, usersCtrl.logoutAll);
 app.get('/api/users/:id', requireAuth, usersCtrl.getUserByIdOrUsername);
 
 // Stories & Status Routes (24-Hour Stories)
@@ -332,6 +348,9 @@ app.delete('/api/stories/:id', requireAuth, storiesCtrl.deleteStory);
 app.get('/api/chat/conversations', requireAuth, chatCtrl.getConversations);
 app.get('/api/chat/messages/:otherUserId', requireAuth, chatCtrl.getMessages);
 app.post('/api/chat/send', requireAuth, chatCtrl.sendMessageHttp);
+app.put('/api/chat/messages/:id', requireAuth, chatCtrl.editMessageHttp);
+app.post('/api/chat/messages/forward', requireAuth, chatCtrl.forwardMessageHttp);
+app.get('/api/chat/search', requireAuth, chatCtrl.searchChatHttp);
 app.post('/api/chat/mark-read', requireAuth, chatCtrl.markRead);
 app.post('/api/chat/upload', requireAuth, uploadLimiter, upload.single('file'), (req: any, res: any) => {
   if (!req.file) {
@@ -346,6 +365,14 @@ app.post('/api/chat/upload', requireAuth, uploadLimiter, upload.single('file'), 
   });
 });
 
+// 3.5. Group Chat Routes
+app.get('/api/groups', requireAuth, chatCtrl.getGroups);
+app.post('/api/groups', requireAuth, chatCtrl.createGroup);
+app.get('/api/groups/:id', requireAuth, chatCtrl.getGroupDetails);
+app.post('/api/groups/:id/members', requireAuth, chatCtrl.addGroupMembers);
+app.delete('/api/groups/:id/members/:memberUserId', requireAuth, chatCtrl.removeGroupMember);
+app.get('/api/groups/:id/messages', requireAuth, chatCtrl.getGroupMessages);
+
 // 4. Calls Routes
 app.get('/api/calls/history', requireAuth, callsCtrl.getCallHistory);
 app.post('/api/calls/log', requireAuth, callsCtrl.createCallLogHttp);
@@ -353,13 +380,11 @@ app.post('/api/calls/log', requireAuth, callsCtrl.createCallLogHttp);
 // 5. WebRTC ICE Server Discovery & TURN Configuration
 app.get('/api/webrtc/config', webrtcCtrl.getWebRtcConfig);
 
-// 6. Subscriptions & Razorpay Payment Routes
+// 6. Free Forever Platform Membership
 app.get('/api/subscriptions/plans', subsCtrl.getPlans);
 app.get('/api/subscriptions/current', requireAuth, subsCtrl.getCurrentSubscription);
 app.post('/api/subscriptions/subscribe', requireAuth, subsCtrl.subscribePlan);
 app.post('/api/subscriptions/cancel', requireAuth, subsCtrl.cancelSubscription);
-app.post('/api/subscriptions/create-razorpay-order', requireAuth, subsCtrl.createRazorpayOrderHttp);
-app.post('/api/subscriptions/verify-payment', requireAuth, subsCtrl.verifyRazorpayPaymentHttp);
 
 // 6.5 Royal Owner & Admin Control Routes
 app.get('/api/admin/stats', requireAdmin, adminCtrl.getAdminStats);
@@ -377,6 +402,8 @@ app.get('/api/admin/messages/recent', requireAdmin, adminCtrl.getAdminRecentMess
 app.delete('/api/admin/messages/:id', requireAdmin, adminCtrl.deleteAdminMessage);
 app.get('/api/admin/activities', requireAdmin, adminCtrl.getAdminUserActivities);
 app.get('/api/admin/users/:id/inspection', requireAdmin, adminCtrl.getAdminUserInspection);
+app.get('/api/admin/reports', requireAdmin, adminCtrl.getAdminReports);
+app.post('/api/admin/reports/:id/resolve', requireAdmin, adminCtrl.resolveAdminReport);
 
 
 // 7. Serve static client in production (with multi-path fallback for local, Render, and Docker)

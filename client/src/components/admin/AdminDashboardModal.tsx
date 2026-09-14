@@ -37,10 +37,11 @@ import {
   Pause,
   Calendar,
   MessageCircle,
+  Flag,
 } from 'lucide-react';
 import axios from 'axios';
 import { useAuth } from '../../context/AuthContext';
-import { User } from '../../types';
+import { User, UserReport } from '../../types';
 import { Avatar } from '../common/Avatar';
 
 interface AdminStats {
@@ -130,15 +131,21 @@ interface AdminDashboardModalProps {
   onClose: () => void;
 }
 
-type TabType = 'overview' | 'chats' | 'activities' | 'users' | 'broadcast' | 'security';
+type TabType = 'chats' | 'activities' | 'users' | 'reports' | 'analytics' | 'system';
 
 export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({ isOpen, onClose }) => {
   const { user: currentUser, refreshUser } = useAuth();
-  const [activeTab, setActiveTab] = useState<TabType>('overview');
+  const [activeTab, setActiveTab] = useState<TabType>('chats');
 
   // Stats State
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [loadingStats, setLoadingStats] = useState(false);
+
+  // Reports State
+  const [reportsList, setReportsList] = useState<UserReport[]>([]);
+  const [loadingReports, setLoadingReports] = useState(false);
+  const [reportsFilter, setReportsFilter] = useState<'all' | 'pending' | 'resolved' | 'dismissed'>('all');
+  const [actionReportId, setActionReportId] = useState<string | null>(null);
 
   // Users State
   const [usersList, setUsersList] = useState<User[]>([]);
@@ -165,6 +172,31 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({ isOpen
   const [savingPasscode, setSavingPasscode] = useState(false);
   const [passcodeSuccessMsg, setPasscodeSuccessMsg] = useState<string | null>(null);
   const [passcodeErrorMsg, setPasscodeErrorMsg] = useState<string | null>(null);
+
+  // Fetch Reports
+  const fetchReports = async () => {
+    try {
+      setLoadingReports(true);
+      const res = await axios.get('/api/admin/reports');
+      setReportsList(res.data.reports || []);
+    } catch (err) {
+      console.error('Failed to load reports:', err);
+    } finally {
+      setLoadingReports(false);
+    }
+  };
+
+  const handleResolveReport = async (reportId: string, action: 'resolved' | 'dismissed') => {
+    try {
+      setActionReportId(reportId);
+      await axios.post(`/api/admin/reports/${reportId}/resolve`, { action });
+      setReportsList(prev => prev.map(r => r.id === reportId ? { ...r, status: action, resolved_at: new Date().toISOString() } : r));
+    } catch (err) {
+      console.error('Failed to resolve report:', err);
+    } finally {
+      setActionReportId(null);
+    }
+  };
 
   // Fetch Stats
   const fetchStats = async () => {
@@ -327,6 +359,8 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({ isOpen
         fetchRecentMessages(chatSearchQuery);
       } else if (activeTab === 'activities') {
         fetchActivities();
+      } else if (activeTab === 'reports') {
+        fetchReports();
       }
       if (refreshUser) {
         refreshUser();
@@ -547,19 +581,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({ isOpen
 
         {/* Navigation Tabs */}
         <div className="flex items-center gap-2 p-2.5 bg-dark-950/50 border-b border-white/5 text-xs font-bold overflow-x-auto">
-          <button
-            type="button"
-            onClick={() => setActiveTab('overview')}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl transition-all whitespace-nowrap ${
-              activeTab === 'overview'
-                ? 'bg-gradient-to-r from-amber-500/20 via-yellow-500/15 to-amber-600/20 text-amber-300 border border-gold-500/30 shadow-sm'
-                : 'text-dark-400 hover:text-white hover:bg-white/5'
-            }`}
-          >
-            <BarChart3 className="w-4 h-4" />
-            <span>Overview & Stats</span>
-          </button>
-
+          {/* 1. CHATS */}
           <button
             type="button"
             onClick={() => {
@@ -574,7 +596,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({ isOpen
             }`}
           >
             <MessageSquare className="w-4 h-4" />
-            <span>User Chats & Messages</span>
+            <span>Chats & Messages</span>
             {stats && stats.totalMessages > 0 && (
               <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-extrabold">
                 {stats.totalMessages}
@@ -582,6 +604,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({ isOpen
             )}
           </button>
 
+          {/* 2. ACTIVITIES */}
           <button
             type="button"
             onClick={() => {
@@ -595,10 +618,11 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({ isOpen
             }`}
           >
             <Activity className="w-4 h-4 text-emerald-400" />
-            <span>User Activities</span>
+            <span>Activities</span>
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
           </button>
 
+          {/* 3. USERS */}
           <button
             type="button"
             onClick={() => setActiveTab('users')}
@@ -609,41 +633,65 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({ isOpen
             }`}
           >
             <Users className="w-4 h-4" />
-            <span>Users Management ({usersList.length})</span>
+            <span>Users ({usersList.length})</span>
           </button>
 
+          {/* 4. REPORTS */}
           <button
             type="button"
-            onClick={() => setActiveTab('broadcast')}
+            onClick={() => {
+              setActiveTab('reports');
+              fetchReports();
+            }}
             className={`flex items-center gap-2 px-3.5 py-2 rounded-xl transition-all whitespace-nowrap ${
-              activeTab === 'broadcast'
+              activeTab === 'reports'
                 ? 'bg-gradient-to-r from-amber-500/20 via-yellow-500/15 to-amber-600/20 text-amber-300 border border-gold-500/30 shadow-sm'
                 : 'text-dark-400 hover:text-white hover:bg-white/5'
             }`}
           >
-            <Megaphone className="w-4 h-4" />
-            <span>Global Broadcast</span>
+            <AlertTriangle className="w-4 h-4 text-amber-400" />
+            <span>Reports</span>
+            {reportsList.filter(r => r.status === 'pending').length > 0 && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-rose-500/20 text-rose-300 font-extrabold border border-rose-500/30">
+                {reportsList.filter(r => r.status === 'pending').length}
+              </span>
+            )}
           </button>
 
+          {/* 5. ANALYTICS */}
           <button
             type="button"
-            onClick={() => setActiveTab('security')}
+            onClick={() => setActiveTab('analytics')}
             className={`flex items-center gap-2 px-3.5 py-2 rounded-xl transition-all whitespace-nowrap ${
-              activeTab === 'security'
+              activeTab === 'analytics'
                 ? 'bg-gradient-to-r from-amber-500/20 via-yellow-500/15 to-amber-600/20 text-amber-300 border border-gold-500/30 shadow-sm'
                 : 'text-dark-400 hover:text-white hover:bg-white/5'
             }`}
           >
-            <KeyRound className="w-4 h-4" />
-            <span>Owner Access</span>
+            <BarChart3 className="w-4 h-4" />
+            <span>Analytics</span>
+          </button>
+
+          {/* 6. SYSTEM */}
+          <button
+            type="button"
+            onClick={() => setActiveTab('system')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl transition-all whitespace-nowrap ${
+              activeTab === 'system'
+                ? 'bg-gradient-to-r from-amber-500/20 via-yellow-500/15 to-amber-600/20 text-amber-300 border border-gold-500/30 shadow-sm'
+                : 'text-dark-400 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            <Server className="w-4 h-4" />
+            <span>System & Broadcast</span>
           </button>
         </div>
 
         {/* Content Body */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
           
-          {/* TAB 1: OVERVIEW */}
-          {activeTab === 'overview' && (
+          {/* TAB: ANALYTICS */}
+          {activeTab === 'analytics' && (
             <div className="space-y-6">
               <div className="flex items-center justify-between">
                 <h4 className="text-sm font-black text-white flex items-center gap-2">
@@ -1300,9 +1348,160 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({ isOpen
             </div>
           )}
 
-          {/* TAB 3: GLOBAL BROADCAST */}
-          {activeTab === 'broadcast' && (
+          {/* TAB 4: REPORTS */}
+          {activeTab === 'reports' && (
             <div className="space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <h4 className="text-sm font-black text-white flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 text-amber-400" />
+                    <span>Member Reports & Safety</span>
+                  </h4>
+                  <span className="text-xs text-dark-400">({reportsList.length} total)</span>
+                </div>
+
+                {/* Filter buttons */}
+                <div className="flex items-center gap-1.5 p-1 bg-dark-950 rounded-xl border border-white/5 text-xs">
+                  {(['all', 'pending', 'resolved', 'dismissed'] as const).map((filter) => (
+                    <button
+                      key={filter}
+                      type="button"
+                      onClick={() => setReportsFilter(filter)}
+                      className={`px-3 py-1 rounded-lg font-bold capitalize transition-all ${
+                        reportsFilter === filter
+                          ? 'bg-amber-500/20 text-amber-300 border border-gold-500/30'
+                          : 'text-dark-400 hover:text-white'
+                      }`}
+                    >
+                      {filter}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={fetchReports}
+                    disabled={loadingReports}
+                    className="p-1 text-dark-400 hover:text-amber-300 ml-1"
+                    title="Refresh reports"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${loadingReports ? 'animate-spin' : ''}`} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Reports List */}
+              <div className="space-y-3">
+                {loadingReports ? (
+                  <div className="p-8 text-center text-xs text-dark-400">Loading user reports...</div>
+                ) : reportsList.filter(r => reportsFilter === 'all' || r.status === reportsFilter).length === 0 ? (
+                  <div className="p-8 text-center text-xs text-dark-400 rounded-2xl bg-dark-950/40 border border-white/5">
+                    No {reportsFilter !== 'all' ? reportsFilter : ''} reports found.
+                  </div>
+                ) : (
+                  reportsList
+                    .filter(r => reportsFilter === 'all' || r.status === reportsFilter)
+                    .map((report) => (
+                      <div
+                        key={report.id}
+                        className="p-4 rounded-2xl bg-dark-950/70 border border-white/10 space-y-3 hover:border-gold-500/20 transition-all"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-xl bg-rose-500/20 border border-rose-500/30 flex items-center justify-center text-rose-400 shrink-0">
+                              <Flag className="w-4 h-4" />
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2 flex-wrap text-xs">
+                                <span className="font-bold text-white">Reported:</span>
+                                <span className="font-extrabold text-rose-300">
+                                  {report.reported_user?.full_name || 'User'} (@{report.reported_user?.username || 'user'})
+                                </span>
+                                <span className="text-dark-500">•</span>
+                                <span className="text-dark-400">By:</span>
+                                <span className="text-amber-300 font-semibold">
+                                  @{report.reporter?.username || 'user'}
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-dark-400 mt-0.5">
+                                {new Date(report.created_at).toLocaleString()}
+                              </p>
+                            </div>
+                          </div>
+
+                          <span className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full border ${
+                            report.status === 'pending'
+                              ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                              : report.status === 'resolved'
+                              ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                              : 'bg-dark-800 text-dark-400 border-white/10'
+                          }`}>
+                            {report.status}
+                          </span>
+                        </div>
+
+                        {/* Report Reason */}
+                        <div className="p-3 rounded-xl bg-dark-900 border border-white/5 text-xs text-white">
+                          <p className="font-semibold text-rose-300 mb-1">Reason / Details:</p>
+                          <p className="text-dark-200 leading-relaxed whitespace-pre-wrap">{report.reason}</p>
+                        </div>
+
+                        {/* Action buttons */}
+                        <div className="flex items-center justify-between pt-1 flex-wrap gap-2">
+                          <div className="flex items-center gap-2">
+                            {report.reported_user && (
+                              <button
+                                type="button"
+                                onClick={() => handleInspectUser(report.reported_user_id)}
+                                className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-bold text-dark-200 border border-white/10 flex items-center gap-1.5 transition-all"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                                <span>Inspect User</span>
+                              </button>
+                            )}
+                            {report.reported_user && !report.reported_user.is_banned && (
+                              <button
+                                type="button"
+                                onClick={() => handleToggleBan(report.reported_user!)}
+                                className="px-3 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-xs font-bold text-rose-300 border border-rose-500/30 flex items-center gap-1.5 transition-all"
+                              >
+                                <UserX className="w-3.5 h-3.5" />
+                                <span>Suspend User</span>
+                              </button>
+                            )}
+                          </div>
+
+                          {report.status === 'pending' && (
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleResolveReport(report.id, 'dismissed')}
+                                disabled={actionReportId === report.id}
+                                className="px-3 py-1.5 rounded-xl bg-dark-800 hover:bg-dark-750 text-dark-300 font-bold text-xs border border-white/10 transition-all"
+                              >
+                                Dismiss
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleResolveReport(report.id, 'resolved')}
+                                disabled={actionReportId === report.id}
+                                className="px-3.5 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 font-bold text-xs border border-emerald-500/30 flex items-center gap-1 transition-all"
+                              >
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                <span>Mark Resolved</span>
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 6: SYSTEM & BROADCAST */}
+          {activeTab === 'system' && (
+            <div className="space-y-6">
+              {/* Broadcast Section */}
               <div className="p-4 rounded-2xl bg-gradient-to-tr from-amber-500/15 via-yellow-500/10 to-amber-600/15 border border-gold-500/25">
                 <h4 className="text-sm font-black text-amber-300 flex items-center gap-2">
                   <Megaphone className="w-4 h-4" />
@@ -1327,7 +1526,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({ isOpen
                     type="text"
                     value={broadcastTitle}
                     onChange={(e) => setBroadcastTitle(e.target.value)}
-                    placeholder="e.g. Nexus Royal Maintenance / Feature Update"
+                    placeholder="e.g. Nexus Maintenance / Feature Update"
                     required
                     className="w-full bg-dark-950 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white placeholder-dark-500 focus:outline-none focus:border-gold-500/50"
                   />
@@ -1339,7 +1538,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({ isOpen
                     rows={3}
                     value={broadcastMessage}
                     onChange={(e) => setBroadcastMessage(e.target.value)}
-                    placeholder="Write the royal announcement message..."
+                    placeholder="Write the announcement message..."
                     required
                     className="w-full bg-dark-950 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white placeholder-dark-500 focus:outline-none focus:border-gold-500/50 resize-none"
                   />
@@ -1378,7 +1577,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({ isOpen
                 <button
                   type="submit"
                   disabled={sendingBroadcast}
-                  className="flex items-center justify-center gap-2 w-full py-3 rounded-xl bg-gradient-to-r from-amber-600 via-yellow-500 to-amber-500 hover:from-amber-500 hover:to-yellow-400 text-dark-950 font-black text-xs shadow-lg shadow-gold-500/25 transition-all disabled:opacity-50"
+                  className="flex items-center justify-center gap-2 w-full py-3 rounded-xl bg-gradient-to-r from-amber-600 via-yellow-500 to-amber-500 hover:from-amber-500 hover:to-yellow-400 text-dark-950 font-black text-xs shadow-lg shadow-gold-500/25 transition-all disabled:opacity-50 cursor-pointer"
                 >
                   <Send className="w-4 h-4" />
                   <span>{sendingBroadcast ? 'Broadcasting...' : 'Broadcast Announcement to Everyone'}</span>
@@ -1402,21 +1601,16 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({ isOpen
                   </div>
                 </div>
               )}
-            </div>
-          )}
 
-          {/* TAB 4: OWNER ACCESS & SECURITY */}
-          {activeTab === 'security' && (
-            <div className="space-y-6">
-              {/* Verified Owner Card */}
-              <div className="p-4 sm:p-5 rounded-2xl bg-dark-950/70 border border-gold-500/25 space-y-3">
+              {/* Verified Owner & Passcode Security Card */}
+              <div className="p-4 sm:p-5 rounded-2xl bg-dark-950/70 border border-gold-500/25 space-y-3 mt-6">
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <div className="flex items-center gap-2.5">
                     <div className="p-2 rounded-xl bg-amber-500/20 text-amber-300">
                       <Crown className="w-5 h-5" />
                     </div>
                     <div>
-                      <h4 className="text-sm font-black text-white">Authorized Royal Platform Owner</h4>
+                      <h4 className="text-sm font-black text-white">Authorized Platform Owner</h4>
                       <p className="text-xs text-amber-400 font-semibold mt-0.5">karthikarthiswaran50@gmail.com</p>
                     </div>
                   </div>
@@ -1426,7 +1620,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({ isOpen
                   </span>
                 </div>
                 <p className="text-xs text-dark-300 leading-relaxed">
-                  Your account is permanently authorized as the sole Royal Owner. You have exclusive rights to manage users, suspend abusive accounts, broadcast global announcements, and change platform master keys.
+                  Your account is permanently authorized as the sole Platform Owner. You have exclusive rights to manage users, suspend abusive accounts, broadcast global announcements, and change platform master keys.
                 </p>
               </div>
 

@@ -2,7 +2,7 @@ import { Server, Socket } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import { JWT_SECRET } from './middleware/auth.js';
 import { AuthPayload, CallType, UserWithPlan } from './types.js';
-import { saveMessage, toggleReaction, deleteMessage } from './controllers/chat.js';
+import { saveMessage, toggleReaction, deleteMessage, editMessage, saveGroupMessage } from './controllers/chat.js';
 import { recordCallLog } from './controllers/calls.js';
 import { getUserWithPlan } from './controllers/auth.js';
 import { db } from './db.js';
@@ -132,6 +132,14 @@ export function setupSocket(io: Server) {
     }
     userSockets.get(userId)!.add(socket.id);
 
+    // Auto-join group rooms for this user
+    try {
+      const memberGroups = db.prepare('SELECT group_id FROM group_members WHERE user_id = ?').all(userId) as any[];
+      memberGroups.forEach((g) => {
+        socket.join(`group:${g.group_id}`);
+      });
+    } catch (e) {}
+
     // Broadcast updated presence lists
     broadcastOnlineList();
 
@@ -177,6 +185,16 @@ export function setupSocket(io: Server) {
       try {
         const { receiverId, content, type = 'text', mediaUrl, replyToId, replyToContent, replyToSender } = data;
         if (typeof receiverId !== 'string' || !receiverId.trim() || (!content && !mediaUrl)) return;
+
+        // Check if either user blocked the other
+        const isBlocked = db.prepare(`
+          SELECT 1 FROM blocked_users 
+          WHERE (user_id = ? AND blocked_id = ?) OR (user_id = ? AND blocked_id = ?)
+        `).get(userId, receiverId.trim(), receiverId.trim(), userId);
+        if (isBlocked) {
+          socket.emit('chat:error', { message: 'Cannot send message: User is blocked.' });
+          return;
+        }
 
         const safeContent = typeof content === 'string' ? content.slice(0, 10000) : '';
         const safeType = ['text', 'image', 'audio', 'system', 'call_log'].includes(type) ? type : 'text';
@@ -323,6 +341,102 @@ export function setupSocket(io: Server) {
       }
     });
 
+    // Edit Message Handler
+    socket.on('chat:edit_message', (data: { messageId: string; content: string; receiverId?: string; groupId?: string }) => {
+      try {
+        const res = editMessage(data.messageId, userId, data.content);
+        if (res) {
+          const payload = {
+            messageId: res.message.id,
+            content: res.message.content,
+            editedAt: res.message.edited_at,
+            conversationId: res.conversationId,
+            groupId: res.groupId,
+          };
+          socket.emit('chat:message_edited', payload);
+          if (data.groupId) {
+            io.to(`group:${data.groupId}`).emit('chat:message_edited', payload);
+          } else if (data.receiverId) {
+            const receiverSockets = getSocketsForUser(data.receiverId);
+            receiverSockets.forEach((sId) => {
+              io.to(sId).emit('chat:message_edited', payload);
+            });
+          }
+        }
+      } catch (err) {
+        console.error('Socket chat:edit_message error:', err);
+      }
+    });
+
+    // ----------------------------------------------------
+    // 2.5. GROUP CHAT SOCKET HANDLERS
+    // ----------------------------------------------------
+    socket.on('group:join', (data: { groupId: string }) => {
+      if (data?.groupId) {
+        socket.join(`group:${data.groupId}`);
+      }
+    });
+
+    socket.on('group:leave', (data: { groupId: string }) => {
+      if (data?.groupId) {
+        socket.leave(`group:${data.groupId}`);
+      }
+    });
+
+    socket.on('group:typing', (data: { groupId: string; isTyping: boolean }) => {
+      if (data?.groupId) {
+        socket.to(`group:${data.groupId}`).emit('group:user_typing', {
+          groupId: data.groupId,
+          userId,
+          isTyping: data.isTyping,
+        });
+      }
+    });
+
+    socket.on('group:send_message', async (data: {
+      groupId: string;
+      content: string;
+      type?: 'text' | 'image' | 'audio' | 'system' | 'call_log';
+      mediaUrl?: string;
+      replyToId?: string;
+      replyToContent?: string;
+      replyToSender?: string;
+    }) => {
+      try {
+        const { groupId, content, type = 'text', mediaUrl, replyToId, replyToContent, replyToSender } = data;
+        if (!groupId || (!content && !mediaUrl)) return;
+
+        // Verify membership
+        const isMember = db.prepare('SELECT role FROM group_members WHERE group_id = ? AND user_id = ?').get(groupId, userId);
+        if (!isMember) {
+          socket.emit('chat:error', { message: 'You are not a member of this group.' });
+          return;
+        }
+
+        const safeContent = typeof content === 'string' ? content.slice(0, 10000) : '';
+        const safeType = ['text', 'image', 'audio', 'system', 'call_log'].includes(type) ? type : 'text';
+        const safeMediaUrl = typeof mediaUrl === 'string' && (mediaUrl.startsWith('/uploads/') || mediaUrl.startsWith('https://'))
+          ? mediaUrl.slice(0, 500)
+          : undefined;
+
+        const result = saveGroupMessage({
+          groupId,
+          senderId: userId,
+          content: safeContent,
+          type: safeType as any,
+          mediaUrl: safeMediaUrl,
+          replyToId: typeof replyToId === 'string' ? replyToId.slice(0, 100) : undefined,
+          replyToContent: typeof replyToContent === 'string' ? replyToContent.slice(0, 500) : undefined,
+          replyToSender: typeof replyToSender === 'string' ? replyToSender.slice(0, 100) : undefined,
+        });
+
+        // Broadcast to group room
+        io.to(`group:${groupId}`).emit('group:new_message', result);
+      } catch (err) {
+        console.error('Socket group:send_message error:', err);
+      }
+    });
+
     // ----------------------------------------------------
     // 3. WEBRTC CALL SIGNALING (AUDIO & VIDEO)
     // ----------------------------------------------------
@@ -344,6 +458,35 @@ export function setupSocket(io: Server) {
         socket.emit('call:error', { message: 'User not found.' });
         return;
       }
+
+      // Check if either user blocked the other
+      const isBlocked = db.prepare(`
+        SELECT 1 FROM blocked_users 
+        WHERE (user_id = ? AND blocked_id = ?) OR (user_id = ? AND blocked_id = ?)
+      `).get(userId, receiverId, receiverId, userId);
+      if (isBlocked) {
+        socket.emit('call:error', { message: 'Cannot place call: User is unavailable.' });
+        return;
+      }
+
+      // Check receiver privacy settings for calls
+      try {
+        const receiverSettings = db.prepare('SELECT who_can_call_me FROM user_settings WHERE user_id = ?').get(receiverId) as any;
+        if (receiverSettings?.who_can_call_me === 'nobody') {
+          socket.emit('call:error', { message: `${receiver.full_name} has disabled incoming calls.` });
+          return;
+        }
+        if (receiverSettings?.who_can_call_me === 'contacts') {
+          const hasPriorChat = db.prepare(`
+            SELECT 1 FROM messages 
+            WHERE (sender_id = ? AND receiver_id = ?)
+          `).get(receiverId, userId);
+          if (!hasPriorChat) {
+            socket.emit('call:error', { message: `${receiver.full_name} only accepts calls from existing contacts.` });
+            return;
+          }
+        }
+      } catch (e) {}
 
       // Clean up any stale active calls (> 60s without connection or older than 90s)
       const now = Date.now();

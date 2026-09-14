@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useSocket } from '../../context/SocketContext';
 import { useAuth } from '../../context/AuthContext';
-import { User, Message, CallType } from '../../types';
+import { User, Message, CallType, Group } from '../../types';
 import { Avatar } from '../common/Avatar';
 import { PlanBadge } from '../common/Badge';
 import {
@@ -28,15 +28,25 @@ import {
   ChevronUp,
   ChevronDown,
   Image as ImageIcon,
+  Edit2,
+  Share2,
+  FileText,
+  Download,
+  ShieldAlert,
+  Ban,
+  Users,
 } from 'lucide-react';
 import axios from 'axios';
 import { trackUserActivity } from '../../config/firebase';
 import { VoicePlayer } from './VoicePlayer';
 import { MediaViewerModal } from './MediaViewerModal';
 import { ChatMediaGalleryModal } from './ChatMediaGalleryModal';
+import { ForwardMessageModal } from './ForwardMessageModal';
+import { ReportUserModal } from './ReportUserModal';
 
 interface ChatRoomProps {
-  otherUser: User;
+  otherUser?: User | null;
+  group?: Group | null;
   onBack?: () => void;
   onViewProfile?: (user: User) => void;
   onNavigateToSubscription?: () => void;
@@ -44,7 +54,7 @@ interface ChatRoomProps {
 
 const QUICK_REACTION_EMOJIS = ['❤️', '👍', '😂', '😮', '😢', '🔥', '🙏', '🎉'];
 
-export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewProfile, onNavigateToSubscription }) => {
+export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, onViewProfile, onNavigateToSubscription }) => {
   const { user } = useAuth();
   const {
     socket,
@@ -70,13 +80,26 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
   // Quoted Reply state
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
 
+  // Message Editing state
+  const [editingMessage, setEditingMessage] = useState<Message | null>(null);
+
+  // Message Forwarding state
+  const [forwardingMessage, setForwardingMessage] = useState<Message | null>(null);
+
+  // User Actions (Report & Block)
+  const [isReportOpen, setIsReportOpen] = useState(false);
+  const [isBlockConfirmOpen, setIsBlockConfirmOpen] = useState(false);
+  const [showUserActionsMenu, setShowUserActionsMenu] = useState(false);
+
   // Reaction popover & action menu state
   const [activeMenuMessageId, setActiveMenuMessageId] = useState<string | null>(null);
   const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null);
 
+  const chatKey = group ? `group_${group.id}` : otherUser ? `user_${otherUser.id}` : '';
+
   // Chat Wallpaper state
   const [chatWallpaper, setChatWallpaper] = useState<string>(() => {
-    return localStorage.getItem(`nexus_wallpaper_${otherUser.id}`) || 'default';
+    return localStorage.getItem(`nexus_wallpaper_${chatKey}`) || 'default';
   });
   const [showWallpaperMenu, setShowWallpaperMenu] = useState(false);
 
@@ -99,7 +122,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
   // Pinned Message state
   const [pinnedMessage, setPinnedMessage] = useState<Message | null>(() => {
     try {
-      const saved = localStorage.getItem(`nexus_pinned_${otherUser.id}`);
+      const saved = localStorage.getItem(`nexus_pinned_${chatKey}`);
       return saved ? JSON.parse(saved) : null;
     } catch {
       return null;
@@ -109,11 +132,11 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
   const handleTogglePin = (msg: Message) => {
     if (pinnedMessage?.id === msg.id) {
       setPinnedMessage(null);
-      localStorage.removeItem(`nexus_pinned_${otherUser.id}`);
+      localStorage.removeItem(`nexus_pinned_${chatKey}`);
       showToast('Message unpinned');
     } else {
       setPinnedMessage(msg);
-      localStorage.setItem(`nexus_pinned_${otherUser.id}`, JSON.stringify(msg));
+      localStorage.setItem(`nexus_pinned_${chatKey}`, JSON.stringify(msg));
       showToast('Message pinned to chat top');
     }
     setActiveMenuMessageId(null);
@@ -180,15 +203,16 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
     };
   }, []);
 
-  const isOnline = onlineUserIds.has(otherUser.id);
-  const isReachable = reachableUserIds.has(otherUser.id);
-  const isPeerTyping = !!typingMap[otherUser.id];
-  const userLastSeen = lastSeenMap[otherUser.id] || otherUser.last_seen;
+  const isOnline = otherUser ? onlineUserIds.has(otherUser.id) : false;
+  const isReachable = otherUser ? reachableUserIds.has(otherUser.id) : false;
+  const isPeerTyping = otherUser ? !!typingMap[otherUser.id] : false;
+  const userLastSeen = otherUser ? (lastSeenMap[otherUser.id] || otherUser.last_seen) : undefined;
 
   const emojis = ['😀', '🔥', '👍', '❤️', '🚀', '🎉', '👋', '✨', '💻', '🙌', '☕', '💯'];
 
   // Format last seen into human readable string
   const formatLastSeen = (isoString?: string) => {
+    if (!otherUser) return '';
     if (!isoString) return `@${otherUser.username}`;
     try {
       const date = new Date(isoString);
@@ -211,10 +235,15 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
   // Load message history
   const fetchMessages = async () => {
     try {
-      const res = await axios.get(`/api/chat/messages/${otherUser.id}`);
-      setMessages(res.data.messages);
-      if (socket) {
-        socket.emit('chat:read', { senderId: otherUser.id });
+      if (group) {
+        const res = await axios.get(`/api/groups/${group.id}/messages`);
+        setMessages(res.data.messages || []);
+      } else if (otherUser) {
+        const res = await axios.get(`/api/chat/messages/${otherUser.id}`);
+        setMessages(res.data.messages || []);
+        if (socket) {
+          socket.emit('chat:read', { senderId: otherUser.id });
+        }
       }
     } catch (err) {
       console.error('Fetch messages error:', err);
@@ -227,19 +256,20 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
     setLoading(true);
     setMessages([]); // Clear messages immediately to prevent stale flash when switching chats
     setReplyingTo(null);
+    setEditingMessage(null);
     fetchMessages();
-  }, [otherUser.id]);
+  }, [otherUser?.id, group?.id]);
 
   // Re-send read receipt if socket reconnects mid-conversation
   useEffect(() => {
-    if (socket && !loading) {
+    if (socket && !loading && otherUser) {
       socket.emit('chat:read', { senderId: otherUser.id });
     }
-  }, [socket, otherUser.id]);
+  }, [socket, otherUser?.id]);
 
-  // Real-time new message
+  // Real-time new direct message
   useEffect(() => {
-    if (!latestMessage) return;
+    if (!latestMessage || !otherUser) return;
 
     if (
       (latestMessage.sender_id === otherUser.id && latestMessage.receiver_id === user?.id) ||
@@ -254,7 +284,25 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
         socket.emit('chat:read', { senderId: otherUser.id });
       }
     }
-  }, [latestMessage, otherUser.id, user?.id, socket]);
+  }, [latestMessage, otherUser?.id, user?.id, socket]);
+
+  // Real-time new group message
+  useEffect(() => {
+    if (!socket || !group) return;
+    const handleGroupMsg = (data: any) => {
+      const msg: Message = data.message || data;
+      if (msg.group_id === group.id) {
+        setMessages(prev => {
+          if (prev.some(m => m.id === msg.id)) return prev;
+          return [...prev, msg];
+        });
+      }
+    };
+    socket.on('group:new_message', handleGroupMsg);
+    return () => {
+      socket.off('group:new_message', handleGroupMsg);
+    };
+  }, [socket, group]);
 
   // Real-time reaction update
   useEffect(() => {
@@ -283,6 +331,18 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
     });
   }, [deletedMessage, user?.id]);
 
+  // Real-time message edit
+  useEffect(() => {
+    if (!socket) return;
+    const handleMessageEdited = (data: { messageId: string; content: string; editedAt: string }) => {
+      setMessages(prev => prev.map(m => m.id === data.messageId ? { ...m, content: data.content, edited_at: data.editedAt } : m));
+    };
+    socket.on('chat:message_edited', handleMessageEdited);
+    return () => {
+      socket.off('chat:message_edited', handleMessageEdited);
+    };
+  }, [socket]);
+
   // Auto-scroll on new message
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -290,40 +350,81 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setInputText(e.target.value);
-    sendTyping(otherUser.id, true);
-    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-    typingTimeoutRef.current = setTimeout(() => {
-      sendTyping(otherUser.id, false);
-    }, 2000);
+    if (otherUser) {
+      sendTyping(otherUser.id, true);
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = setTimeout(() => {
+        sendTyping(otherUser.id, false);
+      }, 2000);
+    } else if (group && socket) {
+      socket.emit('group:typing', { groupId: group.id, isTyping: true });
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = setTimeout(() => {
+        socket.emit('group:typing', { groupId: group.id, isTyping: false });
+      }, 2000);
+    }
   };
 
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputText.trim() || !socket || !user) return;
 
-    socket.emit('chat:send_message', {
-      receiverId: otherUser.id,
-      content: inputText.trim(),
-      type: 'text',
-      replyToId: replyingTo?.id,
-      replyToContent: replyingTo ? (replyingTo.type === 'audio' ? '🎤 Voice note' : replyingTo.type === 'image' ? '📷 Photo' : replyingTo.content) : undefined,
-      replyToSender: replyingTo ? (replyingTo.sender_id === user.id ? 'You' : otherUser.full_name) : undefined,
-    });
+    if (editingMessage) {
+      const newContent = inputText.trim();
+      socket.emit('chat:edit_message', {
+        messageId: editingMessage.id,
+        content: newContent,
+        receiverId: otherUser?.id,
+        groupId: group?.id,
+      });
+      axios.put(`/api/chat/messages/${editingMessage.id}`, { content: newContent }).catch(() => {});
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === editingMessage.id
+            ? { ...m, content: newContent, edited_at: new Date().toISOString() }
+            : m
+        )
+      );
+      setEditingMessage(null);
+      setInputText('');
+      showToast('Message edited');
+      return;
+    }
 
-    trackUserActivity({
-      userId: user.id,
-      username: user.username,
-      action: 'chat_sent',
-      details: {
+    if (group) {
+      socket.emit('group:send_message', {
+        groupId: group.id,
+        content: inputText.trim(),
         type: 'text',
-        recipientId: otherUser.id,
-        recipientUsername: otherUser.username,
-      },
-    });
+        replyToId: replyingTo?.id,
+        replyToContent: replyingTo ? replyingTo.content : undefined,
+        replyToSender: replyingTo ? (replyingTo.sender_id === user.id ? 'You' : replyingTo.sender?.full_name) : undefined,
+      });
+    } else if (otherUser) {
+      socket.emit('chat:send_message', {
+        receiverId: otherUser.id,
+        content: inputText.trim(),
+        type: 'text',
+        replyToId: replyingTo?.id,
+        replyToContent: replyingTo ? (replyingTo.type === 'audio' ? '🎤 Voice note' : replyingTo.type === 'image' ? '📷 Photo' : replyingTo.content) : undefined,
+        replyToSender: replyingTo ? (replyingTo.sender_id === user.id ? 'You' : otherUser.full_name) : undefined,
+      });
+
+      trackUserActivity({
+        userId: user.id,
+        username: user.username,
+        action: 'chat_sent',
+        details: {
+          type: 'text',
+          recipientId: otherUser.id,
+          recipientUsername: otherUser.username,
+        },
+      });
+      sendTyping(otherUser.id, false);
+    }
 
     setInputText('');
     setReplyingTo(null);
-    sendTyping(otherUser.id, false);
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -340,15 +441,31 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
       });
 
       const isImage = file.type.startsWith('image/');
-      socket.emit('chat:send_message', {
-        receiverId: otherUser.id,
-        content: isImage ? 'Sent an image' : `Sent file: ${file.name}`,
-        type: isImage ? 'image' : 'text',
-        mediaUrl: res.data.url,
-        replyToId: replyingTo?.id,
-        replyToContent: replyingTo ? replyingTo.content : undefined,
-        replyToSender: replyingTo ? (replyingTo.sender_id === user.id ? 'You' : otherUser.full_name) : undefined,
-      });
+      if (group) {
+        socket.emit('group:send_message', {
+          groupId: group.id,
+          content: isImage ? 'Sent an image' : `Sent file: ${file.name}`,
+          type: isImage ? 'image' : 'file',
+          mediaUrl: res.data.url,
+          fileName: file.name,
+          fileSize: file.size,
+          replyToId: replyingTo?.id,
+          replyToContent: replyingTo ? replyingTo.content : undefined,
+          replyToSender: replyingTo ? (replyingTo.sender_id === user.id ? 'You' : replyingTo.sender?.full_name) : undefined,
+        });
+      } else if (otherUser) {
+        socket.emit('chat:send_message', {
+          receiverId: otherUser.id,
+          content: isImage ? 'Sent an image' : `Sent file: ${file.name}`,
+          type: isImage ? 'image' : 'file',
+          mediaUrl: res.data.url,
+          fileName: file.name,
+          fileSize: file.size,
+          replyToId: replyingTo?.id,
+          replyToContent: replyingTo ? replyingTo.content : undefined,
+          replyToSender: replyingTo ? (replyingTo.sender_id === user.id ? 'You' : otherUser.full_name) : undefined,
+        });
+      }
 
       setReplyingTo(null);
     } catch (err) {
@@ -420,15 +537,27 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
           headers: { 'Content-Type': 'multipart/form-data' },
         });
 
-        socket.emit('chat:send_message', {
-          receiverId: otherUser.id,
-          content: '🎤 Voice message',
-          type: 'audio',
-          mediaUrl: res.data.url,
-          replyToId: replyingTo?.id,
-          replyToContent: replyingTo ? replyingTo.content : undefined,
-          replyToSender: replyingTo ? (replyingTo.sender_id === user.id ? 'You' : otherUser.full_name) : undefined,
-        });
+        if (otherUser) {
+          socket.emit('chat:send_message', {
+            receiverId: otherUser.id,
+            content: '🎤 Voice message',
+            type: 'audio',
+            mediaUrl: res.data.url,
+            replyToId: replyingTo?.id,
+            replyToContent: replyingTo ? replyingTo.content : undefined,
+            replyToSender: replyingTo ? (replyingTo.sender_id === user.id ? 'You' : otherUser.full_name) : undefined,
+          });
+        } else if (group) {
+          socket.emit('group:send_message', {
+            groupId: group.id,
+            content: '🎤 Voice message',
+            type: 'audio',
+            mediaUrl: res.data.url,
+            replyToId: replyingTo?.id,
+            replyToContent: replyingTo ? replyingTo.content : undefined,
+            replyToSender: replyingTo ? (replyingTo.sender_id === user.id ? 'You' : (replyingTo.sender?.full_name || 'Member')) : undefined,
+          });
+        }
 
         setReplyingTo(null);
       } catch (err) {
@@ -462,16 +591,18 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
   };
 
   const handleStartCall = (callType: CallType) => {
-    startCall(otherUser, callType);
+    if (otherUser) {
+      startCall(otherUser, callType);
+    }
   };
 
   const handleReact = (messageId: string, emoji: string) => {
-    sendReaction(messageId, emoji, otherUser.id);
+    sendReaction(messageId, emoji, otherUser?.id);
     setActiveMenuMessageId(null);
   };
 
   const handleDelete = (messageId: string, deleteType: 'for_everyone' | 'for_me') => {
-    socketDeleteMessage(messageId, deleteType, otherUser.id);
+    socketDeleteMessage(messageId, deleteType, otherUser?.id);
     setActiveMenuMessageId(null);
   };
 
@@ -557,22 +688,34 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
               <ArrowLeft className="w-5 h-5 text-brand-400" />
             </button>
           )}
-          <Avatar
-            src={otherUser.avatar_url}
-            name={otherUser.full_name}
-            size="md"
-            isOnline={isOnline}
-            isReachable={isReachable}
-            showOnlineStatus
-            planId={otherUser.plan_id}
-          />
+          {group ? (
+            <div className="w-10 h-10 rounded-2xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-300 shrink-0">
+              <Users className="w-5 h-5" />
+            </div>
+          ) : (
+            <Avatar
+              src={otherUser?.avatar_url}
+              name={otherUser?.full_name || 'User'}
+              size="md"
+              isOnline={isOnline}
+              isReachable={isReachable}
+              showOnlineStatus
+              planId={otherUser?.plan_id}
+            />
+          )}
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h2 className="text-sm sm:text-base font-bold text-white truncate max-w-[140px] sm:max-w-[220px]">{otherUser.full_name}</h2>
-              <PlanBadge planId={otherUser.plan_id} size="sm" />
+              <h2 className="text-sm sm:text-base font-bold text-white truncate max-w-[140px] sm:max-w-[220px]">
+                {group ? group.name : (otherUser?.full_name || 'User')}
+              </h2>
+              {otherUser && <PlanBadge planId={otherUser.plan_id} size="sm" />}
             </div>
             <p className="text-xs text-dark-400 flex items-center gap-1.5">
-              {isPeerTyping ? (
+              {group ? (
+                <span className="text-amber-400/80 font-medium">
+                  {group.members_count || 1} members • Group Chat
+                </span>
+              ) : isPeerTyping ? (
                 <span className="text-brand-400 font-medium animate-pulse">Typing...</span>
               ) : isOnline ? (
                 <span className="text-emerald-400 flex items-center gap-1 font-semibold">
@@ -645,7 +788,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
                     type="button"
                     onClick={() => {
                       setChatWallpaper(wp.id);
-                      localStorage.setItem(`nexus_wallpaper_${otherUser.id}`, wp.id);
+                      localStorage.setItem(`nexus_wallpaper_${chatKey}`, wp.id);
                       setShowWallpaperMenu(false);
                     }}
                     style={{ background: wp.color }}
@@ -658,33 +801,78 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
             </div>
           )}
 
-          <button
-            type="button"
-            onClick={() => handleStartCall('audio')}
-            className="p-2.5 rounded-xl bg-dark-800 hover:bg-emerald-500/20 text-dark-300 hover:text-emerald-400 border border-dark-700 hover:border-emerald-500/40 transition-all shadow-sm"
-            title="Start HD Audio Call"
-          >
-            <Phone className="w-4 h-4" />
-          </button>
+          {!group && otherUser && (
+            <>
+              <button
+                type="button"
+                onClick={() => handleStartCall('audio')}
+                className="p-2.5 rounded-xl bg-dark-800 hover:bg-emerald-500/20 text-dark-300 hover:text-emerald-400 border border-dark-700 hover:border-emerald-500/40 transition-all shadow-sm"
+                title="Start HD Audio Call"
+              >
+                <Phone className="w-4 h-4" />
+              </button>
 
-          <button
-            type="button"
-            onClick={() => handleStartCall('video')}
-            className="p-2.5 rounded-xl bg-dark-800 hover:bg-brand-500/20 text-dark-300 hover:text-brand-400 border border-dark-700 hover:border-brand-500/40 transition-all shadow-sm"
-            title="Start HD Video Call"
-          >
-            <Video className="w-4 h-4" />
-          </button>
+              <button
+                type="button"
+                onClick={() => handleStartCall('video')}
+                className="p-2.5 rounded-xl bg-dark-800 hover:bg-brand-500/20 text-dark-300 hover:text-brand-400 border border-dark-700 hover:border-brand-500/40 transition-all shadow-sm"
+                title="Start HD Video Call"
+              >
+                <Video className="w-4 h-4" />
+              </button>
 
-          {onViewProfile && (
-            <button
-              type="button"
-              onClick={() => onViewProfile(otherUser)}
-              className="p-2.5 rounded-xl bg-dark-800 hover:bg-dark-700 text-dark-300 hover:text-white border border-dark-700 transition-all"
-              title="View Profile"
-            >
-              <Info className="w-4 h-4" />
-            </button>
+              {onViewProfile && (
+                <button
+                  type="button"
+                  onClick={() => onViewProfile(otherUser)}
+                  className="p-2.5 rounded-xl bg-dark-800 hover:bg-dark-700 text-dark-300 hover:text-white border border-dark-700 transition-all"
+                  title="View Profile"
+                >
+                  <Info className="w-4 h-4" />
+                </button>
+              )}
+
+              {/* User actions 3-dot dropdown */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowUserActionsMenu(!showUserActionsMenu)}
+                  className="p-2.5 rounded-xl bg-dark-800 hover:bg-dark-700 text-dark-300 hover:text-white border border-dark-700 transition-all"
+                  title="User options"
+                >
+                  <MoreVertical className="w-4 h-4" />
+                </button>
+                {showUserActionsMenu && (
+                  <div
+                    onClick={(e) => e.stopPropagation()}
+                    className="absolute right-0 top-12 z-50 w-44 bg-dark-900 border border-gold-500/30 rounded-2xl shadow-2xl p-1.5 backdrop-blur-2xl animate-in zoom-in-95 duration-150 space-y-1"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowUserActionsMenu(false);
+                        setIsReportOpen(true);
+                      }}
+                      className="w-full px-2.5 py-2 rounded-xl text-left text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 flex items-center gap-2 transition-all"
+                    >
+                      <ShieldAlert className="w-3.5 h-3.5" />
+                      <span>Report User</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowUserActionsMenu(false);
+                        setIsBlockConfirmOpen(true);
+                      }}
+                      className="w-full px-2.5 py-2 rounded-xl text-left text-xs text-rose-500 font-semibold hover:bg-rose-500/15 flex items-center gap-2 transition-all"
+                    >
+                      <Ban className="w-3.5 h-3.5" />
+                      <span>Block User</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            </>
           )}
         </div>
       </div>
@@ -815,23 +1003,36 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
           </div>
         ) : messages.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center p-8">
-            <Avatar src={otherUser.avatar_url} name={otherUser.full_name} size="xl" planId={otherUser.plan_id} />
-            <h3 className="text-lg font-extrabold text-white mt-4">{otherUser.full_name}</h3>
-            <p className="text-xs text-dark-400 max-w-xs mt-1">{otherUser.bio || 'Say hello and start a Royal conversation!'}</p>
-            <div className="flex items-center gap-3 mt-4">
-              <button
-                onClick={() => handleStartCall('video')}
-                className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500/20 to-yellow-500/20 border border-gold-400/40 text-amber-300 hover:bg-gold-500 hover:text-dark-950 text-xs font-bold flex items-center gap-1.5 transition-all shadow-md shadow-gold-500/10"
-              >
-                <Video className="w-3.5 h-3.5" /> Start Royal Video Call
-              </button>
-              <button
-                onClick={() => handleStartCall('audio')}
-                className="px-4 py-2 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500 hover:text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-md shadow-emerald-500/10"
-              >
-                <Phone className="w-3.5 h-3.5" /> Start Audio Call
-              </button>
-            </div>
+            {group ? (
+              <>
+                <div className="w-16 h-16 rounded-3xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-300">
+                  <Users className="w-8 h-8" />
+                </div>
+                <h3 className="text-lg font-extrabold text-white mt-4">{group.name}</h3>
+                <p className="text-xs text-dark-400 max-w-xs mt-1">{group.description || 'Welcome to the group! Send a message to start chatting.'}</p>
+                <span className="text-[11px] font-bold text-amber-400 mt-2">Free Group Messaging • ♾️ Free Forever</span>
+              </>
+            ) : otherUser ? (
+              <>
+                <Avatar src={otherUser.avatar_url} name={otherUser.full_name} size="xl" planId={otherUser.plan_id} />
+                <h3 className="text-lg font-extrabold text-white mt-4">{otherUser.full_name}</h3>
+                <p className="text-xs text-dark-400 max-w-xs mt-1">{otherUser.bio || 'Say hello and start a conversation!'}</p>
+                <div className="flex items-center gap-3 mt-4">
+                  <button
+                    onClick={() => handleStartCall('video')}
+                    className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500/20 to-yellow-500/20 border border-gold-400/40 text-amber-300 hover:bg-gold-500 hover:text-dark-950 text-xs font-bold flex items-center gap-1.5 transition-all shadow-md shadow-gold-500/10"
+                  >
+                    <Video className="w-3.5 h-3.5" /> Start Video Call
+                  </button>
+                  <button
+                    onClick={() => handleStartCall('audio')}
+                    className="px-4 py-2 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500 hover:text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-md shadow-emerald-500/10"
+                  >
+                    <Phone className="w-3.5 h-3.5" /> Start Audio Call
+                  </button>
+                </div>
+              </>
+            ) : null}
           </div>
         ) : (
           messages.map((msg) => {
@@ -924,6 +1125,32 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
                         </button>
                       )}
 
+                      {isMe && msg.type === 'text' && (
+                        <button
+                          onClick={() => {
+                            setEditingMessage(msg);
+                            setInputText(msg.content);
+                            setActiveMenuMessageId(null);
+                            setTimeout(() => inputRef.current?.focus(), 50);
+                          }}
+                          className="w-full px-2.5 py-2 rounded-xl text-left text-xs text-sky-400 hover:text-sky-300 hover:bg-dark-800 flex items-center gap-2 transition-all"
+                        >
+                          <Edit2 className="w-3.5 h-3.5 text-sky-400" />
+                          <span>Edit Message</span>
+                        </button>
+                      )}
+
+                      <button
+                        onClick={() => {
+                          setForwardingMessage(msg);
+                          setActiveMenuMessageId(null);
+                        }}
+                        className="w-full px-2.5 py-2 rounded-xl text-left text-xs text-dark-200 hover:text-white hover:bg-dark-800 flex items-center gap-2 transition-all"
+                      >
+                        <Share2 className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Forward</span>
+                      </button>
+
                       {/* Pin / Unpin Message */}
                       <button
                         onClick={() => handleTogglePin(msg)}
@@ -977,6 +1204,13 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
                         : 'royal-card bg-dark-900/90 text-dark-100 rounded-bl-xs border border-gold-500/20'
                     }`}
                   >
+                    {/* Sender name for incoming group messages */}
+                    {!isMe && group && (
+                      <div className="text-[11px] font-bold text-amber-300 mb-1">
+                        {msg.sender?.full_name || 'Member'}
+                      </div>
+                    )}
+
                     {/* Quoted Reply Preview */}
                     {msg.reply_to_content && !isDeleted && (
                       <div
@@ -992,7 +1226,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
                       </div>
                     )}
 
-                    {/* Voice Note Player or Image Attachment */}
+                    {/* Voice Note Player, Image Attachment, File Attachment, or Text */}
                     {msg.type === 'audio' && msg.media_url && !isDeleted ? (
                       <VoicePlayer audioUrl={msg.media_url} isMe={isMe} />
                     ) : msg.type === 'image' && msg.media_url && !isDeleted ? (
@@ -1003,12 +1237,34 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
                           className="w-full h-full object-cover transition-transform duration-300 group-hover/img:scale-105"
                           onClick={() => {
                             setViewingMediaUrl(msg.media_url!);
-                            setViewingMediaSender(isMe ? 'You' : otherUser.full_name);
+                            setViewingMediaSender(isMe ? 'You' : (otherUser?.full_name || msg.sender?.full_name || 'Member'));
                           }}
                         />
                         <div className="absolute inset-0 bg-black/30 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center text-xs text-white font-bold backdrop-blur-xs">
                           Click to Zoom & Download
                         </div>
+                      </div>
+                    ) : msg.type === 'file' && msg.media_url && !isDeleted ? (
+                      <div className="flex items-center gap-3 p-2.5 bg-dark-950/70 rounded-xl border border-white/10 my-1 max-w-sm">
+                        <div className="w-9 h-9 rounded-lg bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+                          <FileText className="w-5 h-5" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-semibold text-white truncate">{msg.file_name || 'Document'}</p>
+                          <p className="text-[10px] text-dark-400">
+                            {msg.file_size ? `${(msg.file_size / 1024).toFixed(1)} KB` : 'Attachment'}
+                          </p>
+                        </div>
+                        <a
+                          href={msg.media_url}
+                          download={msg.file_name || 'attachment'}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="p-2 rounded-lg bg-dark-800 hover:bg-amber-500 hover:text-dark-950 text-dark-300 transition-all shrink-0"
+                          title="Download attachment"
+                        >
+                          <Download className="w-4 h-4" />
+                        </a>
                       </div>
                     ) : (
                       <p className="leading-relaxed whitespace-pre-wrap break-words">{msg.content}</p>
@@ -1016,10 +1272,11 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
 
                     {/* Timestamp & status */}
                     <div
-                      className={`flex items-center gap-1 text-[10px] mt-1.5 ${
+                      className={`flex items-center gap-1.5 text-[10px] mt-1.5 ${
                         isMe ? 'text-indigo-200 justify-end' : 'text-dark-400 justify-start'
                       }`}
                     >
+                      {msg.edited_at && <span className="text-[9px] italic opacity-80">(edited)</span>}
                       <span>{formatTime(msg.created_at)}</span>
                       {isMe && !isDeleted && (
                         msg.is_read ? (
@@ -1068,8 +1325,8 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
 
         {isPeerTyping && (
           <div className="flex items-center gap-2 text-xs text-dark-400 italic animate-in fade-in">
-            <Avatar src={otherUser.avatar_url} name={otherUser.full_name} size="xs" />
-            <span>{otherUser.full_name} is typing...</span>
+            <Avatar src={otherUser?.avatar_url} name={otherUser?.full_name || 'Member'} size="xs" />
+            <span>{otherUser?.full_name || 'Member'} is typing...</span>
             <span className="flex gap-1">
               <span className="w-1.5 h-1.5 bg-brand-400 rounded-full animate-bounce" />
               <span className="w-1.5 h-1.5 bg-brand-400 rounded-full animate-bounce [animation-delay:0.2s]" />
@@ -1108,7 +1365,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
             <Reply className="w-4 h-4 text-gold-400 shrink-0" />
             <div className="truncate">
               <span className="font-bold text-amber-300">
-                Replying to {replyingTo.sender_id === user?.id ? 'Yourself' : otherUser.full_name}
+                Replying to {replyingTo.sender_id === user?.id ? 'Yourself' : (otherUser?.full_name || replyingTo.sender?.full_name || 'Member')}
               </span>
               <p className="truncate text-dark-400 text-[11px]">
                 {replyingTo.type === 'audio'
@@ -1124,6 +1381,30 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
             onClick={() => setReplyingTo(null)}
             className="p-1 rounded-full text-dark-400 hover:text-white hover:bg-dark-800"
             title="Cancel reply"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Editing Message Preview Bar */}
+      {editingMessage && (
+        <div className="p-2.5 px-4 bg-dark-900 border-t border-sky-500/30 flex items-center justify-between gap-3 text-xs animate-in slide-in-from-bottom-2">
+          <div className="flex items-center gap-2 min-w-0 border-l-2 border-sky-400 pl-3">
+            <Edit2 className="w-4 h-4 text-sky-400 shrink-0" />
+            <div className="truncate">
+              <span className="font-bold text-sky-300">Editing Message</span>
+              <p className="truncate text-dark-400 text-[11px]">{editingMessage.content}</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setEditingMessage(null);
+              setInputText('');
+            }}
+            className="p-1 rounded-full text-dark-400 hover:text-white hover:bg-dark-800"
+            title="Cancel editing"
           >
             <X className="w-4 h-4" />
           </button>
@@ -1176,7 +1457,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
             type="file"
             ref={fileInputRef}
             onChange={handleFileUpload}
-            accept="image/*,video/*,audio/*,.pdf,.doc"
+            accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.txt,.zip"
             className="hidden"
           />
 
@@ -1208,7 +1489,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
             ref={inputRef}
             value={inputText}
             onChange={handleInputChange}
-            placeholder={`Message ${otherUser.full_name}...`}
+            placeholder={group ? `Message ${group.name}...` : `Message ${otherUser?.full_name || 'contact'}...`}
             className="flex-1 bg-dark-850 border border-gold-500/15 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-dark-500 focus:outline-none focus:border-gold-400/80 focus:ring-1 focus:ring-gold-400/50 transition-all shadow-inner"
           />
 
@@ -1255,6 +1536,66 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, onBack, onViewPro
           setViewingMediaSender(senderName);
         }}
       />
+
+      {/* Forward Message Modal */}
+      <ForwardMessageModal
+        isOpen={!!forwardingMessage}
+        message={forwardingMessage}
+        onClose={() => setForwardingMessage(null)}
+        onForwardSuccess={() => showToast('Message forwarded successfully')}
+      />
+
+      {/* Report User Modal */}
+      {otherUser && (
+        <ReportUserModal
+          isOpen={isReportOpen}
+          user={otherUser}
+          onClose={() => setIsReportOpen(false)}
+          onReportSuccess={() => showToast('Report submitted for review')}
+        />
+      )}
+
+      {/* Block User Confirmation Modal */}
+      {isBlockConfirmOpen && otherUser && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-dark-900 border border-rose-500/30 rounded-2xl w-full max-w-sm p-5 shadow-2xl space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-500/20 border border-rose-500/30 flex items-center justify-center text-rose-400 shrink-0">
+                <Ban className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-white">Block @{otherUser.username}?</h3>
+                <p className="text-xs text-dark-400 mt-0.5">They will no longer be able to send you messages or call you.</p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-dark-800">
+              <button
+                type="button"
+                onClick={() => setIsBlockConfirmOpen(false)}
+                className="px-3 py-1.5 rounded-xl text-xs font-semibold text-dark-300 hover:text-white"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await axios.post(`/api/users/block/${otherUser.id}`);
+                    showToast(`Blocked @${otherUser.username}`);
+                    setIsBlockConfirmOpen(false);
+                  } catch (e: any) {
+                    showToast(e.response?.data?.error || 'Failed to block user');
+                  }
+                }}
+                className="px-4 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition-all shadow-md shadow-rose-600/20"
+              >
+                Block User
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

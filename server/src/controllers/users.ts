@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { db, persistUserToPg, persistSettingsToPg, recordActivity } from '../db.js';
+import { db, persistUserToPg, persistSettingsToPg, persistBlockToPg, persistReportToPg, recordActivity } from '../db.js';
 import { AuthenticatedRequest } from '../middleware/auth.js';
 import { getUserWithPlan } from './auth.js';
 import { UserWithPlan, UserSettings } from '../types.js';
@@ -267,16 +267,22 @@ export async function getSettings(req: AuthenticatedRequest, res: Response): Pro
       return;
     }
 
-    let settings = db.prepare('SELECT * FROM user_settings WHERE user_id = ?').get(userId) as unknown as UserSettings | undefined;
+    let settings = db.prepare('SELECT * FROM user_settings WHERE user_id = ?').get(userId) as any;
     if (!settings) {
       db.prepare(`
-        INSERT INTO user_settings (id, user_id, theme, allow_calls_from, notification_sound, read_receipts, auto_accept_calls)
-        VALUES (?, ?, 'dark', 'everyone', 1, 1, 0)
+        INSERT INTO user_settings (id, user_id, theme, allow_calls_from, notification_sound, read_receipts, auto_accept_calls, who_can_call_me, who_can_see_last_seen)
+        VALUES (?, ?, 'dark', 'everyone', 1, 1, 0, 'everyone', 'everyone')
       `).run(`set_${userId}`, userId);
-      settings = (db.prepare('SELECT * FROM user_settings WHERE user_id = ?').get(userId) as unknown) as UserSettings;
+      settings = db.prepare('SELECT * FROM user_settings WHERE user_id = ?').get(userId) as any;
     }
 
-    res.json({ settings });
+    res.json({
+      settings: {
+        ...settings,
+        who_can_call_me: settings.who_can_call_me || 'everyone',
+        who_can_see_last_seen: settings.who_can_see_last_seen || 'everyone',
+      }
+    });
   } catch (error) {
     console.error('getSettings error:', error);
     res.status(500).json({ error: 'Failed to fetch settings.' });
@@ -291,30 +297,41 @@ export async function updateSettings(req: AuthenticatedRequest, res: Response): 
       return;
     }
 
-    const { theme, allow_calls_from, notification_sound, read_receipts, auto_accept_calls } = req.body;
-
+    const { theme, allow_calls_from, notification_sound, read_receipts, auto_accept_calls, who_can_call_me, who_can_see_last_seen } = req.body;
     const current = db.prepare('SELECT * FROM user_settings WHERE user_id = ?').get(userId) as any;
     
     const newTheme = theme || current?.theme || 'dark';
-    const newAllowCalls = allow_calls_from || current?.allow_calls_from || 'everyone';
+    const newAllowCalls = who_can_call_me || allow_calls_from || current?.allow_calls_from || 'everyone';
     const newNotifSound = notification_sound !== undefined ? (notification_sound ? 1 : 0) : (current?.notification_sound ?? 1);
     const newReadReceipts = read_receipts !== undefined ? (read_receipts ? 1 : 0) : (current?.read_receipts ?? 1);
     const newAutoAccept = auto_accept_calls !== undefined ? (auto_accept_calls ? 1 : 0) : (current?.auto_accept_calls ?? 0);
+    const newWhoCanCallMe = who_can_call_me || current?.who_can_call_me || 'everyone';
+    const newWhoCanSeeLastSeen = who_can_see_last_seen || current?.who_can_see_last_seen || 'everyone';
 
     if (current) {
       db.prepare(`
         UPDATE user_settings
-        SET theme = ?, allow_calls_from = ?, notification_sound = ?, read_receipts = ?, auto_accept_calls = ?
+        SET theme = ?, allow_calls_from = ?, notification_sound = ?, read_receipts = ?, auto_accept_calls = ?, who_can_call_me = ?, who_can_see_last_seen = ?
         WHERE user_id = ?
-      `).run(newTheme, newAllowCalls, newNotifSound, newReadReceipts, newAutoAccept, userId);
+      `).run(newTheme, newAllowCalls, newNotifSound, newReadReceipts, newAutoAccept, newWhoCanCallMe, newWhoCanSeeLastSeen, userId);
     } else {
       db.prepare(`
-        INSERT INTO user_settings (id, user_id, theme, allow_calls_from, notification_sound, read_receipts, auto_accept_calls)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-      `).run(`set_${userId}`, userId, newTheme, newAllowCalls, newNotifSound, newReadReceipts, newAutoAccept);
+        INSERT INTO user_settings (id, user_id, theme, allow_calls_from, notification_sound, read_receipts, auto_accept_calls, who_can_call_me, who_can_see_last_seen)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(`set_${userId}`, userId, newTheme, newAllowCalls, newNotifSound, newReadReceipts, newAutoAccept, newWhoCanCallMe, newWhoCanSeeLastSeen);
     }
 
-    const settings = (db.prepare('SELECT * FROM user_settings WHERE user_id = ?').get(userId) as unknown) as UserSettings;
+    persistSettingsToPg({
+      id: current?.id || `set_${userId}`,
+      user_id: userId,
+      theme: newTheme,
+      allow_calls_from: newAllowCalls,
+      notification_sound: newNotifSound,
+      read_receipts: newReadReceipts,
+      auto_accept_calls: newAutoAccept,
+    });
+
+    const settings = db.prepare('SELECT * FROM user_settings WHERE user_id = ?').get(userId) as any;
     res.json({ settings, message: 'Settings saved successfully.' });
   } catch (error) {
     console.error('updateSettings error:', error);
@@ -340,6 +357,169 @@ export async function updateFcmToken(req: AuthenticatedRequest, res: Response): 
     res.json({ success: true, message: 'FCM push token registered.' });
   } catch (error) {
     res.status(500).json({ error: 'Failed to update FCM token.' });
+  }
+}
+
+// ----------------------------------------------------
+// Blocking & Reporting
+// ----------------------------------------------------
+export async function blockUser(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const userId = req.user?.userId;
+    const { id: targetUserId } = req.params;
+
+    if (!userId || !targetUserId || userId === targetUserId) {
+      res.status(400).json({ error: 'Invalid user to block.' });
+      return;
+    }
+
+    const blockId = 'blk_' + Math.random().toString(36).substring(2, 10);
+    const now = new Date().toISOString();
+
+    db.prepare(`
+      INSERT OR IGNORE INTO blocked_users (id, user_id, blocked_user_id, created_at)
+      VALUES (?, ?, ?, ?)
+    `).run(blockId, userId, targetUserId, now);
+
+    persistBlockToPg({
+      id: blockId,
+      user_id: userId,
+      blocked_user_id: targetUserId,
+    });
+
+    recordActivity(userId, 'block_user', { blocked_user_id: targetUserId });
+
+    res.json({ success: true, message: 'User blocked.' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to block user.' });
+  }
+}
+
+export async function unblockUser(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const userId = req.user?.userId;
+    const { id: targetUserId } = req.params;
+
+    if (!userId || !targetUserId) {
+      res.status(400).json({ error: 'Invalid user to unblock.' });
+      return;
+    }
+
+    db.prepare('DELETE FROM blocked_users WHERE user_id = ? AND blocked_user_id = ?').run(userId, targetUserId);
+    recordActivity(userId, 'unblock_user', { unblocked_user_id: targetUserId });
+
+    res.json({ success: true, message: 'User unblocked.' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to unblock user.' });
+  }
+}
+
+export async function getBlockedUsers(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
+    const blockedRows = (db.prepare(`
+      SELECT b.id, b.blocked_user_id, b.created_at,
+             u.username, u.full_name, u.avatar_url, u.status
+      FROM blocked_users b
+      JOIN users u ON b.blocked_user_id = u.id
+      WHERE b.user_id = ?
+      ORDER BY b.created_at DESC
+    `).all(userId) as any[]).map(b => ({
+      id: b.id,
+      blocked_user_id: b.blocked_user_id,
+      created_at: b.created_at,
+      user: {
+        id: b.blocked_user_id,
+        username: b.username,
+        full_name: b.full_name,
+        avatar_url: b.avatar_url,
+        status: b.status,
+      },
+    }));
+
+    res.json({ blockedUsers: blockedRows });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to fetch blocked users.' });
+  }
+}
+
+export async function reportUser(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const reporterId = req.user?.userId;
+    const { reportedUserId, reason } = req.body;
+
+    if (!reporterId || !reportedUserId || !reason?.trim()) {
+      res.status(400).json({ error: 'Missing required report fields.' });
+      return;
+    }
+
+    const reportId = 'rep_' + Math.random().toString(36).substring(2, 10) + Date.now().toString(36);
+    const now = new Date().toISOString();
+    const cleanReason = sanitizeText(reason.trim());
+
+    db.prepare(`
+      INSERT INTO user_reports (id, reporter_id, reported_user_id, reason, status, created_at)
+      VALUES (?, ?, ?, ?, 'pending', ?)
+    `).run(reportId, reporterId, reportedUserId, cleanReason, now);
+
+    persistReportToPg({
+      id: reportId,
+      reporter_id: reporterId,
+      reported_user_id: reportedUserId,
+      reason: cleanReason,
+      status: 'pending',
+    });
+
+    recordActivity(reporterId, 'report_user', { reportedUserId, reason: cleanReason });
+
+    res.status(201).json({ success: true, message: 'Report submitted for review.' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to report user.' });
+  }
+}
+
+// ----------------------------------------------------
+// Account Management (Self Delete & Logout All)
+// ----------------------------------------------------
+export async function deleteAccount(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
+    // Cascade delete user and related data
+    db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+    recordActivity(userId, 'account_deleted', { timestamp: new Date().toISOString() });
+
+    res.json({ success: true, message: 'Your Nexus account has been permanently deleted.' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to delete account.' });
+  }
+}
+
+export async function logoutAll(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
+    // Clear push tokens to invalidate notifications to all sessions
+    db.prepare('UPDATE user_settings SET fcm_token = NULL WHERE user_id = ?').run(userId);
+    db.prepare('DELETE FROM push_subscriptions WHERE user_id = ?').run(userId);
+    recordActivity(userId, 'logout_all_devices');
+
+    res.json({ success: true, message: 'Logged out of all mobile and web devices.' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to logout from all devices.' });
   }
 }
 
