@@ -1,25 +1,40 @@
 {
-  "short_name": "Nexus",
-  "name": "Nexus - Real-Time Video & Chat",
-  "description": "High-Definition Video Calling, Audio Calls, Messaging & Subscriptions",
+  "short_name": "Nexus Royal",
+  "name": "Nexus Royal - Real-Time Video & Chat",
+  "description": "High-Definition Video Calling, Audio Calls, Messaging & Community",
+  "id": "com.nexus.royal.app",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "window-controls-overlay", "minimal-ui"],
+  "orientation": "portrait",
+  "background_color": "#030712",
+  "theme_color": "#090d16",
+  "categories": ["social", "communication"],
   "icons": [
     {
       "src": "/icon-192.png",
       "type": "image/png",
       "sizes": "192x192",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "maskable"
     },
     {
       "src": "/icon-512.png",
       "type": "image/png",
       "sizes": "512x512",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "maskable"
     }
-  ],
-  "start_url": "/",
-  "background_color": "#030712",
-  "theme_color": "#6366f1",
-  "display": "standalone",
-  "orientation": "portrait",
-  "scope": "/"
+  ]
 }

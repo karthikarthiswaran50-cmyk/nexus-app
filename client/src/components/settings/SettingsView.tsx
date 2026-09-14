@@ -18,6 +18,8 @@ import {
   RefreshCw,
   Wifi,
   WifiOff,
+  Download,
+  Sparkles,
 } from 'lucide-react';
 import axios from 'axios';
 import {
@@ -29,10 +31,16 @@ import {
 } from '../../utils/notifications';
 import { requestFcmToken } from '../../config/firebase';
 import { AdminDashboardModal } from '../admin/AdminDashboardModal';
+import { usePWAInstall } from '../../hooks/usePWAInstall';
+import { InstallModal } from '../pwa/InstallModal';
 
 export const SettingsView: React.FC = () => {
   const { user, settings, updateSettings, logout } = useAuth();
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
+
+  // 📲 PWA Standalone Install State
+  const pwaState = usePWAInstall();
+  const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
 
   const [allowCallsFrom, setAllowCallsFrom] = useState(settings?.allow_calls_from || 'everyone');
   const [notificationSound, setNotificationSound] = useState(settings?.notification_sound ?? true);
@@ -475,6 +483,72 @@ export const SettingsView: React.FC = () => {
           </form>
         </div>
 
+        {/* 📲 Mobile App Installation & Standalone Mode Card */}
+        <div className="bg-dark-900 border border-gold-500/15 rounded-3xl p-6 space-y-5 shadow-xl royal-card md:col-span-2">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gold-500/15 pb-4">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-gold-500/15 border border-gold-500/35 flex items-center justify-center text-amber-400 shadow-sm">
+                <Smartphone className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-black text-white">Mobile App & Fullscreen Mode</h3>
+                  <span className={`text-[9px] px-2 py-0.5 rounded-full font-black uppercase tracking-wider flex items-center gap-1 ${
+                    pwaState.isStandalone
+                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                      : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                  }`}>
+                    {pwaState.isStandalone ? '✓ Original App Mode' : '📱 Web Mode'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-dark-300">
+                  {pwaState.isStandalone
+                    ? 'Running in standalone fullscreen mode without browser URL bar'
+                    : 'Install to mobile home screen to hide browser address bar completely'}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className={`px-3 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${
+                pwaState.isStandalone
+                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                  : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+              }`}>
+                {pwaState.isStandalone ? '✓ Installed & Standalone' : 'Ready to Install'}
+              </span>
+            </div>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-dark-850/80 border border-gold-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-xs">
+            <div className="space-y-1">
+              <p className="font-bold text-white flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+                <span>மேலே உள்ள Link மறைய Original App ஆக மாற்றவும்:</span>
+              </p>
+              <p className="text-[11px] text-dark-300 leading-relaxed max-w-xl">
+                மொபைலில் <strong>Nexus Royal</strong>-ஐ Install செய்து முகப்புத் திரையிலிருந்து (Home Screen) திறந்தால், Chrome URL bar, share icon எதுவும் தோன்றாது. Play Store ஆப் போல 100% fullscreen அனுபவம் கிடைக்கும்.
+              </p>
+            </div>
+
+            {!pwaState.isStandalone ? (
+              <button
+                type="button"
+                onClick={() => setIsInstallModalOpen(true)}
+                className="px-4 py-2.5 bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-600 hover:from-amber-400 hover:to-yellow-300 text-dark-950 font-black rounded-xl text-xs shadow-lg shadow-gold-500/25 transition-all active:scale-95 flex items-center justify-center gap-2 shrink-0 cursor-pointer"
+              >
+                <Download className="w-4 h-4 stroke-[2.5]" />
+                <span>📲 Install Mobile App</span>
+              </button>
+            ) : (
+              <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-bold shrink-0">
+                <CheckCircle2 className="w-4 h-4" />
+                <span>Original App Active</span>
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* 🔔 Push Notification Activation Card */}
         <div className="bg-dark-900 border border-gold-500/15 rounded-3xl p-6 space-y-5 shadow-xl royal-card md:col-span-2">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gold-500/15 pb-4">
@@ -641,6 +715,13 @@ export const SettingsView: React.FC = () => {
       <AdminDashboardModal
         isOpen={isAdminModalOpen}
         onClose={() => setIsAdminModalOpen(false)}
+      />
+
+      {/* 📲 PWA Standalone Mobile Install Modal */}
+      <InstallModal
+        isOpen={isInstallModalOpen}
+        onClose={() => setIsInstallModalOpen(false)}
+        pwaState={pwaState}
       />
 
     </div>

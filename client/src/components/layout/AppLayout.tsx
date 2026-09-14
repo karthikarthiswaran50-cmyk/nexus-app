@@ -26,6 +26,7 @@ import {
   Gem,
   Bell,
   BellRing,
+  Smartphone,
 } from 'lucide-react';
 import axios from 'axios';
 import { getNotificationPermissionStatus, requestNotificationPermission, startPushNotificationRobot } from '../../utils/notifications';
@@ -34,6 +35,8 @@ import { UsernameSetupModal } from '../auth/UsernameSetupModal';
 import { AppLockOverlay } from '../auth/AppLockOverlay';
 import { GlobalAnnouncementBanner } from '../common/GlobalAnnouncementBanner';
 import { AdminDashboardModal } from '../admin/AdminDashboardModal';
+import { usePWAInstall } from '../../hooks/usePWAInstall';
+import { InstallModal } from '../pwa/InstallModal';
 
 export type NavTab = 'chats' | 'calls' | 'directory' | 'subscription' | 'profile' | 'settings';
 
@@ -59,6 +62,13 @@ export const AppLayout: React.FC = () => {
 
   // Royal Admin Command Center Modal
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
+
+  // 📲 PWA Standalone Install State
+  const pwaState = usePWAInstall();
+  const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
+  const [dismissInstallBanner, setDismissInstallBanner] = useState(() =>
+    localStorage.getItem('nexus_install_banner_dismissed') === 'true'
+  );
 
   useEffect(() => {
     if (user) {
@@ -274,7 +284,18 @@ export const AppLayout: React.FC = () => {
 
         {/* User Status Card & Actions */}
         <div className="flex items-center gap-2 sm:gap-2.5">
-          
+          {!pwaState.isStandalone && (
+            <button
+              type="button"
+              onClick={() => setIsInstallModalOpen(true)}
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500/20 via-yellow-500/15 to-amber-600/20 hover:from-amber-500/30 hover:to-amber-600/30 border border-amber-400/40 text-amber-300 font-extrabold text-xs shadow-sm hover:scale-105 transition-all cursor-pointer"
+              title="Install Mobile App"
+            >
+              <Smartphone className="w-3.5 h-3.5 text-amber-400" />
+              <span className="hidden xs:inline">Install App</span>
+              <span className="xs:hidden">Install</span>
+            </button>
+          )}
 
           <button
             type="button"
@@ -363,9 +384,69 @@ export const AppLayout: React.FC = () => {
         </div>
       )}
 
+      {/* 📲 PWA Standalone Mobile Install Ribbon (hides when running as standalone app) */}
+      {!pwaState.isStandalone && !dismissInstallBanner && (
+        <div className="bg-gradient-to-r from-amber-600/25 via-yellow-500/20 to-amber-600/25 border-b border-gold-500/35 px-3.5 sm:px-6 py-2.5 flex items-center justify-between gap-3 text-xs text-amber-200 z-30 shrink-0 shadow-lg">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-amber-500/20 border border-amber-400/40 flex items-center justify-center shrink-0 text-amber-300 shadow-sm">
+              <Smartphone className="w-4 h-4 text-amber-400" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5">
+                <span className="font-black text-white text-xs">📲 Install Nexus Royal</span>
+                <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-500/25 text-amber-300 border border-amber-400/35 uppercase font-black tracking-wider">
+                  Standalone App
+                </span>
+              </div>
+              <p className="truncate text-[11px] text-dark-300 mt-0.5">
+                Mobile browser link மறைந்து Original App போல் முழு திரையில் இயங்க Install செய்யவும்
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => setIsInstallModalOpen(true)}
+              className="px-3 sm:px-4 py-1.5 bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-600 hover:from-amber-400 hover:to-yellow-300 text-dark-950 font-black rounded-xl text-xs shadow-md shadow-gold-500/25 transition-all active:scale-95 flex items-center gap-1 cursor-pointer"
+            >
+              <span>Install App</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                localStorage.setItem('nexus_install_banner_dismissed', 'true');
+                setDismissInstallBanner(true);
+              }}
+              className="p-1.5 text-dark-400 hover:text-white rounded-lg transition-colors cursor-pointer"
+              title="Dismiss"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Mobile Drawer Menu (Royal) */}
       {mobileMenuOpen && (
         <div className="md:hidden bg-dark-900 border-b border-gold-500/20 p-4 space-y-2 animate-in slide-in-from-top duration-200 z-30 shrink-0 shadow-2xl">
+          {!pwaState.isStandalone && (
+            <button
+              type="button"
+              onClick={() => {
+                setMobileMenuOpen(false);
+                setIsInstallModalOpen(true);
+              }}
+              className="w-full px-4 py-2.5 rounded-xl text-xs font-bold flex items-center justify-between text-amber-300 bg-amber-500/10 border border-amber-500/30 hover:bg-amber-500/20 transition-all mb-2 cursor-pointer"
+            >
+              <div className="flex items-center gap-3">
+                <Smartphone className="w-4 h-4 text-amber-400" />
+                <span>📲 Install Mobile App (No Link Bar)</span>
+              </div>
+              <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                Install
+              </span>
+            </button>
+          )}
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = currentTab === item.id;
@@ -515,6 +596,13 @@ export const AppLayout: React.FC = () => {
       <AdminDashboardModal
         isOpen={isAdminModalOpen}
         onClose={() => setIsAdminModalOpen(false)}
+      />
+
+      {/* 📲 PWA Standalone Mobile Install Modal */}
+      <InstallModal
+        isOpen={isInstallModalOpen}
+        onClose={() => setIsInstallModalOpen(false)}
+        pwaState={pwaState}
       />
 
     </div>
