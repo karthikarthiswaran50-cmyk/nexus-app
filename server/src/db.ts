@@ -194,6 +194,10 @@ export function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_messages_receiver ON messages(receiver_id, is_read);
     CREATE INDEX IF NOT EXISTS idx_conversations_users ON conversations(user1_id, user2_id);
     CREATE INDEX IF NOT EXISTS idx_call_logs_users ON call_logs(caller_id, receiver_id);
+    CREATE INDEX IF NOT EXISTS idx_conversations_last_msg ON conversations(last_message_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_users_last_seen ON users(last_seen DESC);
+    CREATE INDEX IF NOT EXISTS idx_messages_sender ON messages(sender_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_call_logs_started ON call_logs(started_at DESC);
   `);
 
   // Migrations for new features: reactions, reply_to, delete, last_seen, and editing

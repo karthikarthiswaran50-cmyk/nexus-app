@@ -76,12 +76,12 @@ const authLimiter = rateLimit({
   message: { error: 'Security Alert: Too many authentication attempts. Please wait 15 minutes.' },
 });
 
-const paymentLimiter = rateLimit({
+const strictApiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 15, // Max 15 payment checkout operations per 15 minutes
+  max: 30, // Stricter limit for sensitive API operations
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'Rate limit exceeded for payment operations.' },
+  message: { error: 'Rate limit exceeded. Please wait before retrying.' },
 });
 
 const uploadLimiter = rateLimit({

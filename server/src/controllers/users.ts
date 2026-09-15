@@ -442,7 +442,7 @@ export async function getBlockedUsers(req: AuthenticatedRequest, res: Response):
       },
     }));
 
-    res.json({ blockedUsers: blockedRows });
+    res.json({ blocks: blockedRows });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to fetch blocked users.' });
   }

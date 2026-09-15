@@ -126,6 +126,10 @@ export const AppLayout: React.FC = () => {
       ? '🎤 Voice Message'
       : latestMessage.type === 'image'
       ? '📷 Photo'
+      : latestMessage.type === 'video'
+      ? '🎬 Video'
+      : latestMessage.type === 'file'
+      ? `📎 ${latestMessage.file_name || 'File'}`
       : latestMessage.content || 'Sent an attachment';
 
     setInAppMessageToast({

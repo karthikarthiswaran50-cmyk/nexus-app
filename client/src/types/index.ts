@@ -1,5 +1,5 @@
-export type SubscriptionPlanId = 'free' | 'pro' | 'vip';
-export type SubscriptionStatus = 'active' | 'cancelled' | 'past_due' | 'trialing';
+export type SubscriptionPlanId = 'free';
+export type SubscriptionStatus = 'active';
 
 export interface User {
   id: string;
@@ -15,7 +15,6 @@ export interface User {
   updated_at: string;
   plan_id?: SubscriptionPlanId;
   subscription_status?: SubscriptionStatus;
-  subscription_expires_at?: string;
   role?: 'user' | 'admin';
   is_banned?: boolean | number;
 }
@@ -30,35 +29,6 @@ export interface UserSettings {
   auto_accept_calls: boolean;
   who_can_call_me?: 'everyone' | 'contacts' | 'nobody';
   who_can_see_last_seen?: 'everyone' | 'nobody';
-}
-
-export interface SubscriptionPlan {
-  id: SubscriptionPlanId;
-  name: string;
-  tagline: string;
-  priceMonthly: number;
-  priceYearly: number;
-  features: string[];
-  limits: {
-    maxCallDurationMins: number;
-    hasVideoCalls: boolean;
-    hasScreenShare: boolean;
-    hasHdVideo: boolean;
-    hasPriorityBadge: boolean;
-    hasCustomThemes: boolean;
-    hasRecordedNotes: boolean;
-  };
-}
-
-export interface SubscriptionInvoice {
-  id: string;
-  user_id: string;
-  plan_id: SubscriptionPlanId;
-  amount: number;
-  currency: string;
-  status: 'paid' | 'pending' | 'failed';
-  invoice_number: string;
-  created_at: string;
 }
 
 export type MessageType = 'text' | 'image' | 'audio' | 'video' | 'file' | 'system' | 'call_log';

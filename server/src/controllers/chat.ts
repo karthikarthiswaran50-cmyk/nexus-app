@@ -59,6 +59,8 @@ export async function getMessages(req: AuthenticatedRequest, res: Response): Pro
   try {
     const userId = req.user?.userId;
     const { otherUserId } = req.params;
+    const limitParam = Math.min(parseInt(req.query.limit as string || '100', 10), 200);
+    const beforeId = req.query.before as string | undefined; // message ID cursor for pagination
 
     if (!userId || !otherUserId) {
       res.status(400).json({ error: 'Missing parameters.' });
@@ -83,12 +85,29 @@ export async function getMessages(req: AuthenticatedRequest, res: Response): Pro
       WHERE conversation_id = ? AND receiver_id = ? AND is_read = 0
     `).run(conv.id, userId);
 
-    const rawMessages = (db.prepare(`
-      SELECT * FROM messages
-      WHERE conversation_id = ?
-      ORDER BY created_at ASC
-      LIMIT 200
-    `).all(conv.id) as unknown) as any[];
+    let rawMessages: any[];
+    if (beforeId) {
+      // Cursor-based pagination: get messages older than the given message ID
+      const cursor = db.prepare('SELECT created_at FROM messages WHERE id = ?').get(beforeId) as any;
+      if (!cursor) {
+        res.json({ messages: [], conversationId: conv.id });
+        return;
+      }
+      rawMessages = (db.prepare(`
+        SELECT * FROM messages
+        WHERE conversation_id = ? AND created_at < ?
+        ORDER BY created_at DESC
+        LIMIT ?
+      `).all(conv.id, cursor.created_at, limitParam) as unknown) as any[];
+      rawMessages.reverse(); // restore chronological order
+    } else {
+      rawMessages = (db.prepare(`
+        SELECT * FROM messages
+        WHERE conversation_id = ?
+        ORDER BY created_at ASC
+        LIMIT ?
+      `).all(conv.id, limitParam) as unknown) as any[];
+    }
 
     // Parse reactions, deleted_for_users, and filter deleted for current user
     const messages: Message[] = rawMessages
@@ -97,7 +116,7 @@ export async function getMessages(req: AuthenticatedRequest, res: Response): Pro
         try {
           deletedUsers = m.deleted_for_users ? JSON.parse(m.deleted_for_users) : [];
         } catch (e) {}
-        return !deletedUsers.includes(userId);
+        return !deletedUsers.includes(userId!);
       })
       .map((m) => {
         let reactions = {};
@@ -115,18 +134,21 @@ export async function getMessages(req: AuthenticatedRequest, res: Response): Pro
           content: isDeletedForAll ? '🚫 This message was deleted' : m.content,
           type: isDeletedForAll ? 'system' : m.type,
           media_url: isDeletedForAll ? undefined : m.media_url,
+          file_name: isDeletedForAll ? undefined : m.file_name,
+          file_size: isDeletedForAll ? undefined : m.file_size,
           is_read: !!m.is_read,
           reactions,
           reply_to_id: m.reply_to_id,
           reply_to_content: m.reply_to_content,
           reply_to_sender: m.reply_to_sender,
+          edited_at: m.edited_at,
           is_deleted_for_all: isDeletedForAll,
           created_at: m.created_at,
           sender: getUserWithPlan(m.sender_id) || undefined,
         };
       });
 
-    res.json({ messages, conversationId: conv.id });
+    res.json({ messages, conversationId: conv.id, hasMore: rawMessages.length === limitParam });
   } catch (error) {
     console.error('getMessages error:', error);
     res.status(500).json({ error: 'Failed to retrieve messages.' });
@@ -137,13 +159,15 @@ export function saveMessage(params: {
   senderId: string;
   receiverId: string;
   content: string;
-  type?: 'text' | 'image' | 'audio' | 'system' | 'call_log';
+  type?: 'text' | 'image' | 'audio' | 'video' | 'file' | 'system' | 'call_log';
   mediaUrl?: string;
+  fileName?: string;
+  fileSize?: number;
   replyToId?: string;
   replyToContent?: string;
   replyToSender?: string;
 }): { message: Message; conversationId: string } {
-  const { senderId, receiverId, content, type = 'text', mediaUrl, replyToId, replyToContent, replyToSender } = params;
+  const { senderId, receiverId, content, type = 'text', mediaUrl, fileName, fileSize, replyToId, replyToContent, replyToSender } = params;
 
   // Find or create conversation
   let conv = db.prepare(`
@@ -172,8 +196,8 @@ export function saveMessage(params: {
   const cleanContent = type === 'text' ? sanitizeText(content) : content;
 
   db.prepare(`
-    INSERT INTO messages (id, conversation_id, sender_id, receiver_id, content, type, media_url, is_read, reactions, reply_to_id, reply_to_content, reply_to_sender, is_deleted_for_all, deleted_for_users, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, 0, '{}', ?, ?, ?, 0, '[]', ?)
+    INSERT INTO messages (id, conversation_id, sender_id, receiver_id, content, type, media_url, file_name, file_size, is_read, reactions, reply_to_id, reply_to_content, reply_to_sender, is_deleted_for_all, deleted_for_users, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, '{}', ?, ?, ?, 0, '[]', ?)
   `).run(
     msgId,
     conv.id,
@@ -182,6 +206,8 @@ export function saveMessage(params: {
     cleanContent,
     type,
     mediaUrl || null,
+    fileName || null,
+    fileSize || null,
     replyToId || null,
     replyToContent || null,
     replyToSender || null,
@@ -216,6 +242,8 @@ export function saveMessage(params: {
     content: cleanContent,
     type,
     media_url: mediaUrl,
+    file_name: fileName,
+    file_size: fileSize,
     is_read: false,
     reactions: {},
     reply_to_id: replyToId,
@@ -447,6 +475,8 @@ export async function forwardMessageHttp(req: AuthenticatedRequest, res: Respons
         content: sourceMsg.content,
         type: sourceMsg.type,
         mediaUrl: sourceMsg.media_url,
+        fileName: sourceMsg.file_name,
+        fileSize: sourceMsg.file_size,
       });
       forwardedMessages.push(res.message);
     }
@@ -459,6 +489,8 @@ export async function forwardMessageHttp(req: AuthenticatedRequest, res: Respons
         content: sourceMsg.content,
         type: sourceMsg.type,
         mediaUrl: sourceMsg.media_url,
+        fileName: sourceMsg.file_name,
+        fileSize: sourceMsg.file_size,
       });
       if (res) forwardedMessages.push(res.message);
     }
@@ -769,6 +801,8 @@ export async function getGroupMessages(req: AuthenticatedRequest, res: Response)
   try {
     const userId = req.user?.userId;
     const { id } = req.params;
+    const limitParam = Math.min(parseInt(req.query.limit as string || '100', 10), 250);
+    const beforeId = req.query.before as string | undefined;
 
     if (!userId || !id) {
       res.status(400).json({ error: 'Missing parameters' });
@@ -782,12 +816,30 @@ export async function getGroupMessages(req: AuthenticatedRequest, res: Response)
       return;
     }
 
-    const raw = (db.prepare(`
-      SELECT * FROM messages
-      WHERE group_id = ?
-      ORDER BY created_at ASC
-      LIMIT 250
-    `).all(id) as any[]).map(m => {
+    let rawMessages: any[];
+    if (beforeId) {
+      const cursor = db.prepare('SELECT created_at FROM messages WHERE id = ?').get(beforeId) as any;
+      if (!cursor) {
+        res.json({ messages: [], hasMore: false });
+        return;
+      }
+      rawMessages = (db.prepare(`
+        SELECT * FROM messages
+        WHERE group_id = ? AND created_at < ?
+        ORDER BY created_at DESC
+        LIMIT ?
+      `).all(id, cursor.created_at, limitParam) as any[]);
+      rawMessages.reverse();
+    } else {
+      rawMessages = (db.prepare(`
+        SELECT * FROM messages
+        WHERE group_id = ?
+        ORDER BY created_at ASC
+        LIMIT ?
+      `).all(id, limitParam) as any[]);
+    }
+
+    const raw = rawMessages.map(m => {
       let reactions = {};
       try { reactions = m.reactions ? JSON.parse(m.reactions) : {}; } catch (e) {}
       const isDeletedForAll = !!m.is_deleted_for_all;
@@ -799,8 +851,8 @@ export async function getGroupMessages(req: AuthenticatedRequest, res: Response)
         content: isDeletedForAll ? '🚫 This message was deleted' : m.content,
         type: isDeletedForAll ? 'system' : m.type,
         media_url: isDeletedForAll ? undefined : m.media_url,
-        file_name: m.file_name,
-        file_size: m.file_size,
+        file_name: isDeletedForAll ? undefined : m.file_name,
+        file_size: isDeletedForAll ? undefined : m.file_size,
         is_read: true,
         reactions,
         reply_to_id: m.reply_to_id,
@@ -813,7 +865,7 @@ export async function getGroupMessages(req: AuthenticatedRequest, res: Response)
       };
     });
 
-    res.json({ messages: raw });
+    res.json({ messages: raw, hasMore: rawMessages.length === limitParam });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to fetch group messages.' });
   }

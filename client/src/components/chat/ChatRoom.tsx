@@ -232,15 +232,21 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, on
     }
   };
 
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const messagesContainerRef = useRef<HTMLDivElement | null>(null);
+
   // Load message history
   const fetchMessages = async () => {
     try {
       if (group) {
         const res = await axios.get(`/api/groups/${group.id}/messages`);
         setMessages(res.data.messages || []);
+        setHasMore(!!res.data.hasMore);
       } else if (otherUser) {
         const res = await axios.get(`/api/chat/messages/${otherUser.id}`);
         setMessages(res.data.messages || []);
+        setHasMore(!!res.data.hasMore);
         if (socket) {
           socket.emit('chat:read', { senderId: otherUser.id });
         }
@@ -249,6 +255,39 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, on
       console.error('Fetch messages error:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadMoreMessages = async () => {
+    if (loadingMore || !hasMore || messages.length === 0) return;
+    const oldestMsg = messages[0];
+    if (!oldestMsg) return;
+    setLoadingMore(true);
+    try {
+      let res;
+      if (group) {
+        res = await axios.get(`/api/groups/${group.id}/messages?before=${oldestMsg.id}`);
+      } else if (otherUser) {
+        res = await axios.get(`/api/chat/messages/${otherUser.id}?before=${oldestMsg.id}`);
+      }
+      if (res?.data?.messages?.length > 0) {
+        const container = messagesContainerRef.current;
+        const prevScrollHeight = container?.scrollHeight || 0;
+        setMessages(prev => [...(res!.data.messages as Message[]), ...prev]);
+        setHasMore(!!res?.data.hasMore);
+        // Restore scroll position so user doesn't jump
+        requestAnimationFrame(() => {
+          if (container) {
+            container.scrollTop = container.scrollHeight - prevScrollHeight;
+          }
+        });
+      } else {
+        setHasMore(false);
+      }
+    } catch (err) {
+      console.error('loadMoreMessages error:', err);
+    } finally {
+      setLoadingMore(false);
     }
   };
 
@@ -978,6 +1017,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, on
 
       {/* 👑 Messages Thread Container with Custom Wallpaper */}
       <div 
+        ref={messagesContainerRef}
         className="flex-1 p-4 sm:p-6 overflow-y-auto space-y-4 royal-watermark transition-all duration-300"
         style={{
           background:
@@ -997,6 +1037,19 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, on
         }}
         onClick={() => { setActiveMenuMessageId(null); setShowWallpaperMenu(false); }}
       >
+        {/* Load More Button — shown at top when older messages exist */}
+        {hasMore && !loading && messages.length > 0 && (
+          <div className="flex justify-center mb-2">
+            <button
+              type="button"
+              onClick={loadMoreMessages}
+              disabled={loadingMore}
+              className="px-4 py-1.5 rounded-full text-xs font-bold bg-dark-800 hover:bg-dark-700 text-dark-300 hover:text-white border border-dark-700 transition-all disabled:opacity-50"
+            >
+              {loadingMore ? 'Loading…' : '↑ Load older messages'}
+            </button>
+          </div>
+        )}
         {loading ? (
           <div className="h-full flex items-center justify-center">
             <div className="w-8 h-8 border-2 border-gold-400 border-t-transparent rounded-full animate-spin" />

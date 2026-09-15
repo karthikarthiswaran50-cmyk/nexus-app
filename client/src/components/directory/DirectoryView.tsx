@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useSocket } from '../../context/SocketContext';
 import { useAuth } from '../../context/AuthContext';
-import { User, SubscriptionPlanId } from '../../types';
+import { User } from '../../types';
 import { Avatar } from '../common/Avatar';
 import { PlanBadge } from '../common/Badge';
 import {
@@ -10,7 +10,6 @@ import {
   Phone,
   Video,
   Users,
-  Sparkles,
   Crown,
   Globe,
   Check,
@@ -29,7 +28,7 @@ export const DirectoryView: React.FC<DirectoryViewProps> = ({ onStartChat, onVie
 
   const [users, setUsers] = useState<User[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [tierFilter, setTierFilter] = useState<'all' | 'pro' | 'vip'>('all');
+  const [onlineOnly, setOnlineOnly] = useState(false);
   const [loading, setLoading] = useState(false);
 
   // Instagram-style: Debounced search by @username or name + initial members loading
@@ -53,8 +52,7 @@ export const DirectoryView: React.FC<DirectoryViewProps> = ({ onStartChat, onVie
   }, [searchQuery]);
 
   const filteredUsers = users.filter((u) => {
-    if (tierFilter === 'pro' && u.plan_id !== 'pro' && u.plan_id !== 'vip') return false;
-    if (tierFilter === 'vip' && u.plan_id !== 'vip') return false;
+    if (onlineOnly && !onlineUserIds.has(u.id) && !reachableUserIds.has(u.id)) return false;
     return true;
   });
 
@@ -82,32 +80,22 @@ export const DirectoryView: React.FC<DirectoryViewProps> = ({ onStartChat, onVie
         <div className="flex items-center gap-2 bg-dark-950/90 p-1.5 rounded-2xl border border-gold-500/20 shadow-inner">
           <button
             type="button"
-            onClick={() => setTierFilter('all')}
+            onClick={() => setOnlineOnly(false)}
             className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
-              tierFilter === 'all' ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-dark-950 shadow-md' : 'text-dark-400 hover:text-white'
+              !onlineOnly ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-dark-950 shadow-md' : 'text-dark-400 hover:text-white'
             }`}
           >
-            All
+            All Members
           </button>
           <button
             type="button"
-            onClick={() => setTierFilter('pro')}
+            onClick={() => setOnlineOnly(true)}
             className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
-              tierFilter === 'pro' ? 'bg-brand-600 text-white shadow-md' : 'text-dark-400 hover:text-white'
+              onlineOnly ? 'bg-emerald-500 text-white shadow-md' : 'text-dark-400 hover:text-white'
             }`}
           >
-            <Sparkles className="w-3 h-3" />
-            <span>Pro</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setTierFilter('vip')}
-            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
-              tierFilter === 'vip' ? 'bg-gradient-to-r from-amber-600 to-yellow-500 text-dark-950 shadow-md' : 'text-dark-400 hover:text-white'
-            }`}
-          >
-            <Crown className="w-3 h-3 fill-current" />
-            <span>VIP</span>
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse inline-block" />
+            <span>Online</span>
           </button>
         </div>
       </div>

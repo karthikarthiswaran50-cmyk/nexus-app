@@ -43,7 +43,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ viewUser, onNavigateTo
   const [fullName, setFullName] = useState(currentUser?.full_name || '');
   const [username, setUsername] = useState(currentUser?.username || '');
   const [bio, setBio] = useState(currentUser?.bio || '');
-  const [status, setStatus] = useState(currentUser?.status || '👑 Imperial VIP on Nexus');
+  const [status, setStatus] = useState(currentUser?.status || 'Hey there! I am using Nexus.');
   const [country, setCountry] = useState(currentUser?.country || 'Global');
   const [avatarUrl, setAvatarUrl] = useState(currentUser?.avatar_url || '');
 
@@ -52,7 +52,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ viewUser, onNavigateTo
       setFullName(currentUser.full_name || '');
       setUsername(currentUser.username || '');
       setBio(currentUser.bio || '');
-      setStatus(currentUser.status || '👑 Imperial VIP on Nexus');
+      setStatus(currentUser.status || 'Hey there! I am using Nexus.');
       setCountry(currentUser.country || 'Global');
       setAvatarUrl(currentUser.avatar_url || '');
     }
@@ -74,12 +74,12 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ viewUser, onNavigateTo
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  // WhatsApp-style status presets with gemstones & emojis
+  // WhatsApp-style status presets with emojis
   const statusPresets = [
     { text: 'Available', emoji: '🟢', color: 'emerald' },
     { text: 'Busy', emoji: '🔴', color: 'ruby' },
-    { text: 'Royal VIP', emoji: '👑', color: 'gold' },
-    { text: 'In a 4K Call', emoji: '📞', color: 'sapphire' },
+    { text: 'Nexus Member', emoji: '👑', color: 'gold' },
+    { text: 'In a call', emoji: '📞', color: 'sapphire' },
     { text: 'At work', emoji: '💼', color: 'indigo' },
     { text: 'Battery low', emoji: '🔋', color: 'amber' },
     { text: 'Traveling', emoji: '✈️', color: 'cyan' },

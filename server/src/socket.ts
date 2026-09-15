@@ -176,20 +176,22 @@ export function setupSocket(io: Server) {
     socket.on('chat:send_message', async (data: {
       receiverId: string;
       content: string;
-      type?: 'text' | 'image' | 'audio' | 'system' | 'call_log';
+      type?: 'text' | 'image' | 'audio' | 'video' | 'file' | 'system' | 'call_log';
       mediaUrl?: string;
+      fileName?: string;
+      fileSize?: number;
       replyToId?: string;
       replyToContent?: string;
       replyToSender?: string;
     }) => {
       try {
-        const { receiverId, content, type = 'text', mediaUrl, replyToId, replyToContent, replyToSender } = data;
+        const { receiverId, content, type = 'text', mediaUrl, fileName, fileSize, replyToId, replyToContent, replyToSender } = data;
         if (typeof receiverId !== 'string' || !receiverId.trim() || (!content && !mediaUrl)) return;
 
         // Check if either user blocked the other
         const isBlocked = db.prepare(`
           SELECT 1 FROM blocked_users 
-          WHERE (user_id = ? AND blocked_id = ?) OR (user_id = ? AND blocked_id = ?)
+          WHERE (user_id = ? AND blocked_user_id = ?) OR (user_id = ? AND blocked_user_id = ?)
         `).get(userId, receiverId.trim(), receiverId.trim(), userId);
         if (isBlocked) {
           socket.emit('chat:error', { message: 'Cannot send message: User is blocked.' });
@@ -197,10 +199,12 @@ export function setupSocket(io: Server) {
         }
 
         const safeContent = typeof content === 'string' ? content.slice(0, 10000) : '';
-        const safeType = ['text', 'image', 'audio', 'system', 'call_log'].includes(type) ? type : 'text';
+        const safeType = ['text', 'image', 'audio', 'video', 'file', 'system', 'call_log'].includes(type) ? type : 'text';
         const safeMediaUrl = typeof mediaUrl === 'string' && (mediaUrl.startsWith('/uploads/') || mediaUrl.startsWith('https://'))
           ? mediaUrl.slice(0, 500)
           : undefined;
+        const safeFileName = typeof fileName === 'string' ? fileName.slice(0, 255) : undefined;
+        const safeFileSize = typeof fileSize === 'number' ? fileSize : undefined;
 
         const result = saveMessage({
           senderId: userId,
@@ -208,6 +212,8 @@ export function setupSocket(io: Server) {
           content: safeContent,
           type: safeType as any,
           mediaUrl: safeMediaUrl,
+          fileName: safeFileName,
+          fileSize: safeFileSize,
           replyToId: typeof replyToId === 'string' ? replyToId.slice(0, 100) : undefined,
           replyToContent: typeof replyToContent === 'string' ? replyToContent.slice(0, 500) : undefined,
           replyToSender: typeof replyToSender === 'string' ? replyToSender.slice(0, 100) : undefined,
@@ -396,14 +402,16 @@ export function setupSocket(io: Server) {
     socket.on('group:send_message', async (data: {
       groupId: string;
       content: string;
-      type?: 'text' | 'image' | 'audio' | 'system' | 'call_log';
+      type?: 'text' | 'image' | 'audio' | 'video' | 'file' | 'system' | 'call_log';
       mediaUrl?: string;
+      fileName?: string;
+      fileSize?: number;
       replyToId?: string;
       replyToContent?: string;
       replyToSender?: string;
     }) => {
       try {
-        const { groupId, content, type = 'text', mediaUrl, replyToId, replyToContent, replyToSender } = data;
+        const { groupId, content, type = 'text', mediaUrl, fileName, fileSize, replyToId, replyToContent, replyToSender } = data;
         if (!groupId || (!content && !mediaUrl)) return;
 
         // Verify membership
@@ -414,10 +422,12 @@ export function setupSocket(io: Server) {
         }
 
         const safeContent = typeof content === 'string' ? content.slice(0, 10000) : '';
-        const safeType = ['text', 'image', 'audio', 'system', 'call_log'].includes(type) ? type : 'text';
+        const safeType = ['text', 'image', 'audio', 'video', 'file', 'system', 'call_log'].includes(type) ? type : 'text';
         const safeMediaUrl = typeof mediaUrl === 'string' && (mediaUrl.startsWith('/uploads/') || mediaUrl.startsWith('https://'))
           ? mediaUrl.slice(0, 500)
           : undefined;
+        const safeFileName = typeof fileName === 'string' ? fileName.slice(0, 255) : undefined;
+        const safeFileSize = typeof fileSize === 'number' ? fileSize : undefined;
 
         const result = saveGroupMessage({
           groupId,
@@ -425,6 +435,8 @@ export function setupSocket(io: Server) {
           content: safeContent,
           type: safeType as any,
           mediaUrl: safeMediaUrl,
+          fileName: safeFileName,
+          fileSize: safeFileSize,
           replyToId: typeof replyToId === 'string' ? replyToId.slice(0, 100) : undefined,
           replyToContent: typeof replyToContent === 'string' ? replyToContent.slice(0, 500) : undefined,
           replyToSender: typeof replyToSender === 'string' ? replyToSender.slice(0, 100) : undefined,
@@ -462,7 +474,7 @@ export function setupSocket(io: Server) {
       // Check if either user blocked the other
       const isBlocked = db.prepare(`
         SELECT 1 FROM blocked_users 
-        WHERE (user_id = ? AND blocked_id = ?) OR (user_id = ? AND blocked_id = ?)
+        WHERE (user_id = ? AND blocked_user_id = ?) OR (user_id = ? AND blocked_user_id = ?)
       `).get(userId, receiverId, receiverId, userId);
       if (isBlocked) {
         socket.emit('call:error', { message: 'Cannot place call: User is unavailable.' });

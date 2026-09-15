@@ -77,7 +77,7 @@ export async function register(req: Request, res: Response): Promise<void> {
     db.prepare(`
       INSERT INTO users (id, email, username, password_hash, full_name, avatar_url, bio, status, country, role, is_banned, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
-    `).run(userId, cleanEmail, cleanUsername, passwordHash, full_name, avatar, userBio, 'Online on Nexus', userCountry, initialRole, now, now);
+    `).run(userId, cleanEmail, cleanUsername, passwordHash, cleanFullName, avatar, userBio, 'Online on Nexus', userCountry, initialRole, now, now);
 
     // Insert default free subscription
     db.prepare(`
@@ -97,7 +97,7 @@ export async function register(req: Request, res: Response): Promise<void> {
       email: cleanEmail,
       username: cleanUsername,
       password_hash: passwordHash,
-      full_name,
+      full_name: cleanFullName,
       avatar_url: avatar,
       bio: userBio,
       status: 'Online on Nexus',
@@ -132,7 +132,7 @@ export async function register(req: Request, res: Response): Promise<void> {
     recordActivity(userId, 'register', {
       username: cleanUsername,
       email: cleanEmail,
-      full_name,
+      full_name: cleanFullName,
     });
 
     const user = getUserWithPlan(userId);
