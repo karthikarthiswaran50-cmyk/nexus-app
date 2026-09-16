@@ -57,11 +57,27 @@ if (pgPool) {
   console.log('📦 Local SQLite engine running (standalone mode).');
 }
 
+// Helper to ensure a column exists in an SQLite table
+function ensureColumn(tableName: string, columnName: string, columnDef: string) {
+  try {
+    const tableInfo = db.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>;
+    const columnExists = tableInfo.some((col) => col.name === columnName);
+    if (!columnExists) {
+      db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnDef};`);
+    }
+  } catch (e: any) {
+    // Fallback try/catch in case PRAGMA fails or ALTER TABLE fails
+    try {
+      db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnDef};`);
+    } catch {}
+  }
+}
+
 // ----------------------------------------------------
 // Database Schema Initialization
 // ----------------------------------------------------
 export function initDatabase() {
-  // 1. Users table (SQLite)
+  // 1. Core Tables Creation (with full schema)
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
@@ -73,13 +89,13 @@ export function initDatabase() {
       bio TEXT NOT NULL DEFAULT '',
       status TEXT NOT NULL DEFAULT 'Hey there! I am using Nexus.',
       country TEXT NOT NULL DEFAULT 'Global',
+      last_seen TEXT DEFAULT (datetime('now')),
+      role TEXT DEFAULT 'user',
+      is_banned INTEGER DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
-  `);
 
-  // 2. Subscriptions table
-  db.exec(`
     CREATE TABLE IF NOT EXISTS subscriptions (
       id TEXT PRIMARY KEY,
       user_id TEXT UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -89,10 +105,7 @@ export function initDatabase() {
       billing_cycle TEXT NOT NULL DEFAULT 'monthly',
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
-  `);
 
-  // 3. User Settings table
-  db.exec(`
     CREATE TABLE IF NOT EXISTS user_settings (
       id TEXT PRIMARY KEY,
       user_id TEXT UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -101,23 +114,11 @@ export function initDatabase() {
       notification_sound INTEGER NOT NULL DEFAULT 1,
       read_receipts INTEGER NOT NULL DEFAULT 1,
       auto_accept_calls INTEGER NOT NULL DEFAULT 0,
+      who_can_call_me TEXT DEFAULT 'everyone',
+      who_can_see_last_seen TEXT DEFAULT 'everyone',
       fcm_token TEXT
     );
-  `);
 
-  try {
-    db.exec(`ALTER TABLE user_settings ADD COLUMN fcm_token TEXT;`);
-  } catch (e) {}
-
-  try {
-    db.exec(`ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'user';`);
-  } catch (e) {}
-
-  try {
-    db.exec(`ALTER TABLE users ADD COLUMN is_banned INTEGER DEFAULT 0;`);
-  } catch (e) {}
-
-  db.exec(`
     CREATE TABLE IF NOT EXISTS system_announcements (
       id TEXT PRIMARY KEY,
       title TEXT NOT NULL,
@@ -131,10 +132,7 @@ export function initDatabase() {
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
     );
-  `);
 
-  // 4. Conversations table
-  db.exec(`
     CREATE TABLE IF NOT EXISTS conversations (
       id TEXT PRIMARY KEY,
       user1_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -143,25 +141,29 @@ export function initDatabase() {
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       UNIQUE(user1_id, user2_id)
     );
-  `);
 
-  // 5. Messages table
-  db.exec(`
     CREATE TABLE IF NOT EXISTS messages (
       id TEXT PRIMARY KEY,
-      conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+      conversation_id TEXT REFERENCES conversations(id) ON DELETE CASCADE,
+      group_id TEXT,
       sender_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      receiver_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      receiver_id TEXT REFERENCES users(id) ON DELETE CASCADE,
       content TEXT NOT NULL,
       type TEXT NOT NULL DEFAULT 'text',
       media_url TEXT,
+      file_name TEXT,
+      file_size INTEGER,
       is_read INTEGER NOT NULL DEFAULT 0,
+      reactions TEXT DEFAULT '{}',
+      reply_to_id TEXT,
+      reply_to_content TEXT,
+      reply_to_sender TEXT,
+      is_deleted_for_all INTEGER DEFAULT 0,
+      deleted_for_users TEXT DEFAULT '[]',
+      edited_at TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
-  `);
 
-  // 6. Call logs table
-  db.exec(`
     CREATE TABLE IF NOT EXISTS call_logs (
       id TEXT PRIMARY KEY,
       caller_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -172,10 +174,7 @@ export function initDatabase() {
       started_at TEXT NOT NULL DEFAULT (datetime('now')),
       ended_at TEXT
     );
-  `);
 
-  // 7. Subscription Invoices table
-  db.exec(`
     CREATE TABLE IF NOT EXISTS subscription_invoices (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -186,37 +185,7 @@ export function initDatabase() {
       invoice_number TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
-  `);
 
-  // SQLite Indexes
-  db.exec(`
-    CREATE INDEX IF NOT EXISTS idx_messages_conv ON messages(conversation_id, created_at);
-    CREATE INDEX IF NOT EXISTS idx_messages_receiver ON messages(receiver_id, is_read);
-    CREATE INDEX IF NOT EXISTS idx_conversations_users ON conversations(user1_id, user2_id);
-    CREATE INDEX IF NOT EXISTS idx_call_logs_users ON call_logs(caller_id, receiver_id);
-    CREATE INDEX IF NOT EXISTS idx_conversations_last_msg ON conversations(last_message_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_users_last_seen ON users(last_seen DESC);
-    CREATE INDEX IF NOT EXISTS idx_messages_sender ON messages(sender_id, created_at);
-    CREATE INDEX IF NOT EXISTS idx_call_logs_started ON call_logs(started_at DESC);
-  `);
-
-  // Migrations for new features: reactions, reply_to, delete, last_seen, and editing
-  try { db.exec(`ALTER TABLE messages ADD COLUMN reactions TEXT DEFAULT '{}';`); } catch (e) {}
-  try { db.exec(`ALTER TABLE messages ADD COLUMN reply_to_id TEXT;`); } catch (e) {}
-  try { db.exec(`ALTER TABLE messages ADD COLUMN reply_to_content TEXT;`); } catch (e) {}
-  try { db.exec(`ALTER TABLE messages ADD COLUMN reply_to_sender TEXT;`); } catch (e) {}
-  try { db.exec(`ALTER TABLE messages ADD COLUMN is_deleted_for_all INTEGER DEFAULT 0;`); } catch (e) {}
-  try { db.exec(`ALTER TABLE messages ADD COLUMN deleted_for_users TEXT DEFAULT '[]';`); } catch (e) {}
-  try { db.exec(`ALTER TABLE messages ADD COLUMN edited_at TEXT;`); } catch (e) {}
-  try { db.exec(`ALTER TABLE messages ADD COLUMN group_id TEXT;`); } catch (e) {}
-  try { db.exec(`ALTER TABLE messages ADD COLUMN file_name TEXT;`); } catch (e) {}
-  try { db.exec(`ALTER TABLE messages ADD COLUMN file_size INTEGER;`); } catch (e) {}
-  try { db.exec(`ALTER TABLE users ADD COLUMN last_seen TEXT DEFAULT (datetime('now'));`); } catch (e) {}
-  try { db.exec(`ALTER TABLE user_settings ADD COLUMN who_can_call_me TEXT DEFAULT 'everyone';`); } catch (e) {}
-  try { db.exec(`ALTER TABLE user_settings ADD COLUMN who_can_see_last_seen TEXT DEFAULT 'everyone';`); } catch (e) {}
-
-  // 11. Groups & Group Members Table
-  db.exec(`
     CREATE TABLE IF NOT EXISTS groups (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -234,9 +203,6 @@ export function initDatabase() {
       joined_at TEXT NOT NULL DEFAULT (datetime('now')),
       UNIQUE(group_id, user_id)
     );
-    CREATE INDEX IF NOT EXISTS idx_group_members_group ON group_members(group_id);
-    CREATE INDEX IF NOT EXISTS idx_group_members_user ON group_members(user_id);
-    CREATE INDEX IF NOT EXISTS idx_messages_group ON messages(group_id, created_at);
 
     CREATE TABLE IF NOT EXISTS blocked_users (
       id TEXT PRIMARY KEY,
@@ -245,7 +211,6 @@ export function initDatabase() {
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       UNIQUE(user_id, blocked_user_id)
     );
-    CREATE INDEX IF NOT EXISTS idx_blocked_users_pair ON blocked_users(user_id, blocked_user_id);
 
     CREATE TABLE IF NOT EXISTS user_reports (
       id TEXT PRIMARY KEY,
@@ -256,11 +221,7 @@ export function initDatabase() {
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       resolved_at TEXT
     );
-    CREATE INDEX IF NOT EXISTS idx_reports_status ON user_reports(status, created_at);
-  `);
 
-  // 8. Stories Table
-  db.exec(`
     CREATE TABLE IF NOT EXISTS stories (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -270,11 +231,7 @@ export function initDatabase() {
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       expires_at TEXT NOT NULL
     );
-    CREATE INDEX IF NOT EXISTS idx_stories_user ON stories(user_id, expires_at);
-  `);
 
-  // 9. Story Views Table
-  db.exec(`
     CREATE TABLE IF NOT EXISTS story_views (
       id TEXT PRIMARY KEY,
       story_id TEXT NOT NULL REFERENCES stories(id) ON DELETE CASCADE,
@@ -282,10 +239,7 @@ export function initDatabase() {
       viewed_at TEXT NOT NULL DEFAULT (datetime('now')),
       UNIQUE(story_id, viewer_id)
     );
-  `);
 
-  // 10. User Activities Table
-  db.exec(`
     CREATE TABLE IF NOT EXISTS user_activities (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -293,6 +247,53 @@ export function initDatabase() {
       details TEXT DEFAULT '{}',
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS push_subscriptions (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      endpoint TEXT UNIQUE NOT NULL,
+      p256dh TEXT NOT NULL,
+      auth TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+
+  // 2. Safe idempotent column migrations for existing databases created before newer fields were added
+  ensureColumn('users', 'last_seen', "TEXT DEFAULT (datetime('now'))");
+  ensureColumn('users', 'role', "TEXT DEFAULT 'user'");
+  ensureColumn('users', 'is_banned', 'INTEGER DEFAULT 0');
+
+  ensureColumn('user_settings', 'fcm_token', 'TEXT');
+  ensureColumn('user_settings', 'who_can_call_me', "TEXT DEFAULT 'everyone'");
+  ensureColumn('user_settings', 'who_can_see_last_seen', "TEXT DEFAULT 'everyone'");
+
+  ensureColumn('messages', 'group_id', 'TEXT');
+  ensureColumn('messages', 'file_name', 'TEXT');
+  ensureColumn('messages', 'file_size', 'INTEGER');
+  ensureColumn('messages', 'reactions', "TEXT DEFAULT '{}'");
+  ensureColumn('messages', 'reply_to_id', 'TEXT');
+  ensureColumn('messages', 'reply_to_content', 'TEXT');
+  ensureColumn('messages', 'reply_to_sender', 'TEXT');
+  ensureColumn('messages', 'is_deleted_for_all', 'INTEGER DEFAULT 0');
+  ensureColumn('messages', 'deleted_for_users', "TEXT DEFAULT '[]'");
+  ensureColumn('messages', 'edited_at', 'TEXT');
+
+  // 3. Performance & Integrity Indexes (created ONLY after all tables and columns are guaranteed to exist)
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_messages_conv ON messages(conversation_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_messages_receiver ON messages(receiver_id, is_read);
+    CREATE INDEX IF NOT EXISTS idx_messages_sender ON messages(sender_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_messages_group ON messages(group_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_conversations_users ON conversations(user1_id, user2_id);
+    CREATE INDEX IF NOT EXISTS idx_conversations_last_msg ON conversations(last_message_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_users_last_seen ON users(last_seen DESC);
+    CREATE INDEX IF NOT EXISTS idx_call_logs_users ON call_logs(caller_id, receiver_id);
+    CREATE INDEX IF NOT EXISTS idx_call_logs_started ON call_logs(started_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_group_members_group ON group_members(group_id);
+    CREATE INDEX IF NOT EXISTS idx_group_members_user ON group_members(user_id);
+    CREATE INDEX IF NOT EXISTS idx_blocked_users_pair ON blocked_users(user_id, blocked_user_id);
+    CREATE INDEX IF NOT EXISTS idx_reports_status ON user_reports(status, created_at);
+    CREATE INDEX IF NOT EXISTS idx_stories_user ON stories(user_id, expires_at);
     CREATE INDEX IF NOT EXISTS idx_user_activities_user ON user_activities(user_id, created_at);
     CREATE INDEX IF NOT EXISTS idx_user_activities_action ON user_activities(action, created_at);
   `);
@@ -461,8 +462,8 @@ async function initPostgresAndRestore() {
       console.log(`📥 Restoring ${res.rows.length} persistent users from PostgreSQL into local cache...`);
       
       const insertUser = db.prepare(`
-        INSERT OR REPLACE INTO users (id, email, username, password_hash, full_name, avatar_url, bio, status, country, role, is_banned, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT OR REPLACE INTO users (id, email, username, password_hash, full_name, avatar_url, bio, status, country, last_seen, role, is_banned, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
 
       for (const row of res.rows) {
@@ -476,6 +477,7 @@ async function initPostgresAndRestore() {
           row.bio || '',
           row.status || '',
           row.country || 'Global',
+          row.last_seen ? new Date(row.last_seen).toISOString() : new Date().toISOString(),
           row.role || 'user',
           row.is_banned ? 1 : 0,
           new Date(row.created_at).toISOString(),
@@ -504,11 +506,22 @@ async function initPostgresAndRestore() {
       // Restore settings
       const setRes = await pgPool.query('SELECT * FROM user_settings');
       const insertSet = db.prepare(`
-        INSERT OR REPLACE INTO user_settings (id, user_id, theme, allow_calls_from, notification_sound, read_receipts, auto_accept_calls, fcm_token)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT OR REPLACE INTO user_settings (id, user_id, theme, allow_calls_from, notification_sound, read_receipts, auto_accept_calls, who_can_call_me, who_can_see_last_seen, fcm_token)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
       for (const st of setRes.rows) {
-        insertSet.run(st.id, st.user_id, st.theme, st.allow_calls_from, st.notification_sound, st.read_receipts, st.auto_accept_calls, st.fcm_token || null);
+        insertSet.run(
+          st.id,
+          st.user_id,
+          st.theme || 'dark',
+          st.allow_calls_from || 'everyone',
+          st.notification_sound ?? 1,
+          st.read_receipts ?? 1,
+          st.auto_accept_calls ?? 0,
+          st.who_can_call_me || 'everyone',
+          st.who_can_see_last_seen || 'everyone',
+          st.fcm_token || null
+        );
       }
 
       // Restore push_subscriptions
@@ -548,13 +561,14 @@ export function persistUserToPg(user: {
   bio?: string;
   status?: string;
   country?: string;
+  last_seen?: string;
   role?: string;
   is_banned?: number;
 }) {
   if (!pgPool) return;
   pgPool.query(
-    `INSERT INTO users (id, email, username, password_hash, full_name, avatar_url, bio, status, country, role, is_banned)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    `INSERT INTO users (id, email, username, password_hash, full_name, avatar_url, bio, status, country, last_seen, role, is_banned)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
      ON CONFLICT (id) DO UPDATE SET
        username = EXCLUDED.username,
        password_hash = CASE WHEN EXCLUDED.password_hash != '' THEN EXCLUDED.password_hash ELSE users.password_hash END,
@@ -563,6 +577,7 @@ export function persistUserToPg(user: {
        bio = EXCLUDED.bio,
        status = EXCLUDED.status,
        country = EXCLUDED.country,
+       last_seen = COALESCE(EXCLUDED.last_seen, users.last_seen),
        role = COALESCE(EXCLUDED.role, users.role),
        is_banned = COALESCE(EXCLUDED.is_banned, users.is_banned),
        updated_at = NOW()`,
@@ -576,6 +591,7 @@ export function persistUserToPg(user: {
       user.bio || '',
       user.status || '',
       user.country || 'Global',
+      user.last_seen ? new Date(user.last_seen) : new Date(),
       user.role || 'user',
       user.is_banned || 0,
     ]
@@ -611,20 +627,35 @@ export function persistSettingsToPg(st: {
   notification_sound: number;
   read_receipts: number;
   auto_accept_calls: number;
+  who_can_call_me?: string;
+  who_can_see_last_seen?: string;
   fcm_token?: string | null;
 }) {
   if (!pgPool) return;
   pgPool.query(
-    `INSERT INTO user_settings (id, user_id, theme, allow_calls_from, notification_sound, read_receipts, auto_accept_calls, fcm_token)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    `INSERT INTO user_settings (id, user_id, theme, allow_calls_from, notification_sound, read_receipts, auto_accept_calls, who_can_call_me, who_can_see_last_seen, fcm_token)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
      ON CONFLICT (user_id) DO UPDATE SET
        theme = EXCLUDED.theme,
        allow_calls_from = EXCLUDED.allow_calls_from,
        notification_sound = EXCLUDED.notification_sound,
        read_receipts = EXCLUDED.read_receipts,
        auto_accept_calls = EXCLUDED.auto_accept_calls,
+       who_can_call_me = COALESCE(EXCLUDED.who_can_call_me, user_settings.who_can_call_me),
+       who_can_see_last_seen = COALESCE(EXCLUDED.who_can_see_last_seen, user_settings.who_can_see_last_seen),
        fcm_token = COALESCE(EXCLUDED.fcm_token, user_settings.fcm_token)`,
-    [st.id, st.user_id, st.theme, st.allow_calls_from, st.notification_sound, st.read_receipts, st.auto_accept_calls, st.fcm_token || null]
+    [
+      st.id,
+      st.user_id,
+      st.theme,
+      st.allow_calls_from,
+      st.notification_sound,
+      st.read_receipts,
+      st.auto_accept_calls,
+      st.who_can_call_me || 'everyone',
+      st.who_can_see_last_seen || 'everyone',
+      st.fcm_token || null
+    ]
   ).catch(err => console.error('Error persisting settings to PostgreSQL:', err.message));
 }
 
