@@ -40,9 +40,9 @@ export const pgPool: pg.Pool | null = isPostgres
   ? new pg.Pool({
       connectionString: databaseUrl,
       ssl: isCloudPostgres ? { rejectUnauthorized: false } : false,
-      max: 10,
+      max: 5,
       idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 10000,
+      connectionTimeoutMillis: 5000, // Short 5s timeout so server never hangs if Supabase is paused
     })
   : null;
 
