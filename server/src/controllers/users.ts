@@ -22,21 +22,9 @@ export async function getUsers(req: AuthenticatedRequest, res: Response): Promis
 
     const rawQuery = (req.query.q as string || '').trim();
 
+    // Privacy Protection: Do not expose directory by default. Require explicit search query.
     if (!rawQuery) {
-      // Return active/suggested community members so Directory is never a blank dead screen
-      const sql = `
-        SELECT u.id, '' as email, u.username, u.full_name, u.avatar_url, u.bio, u.status, u.country, u.created_at, u.updated_at,
-               COALESCE(s.plan_id, 'free') as plan_id,
-               COALESCE(s.status, 'active') as subscription_status,
-               s.current_period_end as subscription_expires_at
-        FROM users u
-        LEFT JOIN subscriptions s ON u.id = s.user_id
-        WHERE COALESCE(u.is_banned, 0) = 0
-        ORDER BY u.created_at DESC
-        LIMIT 30
-      `;
-      const users = (db.prepare(sql).all() as unknown) as UserWithPlan[];
-      res.json({ users });
+      res.json({ users: [] });
       return;
     }
 

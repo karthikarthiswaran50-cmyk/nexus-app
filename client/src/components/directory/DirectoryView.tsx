@@ -31,14 +31,19 @@ export const DirectoryView: React.FC<DirectoryViewProps> = ({ onStartChat, onVie
   const [onlineOnly, setOnlineOnly] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // Instagram-style: Debounced search by @username or name + initial members loading
+  // Privacy-First: Search only by explicit @username or name
   useEffect(() => {
     const q = searchQuery.trim();
+    if (!q) {
+      setUsers([]);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     const timer = setTimeout(async () => {
       try {
-        const url = q ? `/api/users?q=${encodeURIComponent(q)}` : '/api/users';
-        const res = await axios.get(url);
+        const res = await axios.get(`/api/users?q=${encodeURIComponent(q)}`);
         setUsers(res.data.users || []);
       } catch (err) {
         console.error('Search users error:', err);
@@ -46,7 +51,7 @@ export const DirectoryView: React.FC<DirectoryViewProps> = ({ onStartChat, onVie
       } finally {
         setLoading(false);
       }
-    }, q ? 280 : 0);
+    }, 280);
 
     return () => clearTimeout(timer);
   }, [searchQuery]);
@@ -85,7 +90,7 @@ export const DirectoryView: React.FC<DirectoryViewProps> = ({ onStartChat, onVie
               !onlineOnly ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-dark-950 shadow-md' : 'text-dark-400 hover:text-white'
             }`}
           >
-            All Members
+            All Results
           </button>
           <button
             type="button"
@@ -95,7 +100,7 @@ export const DirectoryView: React.FC<DirectoryViewProps> = ({ onStartChat, onVie
             }`}
           >
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse inline-block" />
-            <span>Online</span>
+            <span>Online Only</span>
           </button>
         </div>
       </div>
@@ -122,30 +127,39 @@ export const DirectoryView: React.FC<DirectoryViewProps> = ({ onStartChat, onVie
         )}
       </div>
 
-      {/* User Grid / States */}
-      {loading ? (
+      {/* User Grid / Privacy States */}
+      {!searchQuery.trim() ? (
+        /* Privacy Protection: Initial Empty State before explicit search */
+        <div className="p-12 sm:p-16 text-center bg-dark-900/60 border border-gold-500/15 rounded-3xl royal-card space-y-4 max-w-lg mx-auto">
+          <div className="w-14 h-14 rounded-2xl bg-gold-500/10 border border-gold-500/20 text-gold-400 flex items-center justify-center mx-auto">
+            <Search className="w-7 h-7" />
+          </div>
+          <h3 className="text-lg font-extrabold text-white">Search to Find Members</h3>
+          <p className="text-xs text-dark-300 leading-relaxed">
+            Type a @username or name in the search box above to find and connect with members on Nexus.
+          </p>
+        </div>
+      ) : loading ? (
         <div className="p-16 text-center space-y-3">
           <div className="w-8 h-8 border-2 border-gold-400 border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-xs text-dark-400 font-bold">Loading Royal directory...</p>
+          <p className="text-xs text-dark-400 font-bold">Searching Nexus members...</p>
         </div>
       ) : filteredUsers.length === 0 ? (
         /* No Results Found */
         <div className="p-12 sm:p-16 text-center bg-dark-900/60 border border-gold-500/15 rounded-3xl royal-card space-y-3 max-w-lg mx-auto">
           <Users className="w-12 h-12 text-dark-600 mx-auto" />
           <p className="text-base font-bold text-white">
-            {searchQuery.trim() ? `No members found for "${searchQuery}"` : 'No members found'}
+            No members found for "{searchQuery}"
           </p>
           <p className="text-xs text-dark-400">
-            {searchQuery.trim()
-              ? 'Make sure the @username or name is spelled correctly.'
-              : 'Registered members will appear here.'}
+            Make sure the @username or name is spelled correctly.
           </p>
         </div>
       ) : (
         <div className="space-y-4">
           <div className="flex items-center justify-between px-1">
             <span className="text-xs font-black gold-gradient-text uppercase tracking-widest">
-              {searchQuery.trim() ? `Search Results (${filteredUsers.length})` : `Community Members (${filteredUsers.length})`}
+              Search Results ({filteredUsers.length})
             </span>
           </div>
 
