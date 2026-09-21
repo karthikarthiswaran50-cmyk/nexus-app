@@ -57,7 +57,22 @@ export async function getUsers(req: AuthenticatedRequest, res: Response): Promis
       `%${query}%`
     ) as unknown) as UserWithPlan[];
 
-    res.json({ users });
+    // Apply privacy redaction for search results
+    const redactedUsers = users.map(u => {
+      if (u.id === currentUserId) return u;
+      const st = db.prepare('SELECT who_can_see_profile_photo, who_can_see_last_seen FROM user_settings WHERE user_id = ?').get(u.id) as any;
+      let avatar = u.avatar_url;
+      let lastSeen = u.last_seen;
+      if (st?.who_can_see_profile_photo === 'nobody') {
+        avatar = '';
+      }
+      if (st?.who_can_see_last_seen === 'nobody') {
+        lastSeen = undefined;
+      }
+      return { ...u, avatar_url: avatar, last_seen: lastSeen };
+    });
+
+    res.json({ users: redactedUsers });
   } catch (error) {
     console.error('getUsers error:', error);
     res.status(500).json({ error: 'Failed to retrieve users.' });
@@ -101,6 +116,13 @@ export async function getUserByIdOrUsername(req: AuthenticatedRequest, res: Resp
     // Privacy protection: Redact email unless viewing own profile
     if (user.id !== req.user?.userId) {
       user = { ...user, email: '' };
+      const st = db.prepare('SELECT who_can_see_profile_photo, who_can_see_last_seen FROM user_settings WHERE user_id = ?').get(user.id) as any;
+      if (st?.who_can_see_profile_photo === 'nobody') {
+        user = { ...user, avatar_url: '' };
+      }
+      if (st?.who_can_see_last_seen === 'nobody') {
+        user = { ...user, last_seen: undefined };
+      }
     }
 
     res.json({ user });
@@ -258,8 +280,8 @@ export async function getSettings(req: AuthenticatedRequest, res: Response): Pro
     let settings = db.prepare('SELECT * FROM user_settings WHERE user_id = ?').get(userId) as any;
     if (!settings) {
       db.prepare(`
-        INSERT INTO user_settings (id, user_id, theme, allow_calls_from, notification_sound, read_receipts, auto_accept_calls, who_can_call_me, who_can_see_last_seen)
-        VALUES (?, ?, 'dark', 'everyone', 1, 1, 0, 'everyone', 'everyone')
+        INSERT INTO user_settings (id, user_id, theme, allow_calls_from, notification_sound, read_receipts, auto_accept_calls, who_can_call_me, who_can_see_last_seen, who_can_see_online_status, who_can_see_profile_photo)
+        VALUES (?, ?, 'dark', 'everyone', 1, 1, 0, 'everyone', 'everyone', 'everyone', 'everyone')
       `).run(`set_${userId}`, userId);
       settings = db.prepare('SELECT * FROM user_settings WHERE user_id = ?').get(userId) as any;
     }
@@ -269,6 +291,8 @@ export async function getSettings(req: AuthenticatedRequest, res: Response): Pro
         ...settings,
         who_can_call_me: settings.who_can_call_me || 'everyone',
         who_can_see_last_seen: settings.who_can_see_last_seen || 'everyone',
+        who_can_see_online_status: settings.who_can_see_online_status || 'everyone',
+        who_can_see_profile_photo: settings.who_can_see_profile_photo || 'everyone',
       }
     });
   } catch (error) {
@@ -285,7 +309,18 @@ export async function updateSettings(req: AuthenticatedRequest, res: Response): 
       return;
     }
 
-    const { theme, allow_calls_from, notification_sound, read_receipts, auto_accept_calls, who_can_call_me, who_can_see_last_seen } = req.body;
+    const {
+      theme,
+      allow_calls_from,
+      notification_sound,
+      read_receipts,
+      auto_accept_calls,
+      who_can_call_me,
+      who_can_see_last_seen,
+      who_can_see_online_status,
+      who_can_see_profile_photo
+    } = req.body;
+
     const current = db.prepare('SELECT * FROM user_settings WHERE user_id = ?').get(userId) as any;
     
     const newTheme = theme || current?.theme || 'dark';
@@ -295,18 +330,43 @@ export async function updateSettings(req: AuthenticatedRequest, res: Response): 
     const newAutoAccept = auto_accept_calls !== undefined ? (auto_accept_calls ? 1 : 0) : (current?.auto_accept_calls ?? 0);
     const newWhoCanCallMe = who_can_call_me || current?.who_can_call_me || 'everyone';
     const newWhoCanSeeLastSeen = who_can_see_last_seen || current?.who_can_see_last_seen || 'everyone';
+    const newWhoCanSeeOnlineStatus = who_can_see_online_status || current?.who_can_see_online_status || 'everyone';
+    const newWhoCanSeeProfilePhoto = who_can_see_profile_photo || current?.who_can_see_profile_photo || 'everyone';
 
     if (current) {
       db.prepare(`
         UPDATE user_settings
-        SET theme = ?, allow_calls_from = ?, notification_sound = ?, read_receipts = ?, auto_accept_calls = ?, who_can_call_me = ?, who_can_see_last_seen = ?
+        SET theme = ?, allow_calls_from = ?, notification_sound = ?, read_receipts = ?, auto_accept_calls = ?, who_can_call_me = ?, who_can_see_last_seen = ?, who_can_see_online_status = ?, who_can_see_profile_photo = ?
         WHERE user_id = ?
-      `).run(newTheme, newAllowCalls, newNotifSound, newReadReceipts, newAutoAccept, newWhoCanCallMe, newWhoCanSeeLastSeen, userId);
+      `).run(
+        newTheme,
+        newAllowCalls,
+        newNotifSound,
+        newReadReceipts,
+        newAutoAccept,
+        newWhoCanCallMe,
+        newWhoCanSeeLastSeen,
+        newWhoCanSeeOnlineStatus,
+        newWhoCanSeeProfilePhoto,
+        userId
+      );
     } else {
       db.prepare(`
-        INSERT INTO user_settings (id, user_id, theme, allow_calls_from, notification_sound, read_receipts, auto_accept_calls, who_can_call_me, who_can_see_last_seen)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(`set_${userId}`, userId, newTheme, newAllowCalls, newNotifSound, newReadReceipts, newAutoAccept, newWhoCanCallMe, newWhoCanSeeLastSeen);
+        INSERT INTO user_settings (id, user_id, theme, allow_calls_from, notification_sound, read_receipts, auto_accept_calls, who_can_call_me, who_can_see_last_seen, who_can_see_online_status, who_can_see_profile_photo)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        `set_${userId}`,
+        userId,
+        newTheme,
+        newAllowCalls,
+        newNotifSound,
+        newReadReceipts,
+        newAutoAccept,
+        newWhoCanCallMe,
+        newWhoCanSeeLastSeen,
+        newWhoCanSeeOnlineStatus,
+        newWhoCanSeeProfilePhoto
+      );
     }
 
     persistSettingsToPg({
@@ -317,6 +377,10 @@ export async function updateSettings(req: AuthenticatedRequest, res: Response): 
       notification_sound: newNotifSound,
       read_receipts: newReadReceipts,
       auto_accept_calls: newAutoAccept,
+      who_can_call_me: newWhoCanCallMe,
+      who_can_see_last_seen: newWhoCanSeeLastSeen,
+      who_can_see_online_status: newWhoCanSeeOnlineStatus,
+      who_can_see_profile_photo: newWhoCanSeeProfilePhoto,
     });
 
     const settings = db.prepare('SELECT * FROM user_settings WHERE user_id = ?').get(userId) as any;

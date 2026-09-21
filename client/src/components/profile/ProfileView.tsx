@@ -371,7 +371,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ viewUser, onNavigateTo
               </p>
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-dark-850/80 border border-gold-500/20 text-xs font-semibold text-amber-200">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_#10b981]" />
-                <span>{targetUser.status || '👑 Imperial VIP on Nexus'}</span>
+                <span>{targetUser.status || '👑 Nexus Member'}</span>
               </div>
             </div>
           </div>
@@ -487,7 +487,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ viewUser, onNavigateTo
                 maxLength={100}
                 value={status}
                 onChange={(e) => setStatus(e.target.value)}
-                placeholder="e.g. 👑 Imperial VIP on Nexus"
+                placeholder="e.g. 👑 Nexus Member • Free Forever"
                 className="w-full pl-10 pr-4 py-2.5 bg-dark-850 border border-gold-500/20 rounded-xl text-xs text-white placeholder:text-dark-500 focus:outline-none focus:border-gold-400 focus:ring-1 focus:ring-gold-400/50 transition-all"
               />
             </div>
@@ -560,7 +560,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ viewUser, onNavigateTo
               </h3>
               <div className="p-4 rounded-2xl bg-dark-850/90 border border-gold-500/20 flex items-center justify-between shadow-inner">
                 <p className="text-sm font-bold text-amber-100">
-                  {targetUser.status || '👑 Imperial VIP on Nexus'}
+                  {targetUser.status || '👑 Nexus Member'}
                 </p>
                 <span className="text-[10px] text-emerald-400 font-extrabold px-2.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30">
                   ONLINE

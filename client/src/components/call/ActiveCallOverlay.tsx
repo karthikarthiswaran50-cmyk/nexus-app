@@ -432,6 +432,20 @@ export const ActiveCallOverlay: React.FC = () => {
           <Monitor className="w-5 h-5" />
         </button>
 
+        {/* In-Call Chat Quick Toggle */}
+        <button
+          type="button"
+          onClick={() => setIsChatOpen(!isChatOpen)}
+          className={`p-3.5 rounded-xl border transition-all ${
+            isChatOpen
+              ? 'bg-gradient-to-r from-amber-500 to-yellow-500 border-gold-400 text-dark-950 font-bold shadow-md'
+              : 'bg-dark-850 border-gold-500/20 text-amber-200 hover:bg-dark-800'
+          }`}
+          title="In-call chat"
+        >
+          <MessageSquare className="w-5 h-5" />
+        </button>
+
         {/* End Call Button */}
         <button
           type="button"

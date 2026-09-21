@@ -599,12 +599,23 @@ export const AppLayout: React.FC = () => {
         <button
           type="button"
           onClick={() => { setCurrentTab('profile'); setViewProfileUser(null); }}
-          className={`flex flex-col items-center gap-0.5 py-1 px-3 rounded-xl transition-all ${
+          className={`flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-xl transition-all ${
             currentTab === 'profile' ? 'text-amber-300 font-extrabold scale-105' : 'text-dark-400'
           }`}
         >
           <UserIcon className="w-5 h-5" />
           <span className="text-[10px]">Passport</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setCurrentTab('settings')}
+          className={`flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-xl transition-all ${
+            currentTab === 'settings' ? 'text-amber-300 font-extrabold scale-105' : 'text-dark-400'
+          }`}
+        >
+          <Settings className="w-5 h-5" />
+          <span className="text-[10px]">Settings</span>
         </button>
       </nav>
 

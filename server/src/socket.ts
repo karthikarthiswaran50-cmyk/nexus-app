@@ -84,22 +84,39 @@ export function setupSocket(io: Server) {
   }
 
   function broadcastOnlineList() {
-    const onlineUserIds = Array.from(userSockets.keys());
+    const rawOnlineUserIds = Array.from(userSockets.keys());
     let reachableUserIds: string[] = [];
     try {
       const subRows = db.prepare('SELECT DISTINCT user_id FROM push_subscriptions').all() as any[];
       const settingRows = db.prepare('SELECT user_id FROM user_settings WHERE fcm_token IS NOT NULL').all() as any[];
       reachableUserIds = Array.from(new Set([
-        ...onlineUserIds,
+        ...rawOnlineUserIds,
         ...subRows.map(r => r.user_id),
         ...settingRows.map(r => r.user_id),
       ]));
     } catch (e) {
-      reachableUserIds = onlineUserIds;
+      reachableUserIds = rawOnlineUserIds;
     }
 
-    io.emit('presence:online_list', onlineUserIds);
-    io.emit('presence:reachable_list', reachableUserIds);
+    const hiddenOnlineUsers = new Set<string>();
+    try {
+      const hiddenRows = db.prepare("SELECT user_id FROM user_settings WHERE who_can_see_online_status = 'nobody'").all() as any[];
+      hiddenRows.forEach(r => hiddenOnlineUsers.add(r.user_id));
+    } catch (e) {}
+
+    const publicOnlineUserIds = rawOnlineUserIds.filter(id => !hiddenOnlineUsers.has(id));
+
+    if (socketUsers.size === 0) {
+      io.emit('presence:online_list', publicOnlineUserIds);
+      io.emit('presence:reachable_list', reachableUserIds);
+      return;
+    }
+
+    socketUsers.forEach((uId, sId) => {
+      const listForUser = hiddenOnlineUsers.has(uId) ? Array.from(new Set([...publicOnlineUserIds, uId])) : publicOnlineUserIds;
+      io.to(sId).emit('presence:online_list', listForUser);
+      io.to(sId).emit('presence:reachable_list', reachableUserIds);
+    });
   }
 
   io.use((socket, next) => {
@@ -338,10 +355,14 @@ export function setupSocket(io: Server) {
           WHERE receiver_id = ? AND sender_id = ? AND is_read = 0
         `).run(userId, data.senderId);
 
-        const senderSocketIds = getSocketsForUser(data.senderId);
-        senderSocketIds.forEach((sId) => {
-          io.to(sId).emit('chat:messages_read', { readBy: userId, conversationId: conv?.id });
-        });
+        const readerSettings = db.prepare('SELECT read_receipts FROM user_settings WHERE user_id = ?').get(userId) as any;
+        const sendReceipt = readerSettings ? (readerSettings.read_receipts !== 0) : true;
+        if (sendReceipt) {
+          const senderSocketIds = getSocketsForUser(data.senderId);
+          senderSocketIds.forEach((sId) => {
+            io.to(sId).emit('chat:messages_read', { readBy: userId, conversationId: conv?.id });
+          });
+        }
       } catch (err) {
         console.error('Socket chat:read error:', err);
       }
@@ -810,7 +831,10 @@ export function setupSocket(io: Server) {
         const now = new Date().toISOString();
         try {
           db.prepare('UPDATE users SET last_seen = ? WHERE id = ?').run(now, userId);
-          io.emit('presence:last_seen', { userId, lastSeen: now });
+          const userSetting = db.prepare('SELECT who_can_see_last_seen FROM user_settings WHERE user_id = ?').get(userId) as any;
+          if (!userSetting || userSetting.who_can_see_last_seen !== 'nobody') {
+            io.emit('presence:last_seen', { userId, lastSeen: now });
+          }
         } catch (e) {}
       }
 

@@ -130,29 +130,59 @@ export const DirectoryView: React.FC<DirectoryViewProps> = ({ onStartChat, onVie
       {/* User Grid / Privacy States */}
       {!searchQuery.trim() ? (
         /* Privacy Protection: Initial Empty State before explicit search */
-        <div className="p-12 sm:p-16 text-center bg-dark-900/60 border border-gold-500/15 rounded-3xl royal-card space-y-4 max-w-lg mx-auto">
-          <div className="w-14 h-14 rounded-2xl bg-gold-500/10 border border-gold-500/20 text-gold-400 flex items-center justify-center mx-auto">
-            <Search className="w-7 h-7" />
+        <div className="p-10 sm:p-14 text-center bg-dark-900/70 border border-gold-500/20 rounded-3xl royal-card space-y-4 max-w-lg mx-auto shadow-2xl backdrop-blur-xl animate-in fade-in duration-200">
+          <div className="w-16 h-16 rounded-3xl bg-gradient-to-tr from-amber-500/20 to-yellow-400/10 border border-gold-500/30 text-gold-400 flex items-center justify-center mx-auto shadow-lg shadow-gold-500/10">
+            <Search className="w-8 h-8 text-gold-400" />
           </div>
-          <h3 className="text-lg font-extrabold text-white">Search to Find Members</h3>
-          <p className="text-xs text-dark-300 leading-relaxed">
-            Type a @username or name in the search box above to find and connect with members on Nexus.
-          </p>
+          <div>
+            <h3 className="text-lg font-black text-white">Find Anyone with Privacy Shield</h3>
+            <p className="text-xs text-dark-300 leading-relaxed mt-1.5 max-w-md mx-auto">
+              Members are never listed publicly by default. Type an @username or name in the box above to find and connect.
+            </p>
+          </div>
+          <div className="flex items-center justify-center gap-2 pt-1 text-[11px] text-gold-400/90 font-semibold">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_#10b981]" />
+            <span>End-to-End Encrypted Real-Time Calls & Messaging</span>
+          </div>
         </div>
       ) : loading ? (
-        <div className="p-16 text-center space-y-3">
-          <div className="w-8 h-8 border-2 border-gold-400 border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-xs text-dark-400 font-bold">Searching Nexus members...</p>
+        /* Skeleton Cards Grid (Eliminates layout shifting during debounced search) */
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 animate-in fade-in duration-200">
+          {[1, 2, 3, 4, 5, 6].map((idx) => (
+            <div
+              key={idx}
+              className="bg-dark-900/80 border border-gold-500/15 rounded-2xl p-5 space-y-4 royal-card"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl skeleton-shimmer shrink-0" />
+                <div className="space-y-2 flex-1">
+                  <div className="h-4 rounded-md skeleton-shimmer w-32" />
+                  <div className="h-3 rounded-md skeleton-shimmer w-20" />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <div className="h-3 rounded-md skeleton-shimmer w-full" />
+                <div className="h-3 rounded-md skeleton-shimmer w-3/4" />
+              </div>
+              <div className="pt-3 border-t border-gold-500/10 flex items-center gap-2">
+                <div className="h-8 rounded-xl skeleton-shimmer flex-1" />
+                <div className="h-8 rounded-xl skeleton-shimmer flex-1" />
+                <div className="h-8 rounded-xl skeleton-shimmer flex-1" />
+              </div>
+            </div>
+          ))}
         </div>
       ) : filteredUsers.length === 0 ? (
         /* No Results Found */
-        <div className="p-12 sm:p-16 text-center bg-dark-900/60 border border-gold-500/15 rounded-3xl royal-card space-y-3 max-w-lg mx-auto">
-          <Users className="w-12 h-12 text-dark-600 mx-auto" />
+        <div className="p-10 sm:p-14 text-center bg-dark-900/70 border border-gold-500/20 rounded-3xl royal-card space-y-3 max-w-lg mx-auto shadow-2xl backdrop-blur-xl animate-in fade-in duration-200">
+          <div className="w-14 h-14 rounded-2xl bg-dark-800 border border-white/10 text-dark-500 flex items-center justify-center mx-auto">
+            <Users className="w-7 h-7" />
+          </div>
           <p className="text-base font-bold text-white">
             No members found for "{searchQuery}"
           </p>
           <p className="text-xs text-dark-400">
-            Make sure the @username or name is spelled correctly.
+            Check the username spelling or try searching by part of their name.
           </p>
         </div>
       ) : (

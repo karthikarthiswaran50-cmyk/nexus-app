@@ -1051,8 +1051,33 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, on
           </div>
         )}
         {loading ? (
-          <div className="h-full flex items-center justify-center">
-            <div className="w-8 h-8 border-2 border-gold-400 border-t-transparent rounded-full animate-spin" />
+          <div className="space-y-4 py-4 animate-in fade-in duration-200">
+            <div className="flex items-start gap-2.5 max-w-[70%]">
+              <div className="w-8 h-8 rounded-full skeleton-shimmer shrink-0" />
+              <div className="space-y-1.5 flex-1">
+                <div className="h-10 rounded-2xl rounded-tl-xs skeleton-shimmer w-48 sm:w-64" />
+                <div className="h-3 rounded-full skeleton-shimmer w-16" />
+              </div>
+            </div>
+            <div className="flex items-end justify-end gap-2.5 ml-auto max-w-[70%]">
+              <div className="space-y-1.5 flex flex-col items-end">
+                <div className="h-14 rounded-2xl rounded-tr-xs skeleton-shimmer w-56 sm:w-72" />
+                <div className="h-3 rounded-full skeleton-shimmer w-12" />
+              </div>
+            </div>
+            <div className="flex items-start gap-2.5 max-w-[70%]">
+              <div className="w-8 h-8 rounded-full skeleton-shimmer shrink-0" />
+              <div className="space-y-1.5 flex-1">
+                <div className="h-16 rounded-2xl rounded-tl-xs skeleton-shimmer w-52 sm:w-80" />
+                <div className="h-3 rounded-full skeleton-shimmer w-20" />
+              </div>
+            </div>
+            <div className="flex items-end justify-end gap-2.5 ml-auto max-w-[70%]">
+              <div className="space-y-1.5 flex flex-col items-end">
+                <div className="h-10 rounded-2xl rounded-tr-xs skeleton-shimmer w-40 sm:w-56" />
+                <div className="h-3 rounded-full skeleton-shimmer w-14" />
+              </div>
+            </div>
           </div>
         ) : messages.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center p-8">
@@ -1253,8 +1278,8 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, on
                       isDeleted
                         ? 'bg-dark-900/60 text-dark-500 italic border border-white/5 rounded-2xl'
                         : isMe
-                        ? 'bg-gradient-to-r from-indigo-700 via-indigo-600 to-brand-600 text-white rounded-br-xs border border-indigo-400/30 shadow-indigo-950/60'
-                        : 'royal-card bg-dark-900/90 text-dark-100 rounded-bl-xs border border-gold-500/20'
+                        ? 'bg-gradient-to-br from-indigo-700 via-brand-600 to-indigo-800 text-white rounded-2xl rounded-br-xs border border-gold-500/25 shadow-lg shadow-black/40'
+                        : 'royal-card bg-dark-900/95 text-dark-100 rounded-2xl rounded-bl-xs border border-gold-500/20 shadow-md shadow-black/50'
                     }`}
                   >
                     {/* Sender name for incoming group messages */}

@@ -29,6 +29,8 @@ export interface UserSettings {
   auto_accept_calls: boolean;
   who_can_call_me?: 'everyone' | 'contacts' | 'nobody';
   who_can_see_last_seen?: 'everyone' | 'nobody';
+  who_can_see_online_status?: 'everyone' | 'nobody';
+  who_can_see_profile_photo?: 'everyone' | 'nobody';
 }
 
 export type MessageType = 'text' | 'image' | 'audio' | 'video' | 'file' | 'system' | 'call_log';

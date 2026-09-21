@@ -116,6 +116,8 @@ export function initDatabase() {
       auto_accept_calls INTEGER NOT NULL DEFAULT 0,
       who_can_call_me TEXT DEFAULT 'everyone',
       who_can_see_last_seen TEXT DEFAULT 'everyone',
+      who_can_see_online_status TEXT DEFAULT 'everyone',
+      who_can_see_profile_photo TEXT DEFAULT 'everyone',
       fcm_token TEXT
     );
 
@@ -266,6 +268,8 @@ export function initDatabase() {
   ensureColumn('user_settings', 'fcm_token', 'TEXT');
   ensureColumn('user_settings', 'who_can_call_me', "TEXT DEFAULT 'everyone'");
   ensureColumn('user_settings', 'who_can_see_last_seen', "TEXT DEFAULT 'everyone'");
+  ensureColumn('user_settings', 'who_can_see_online_status', "TEXT DEFAULT 'everyone'");
+  ensureColumn('user_settings', 'who_can_see_profile_photo', "TEXT DEFAULT 'everyone'");
 
   ensureColumn('messages', 'group_id', 'TEXT');
   ensureColumn('messages', 'file_name', 'TEXT');
@@ -396,6 +400,8 @@ async function initPostgresAndRestore() {
       ALTER TABLE messages ADD COLUMN IF NOT EXISTS file_size INT;
       ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS who_can_call_me VARCHAR(50) DEFAULT 'everyone';
       ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS who_can_see_last_seen VARCHAR(50) DEFAULT 'everyone';
+      ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS who_can_see_online_status VARCHAR(50) DEFAULT 'everyone';
+      ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS who_can_see_profile_photo VARCHAR(50) DEFAULT 'everyone';
 
       CREATE TABLE IF NOT EXISTS groups (
         id VARCHAR(100) PRIMARY KEY,
@@ -506,8 +512,8 @@ async function initPostgresAndRestore() {
       // Restore settings
       const setRes = await pgPool.query('SELECT * FROM user_settings');
       const insertSet = db.prepare(`
-        INSERT OR REPLACE INTO user_settings (id, user_id, theme, allow_calls_from, notification_sound, read_receipts, auto_accept_calls, who_can_call_me, who_can_see_last_seen, fcm_token)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT OR REPLACE INTO user_settings (id, user_id, theme, allow_calls_from, notification_sound, read_receipts, auto_accept_calls, who_can_call_me, who_can_see_last_seen, who_can_see_online_status, who_can_see_profile_photo, fcm_token)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
       for (const st of setRes.rows) {
         insertSet.run(
@@ -520,6 +526,8 @@ async function initPostgresAndRestore() {
           st.auto_accept_calls ?? 0,
           st.who_can_call_me || 'everyone',
           st.who_can_see_last_seen || 'everyone',
+          st.who_can_see_online_status || 'everyone',
+          st.who_can_see_profile_photo || 'everyone',
           st.fcm_token || null
         );
       }
@@ -629,12 +637,14 @@ export function persistSettingsToPg(st: {
   auto_accept_calls: number;
   who_can_call_me?: string;
   who_can_see_last_seen?: string;
+  who_can_see_online_status?: string;
+  who_can_see_profile_photo?: string;
   fcm_token?: string | null;
 }) {
   if (!pgPool) return;
   pgPool.query(
-    `INSERT INTO user_settings (id, user_id, theme, allow_calls_from, notification_sound, read_receipts, auto_accept_calls, who_can_call_me, who_can_see_last_seen, fcm_token)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+    `INSERT INTO user_settings (id, user_id, theme, allow_calls_from, notification_sound, read_receipts, auto_accept_calls, who_can_call_me, who_can_see_last_seen, who_can_see_online_status, who_can_see_profile_photo, fcm_token)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
      ON CONFLICT (user_id) DO UPDATE SET
        theme = EXCLUDED.theme,
        allow_calls_from = EXCLUDED.allow_calls_from,
@@ -643,6 +653,8 @@ export function persistSettingsToPg(st: {
        auto_accept_calls = EXCLUDED.auto_accept_calls,
        who_can_call_me = COALESCE(EXCLUDED.who_can_call_me, user_settings.who_can_call_me),
        who_can_see_last_seen = COALESCE(EXCLUDED.who_can_see_last_seen, user_settings.who_can_see_last_seen),
+       who_can_see_online_status = COALESCE(EXCLUDED.who_can_see_online_status, user_settings.who_can_see_online_status),
+       who_can_see_profile_photo = COALESCE(EXCLUDED.who_can_see_profile_photo, user_settings.who_can_see_profile_photo),
        fcm_token = COALESCE(EXCLUDED.fcm_token, user_settings.fcm_token)`,
     [
       st.id,
@@ -654,6 +666,8 @@ export function persistSettingsToPg(st: {
       st.auto_accept_calls,
       st.who_can_call_me || 'everyone',
       st.who_can_see_last_seen || 'everyone',
+      st.who_can_see_online_status || 'everyone',
+      st.who_can_see_profile_photo || 'everyone',
       st.fcm_token || null
     ]
   ).catch(err => console.error('Error persisting settings to PostgreSQL:', err.message));

@@ -52,6 +52,12 @@ export const SettingsView: React.FC = () => {
   const [whoCanSeeLastSeen, setWhoCanSeeLastSeen] = useState<'everyone' | 'nobody'>(
     settings?.who_can_see_last_seen || 'everyone'
   );
+  const [whoCanSeeOnlineStatus, setWhoCanSeeOnlineStatus] = useState<'everyone' | 'nobody'>(
+    settings?.who_can_see_online_status || 'everyone'
+  );
+  const [whoCanSeeProfilePhoto, setWhoCanSeeProfilePhoto] = useState<'everyone' | 'nobody'>(
+    settings?.who_can_see_profile_photo || 'everyone'
+  );
   const [notificationSound, setNotificationSound] = useState(settings?.notification_sound ?? true);
   const [readReceipts, setReadReceipts] = useState(settings?.read_receipts ?? true);
 
@@ -250,6 +256,8 @@ export const SettingsView: React.FC = () => {
         allow_calls_from: allowCallsFrom,
         who_can_call_me: allowCallsFrom,
         who_can_see_last_seen: whoCanSeeLastSeen,
+        who_can_see_online_status: whoCanSeeOnlineStatus,
+        who_can_see_profile_photo: whoCanSeeProfilePhoto,
         notification_sound: notificationSound,
         read_receipts: readReceipts,
       });
@@ -356,6 +364,30 @@ export const SettingsView: React.FC = () => {
               >
                 <option value="everyone">Everyone</option>
                 <option value="nobody">Nobody (Hide Status)</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-dark-300 mb-2">Who can see when you are online?</label>
+              <select
+                value={whoCanSeeOnlineStatus}
+                onChange={(e) => setWhoCanSeeOnlineStatus(e.target.value as any)}
+                className="w-full px-4 py-2.5 bg-dark-850 border border-gold-500/20 rounded-xl text-xs text-white focus:outline-none focus:border-gold-400"
+              >
+                <option value="everyone">Everyone</option>
+                <option value="nobody">Nobody (Hide Online Badge)</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-dark-300 mb-2">Who can see your profile photo?</label>
+              <select
+                value={whoCanSeeProfilePhoto}
+                onChange={(e) => setWhoCanSeeProfilePhoto(e.target.value as any)}
+                className="w-full px-4 py-2.5 bg-dark-850 border border-gold-500/20 rounded-xl text-xs text-white focus:outline-none focus:border-gold-400"
+              >
+                <option value="everyone">Everyone</option>
+                <option value="nobody">Nobody (Default Avatar)</option>
               </select>
             </div>
 
