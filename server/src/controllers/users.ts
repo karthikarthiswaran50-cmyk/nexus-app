@@ -2,7 +2,8 @@ import { Request, Response } from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { db, persistUserToPg, persistSettingsToPg, persistBlockToPg, persistReportToPg, recordActivity } from '../db.js';
+import { db, pgPool, persistUserToPg, persistSettingsToPg, persistBlockToPg, persistReportToPg, recordActivity, purgeUserPermanently } from '../db.js';
+import { disconnectUserSockets } from '../socket.js';
 import { AuthenticatedRequest } from '../middleware/auth.js';
 import { getUserWithPlan } from './auth.js';
 import { UserWithPlan, UserSettings } from '../types.js';
@@ -458,6 +459,9 @@ export async function unblockUser(req: AuthenticatedRequest, res: Response): Pro
     }
 
     db.prepare('DELETE FROM blocked_users WHERE user_id = ? AND blocked_user_id = ?').run(userId, targetUserId);
+    if (pgPool) {
+      pgPool.query('DELETE FROM blocked_users WHERE user_id = $1 AND blocked_user_id = $2', [userId, targetUserId]).catch(() => {});
+    }
     recordActivity(userId, 'unblock_user', { unblocked_user_id: targetUserId });
 
     res.json({ success: true, message: 'User unblocked.' });
@@ -546,11 +550,17 @@ export async function deleteAccount(req: AuthenticatedRequest, res: Response): P
       return;
     }
 
-    // Cascade delete user and related data
-    db.prepare('DELETE FROM users WHERE id = ?').run(userId);
-    recordActivity(userId, 'account_deleted', { timestamp: new Date().toISOString() });
+    // Disconnect active socket connections immediately
+    disconnectUserSockets(userId);
 
-    res.json({ success: true, message: 'Your Nexus account has been permanently deleted.' });
+    // Completely and permanently purge all database records, credentials, conversations, and media
+    const success = await purgeUserPermanently(userId);
+    if (!success) {
+      res.status(500).json({ error: 'Failed to completely purge user account.' });
+      return;
+    }
+
+    res.json({ success: true, message: 'Your Nexus account and all associated data have been permanently erased.' });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to delete account.' });
   }

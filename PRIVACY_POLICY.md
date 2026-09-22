@@ -80,8 +80,9 @@ In strict adherence to Google Play Store requirements:
 4. Tap **Delete Account Permanently**, type `DELETE` to confirm.
 5. All your user profile data, credentials, conversations, messages, media files, call logs, and push tokens are instantly and permanently erased from all production databases and caches.
 
-### How to Request Account Deletion Externally:
-If you cannot access the app, you may email our Data Controller at **karthikarthiswaran50@gmail.com** with the subject *"Nexus Data Deletion Request"*, specifying your registered email address or `@username`. Requests are fulfilled within 48 hours.
+### How to Request Account Deletion Externally (Web Portal):
+- **Online Deletion Form:** You can submit an immediate account and data deletion request at any time without installing or logging into the app at our public portal: **https://nexusroyal.online/delete-account**.
+- **Direct Email:** You may also email our Data Controller at **karthikarthiswaran50@gmail.com** with the subject *"Nexus Data Deletion Request"*, specifying your registered email address or `@username`. Manual requests are verified and fulfilled within 48 hours.
 
 ---
 

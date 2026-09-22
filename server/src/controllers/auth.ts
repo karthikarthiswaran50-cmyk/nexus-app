@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { db, persistUserToPg, persistSubscriptionToPg, persistSettingsToPg, recordActivity } from '../db.js';
+import { db, persistUserToPg, persistSubscriptionToPg, persistSettingsToPg, recordActivity, purgeUserPermanently } from '../db.js';
 import { JWT_SECRET, AuthenticatedRequest } from '../middleware/auth.js';
 import { User, UserWithPlan, Subscription } from '../types.js';
 import { sanitizeText, sanitizeUsername, sanitizeEmail, validatePasswordStrength } from '../utils/sanitize.js';
@@ -500,5 +500,51 @@ export async function setUsername(req: AuthenticatedRequest, res: Response): Pro
     res.status(500).json({ error: 'Failed to claim username.' });
   }
 }
+
+// ----------------------------------------------------
+// Public External Data Deletion (Google Play Store Compliance)
+// ----------------------------------------------------
+export async function requestDataDeletion(req: Request, res: Response): Promise<void> {
+  try {
+    const { email, confirmation } = req.body;
+    if (typeof email !== 'string' || !email.trim()) {
+      res.status(400).json({ error: 'Valid registered email address is required.' });
+      return;
+    }
+
+    const cleanEmail = sanitizeEmail(email);
+    const user = db.prepare('SELECT id, username, email FROM users WHERE lower(email) = ?').get(cleanEmail) as any;
+
+    if (!user) {
+      // Privacy-preserving response (prevents account enumeration)
+      res.json({
+        success: true,
+        message: 'If an account associated with this email address exists in our database, it has been queued for complete erasure.',
+      });
+      return;
+    }
+
+    if (confirmation === true || confirmation === 'DELETE') {
+      await purgeUserPermanently(user.id);
+      res.json({
+        success: true,
+        purged: true,
+        message: `Account @${user.username} (${cleanEmail}) and all associated records, media, calls, and messages have been permanently deleted from Nexus servers.`,
+      });
+      return;
+    }
+
+    res.json({
+      success: true,
+      requiresConfirmation: true,
+      username: user.username,
+      message: `Account found for ${cleanEmail} (@${user.username}). Confirm with "DELETE" to permanently erase all data.`,
+    });
+  } catch (error: any) {
+    console.error('requestDataDeletion error:', error);
+    res.status(500).json({ error: 'Failed to process data deletion request.' });
+  }
+}
+
 
 

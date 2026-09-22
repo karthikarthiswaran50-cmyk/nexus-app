@@ -214,11 +214,24 @@ export const PrivacyPolicyView: React.FC<PrivacyPolicyViewProps> = ({ onBack }) 
             </div>
 
             <div className="pt-2 border-t border-white/10 space-y-1">
-              <span className="font-bold text-white">Web-based data deletion request:</span>
+              <span className="font-bold text-white">Online Web Deletion Portal (No App Needed):</span>
               <p className="text-dark-300">
-                You can also request immediate account deletion without logging in by sending an email from your registered email address to{' '}
-                <a href="mailto:karthikarthiswaran50@gmail.com" className="text-rose-400 font-bold underline">karthikarthiswaran50@gmail.com</a>{' '}
-                with the subject <em>"Account Deletion Request - Nexus"</em>.
+                You can request immediate data erasure online at any time via our public web deletion portal:{' '}
+                <a
+                  href="/delete-account"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    window.history.pushState({}, '', '/delete-account');
+                    window.dispatchEvent(new CustomEvent('nexus_navigate', { detail: 'delete-account' }));
+                  }}
+                  className="text-rose-400 font-bold underline cursor-pointer"
+                >
+                  https://nexusroyal.online/delete-account
+                </a>.
+              </p>
+              <p className="text-dark-400 text-[11px] pt-1">
+                You can also email our Data Controller directly at{' '}
+                <a href="mailto:karthikarthiswaran50@gmail.com" className="text-rose-400 underline">karthikarthiswaran50@gmail.com</a>.
               </p>
             </div>
 

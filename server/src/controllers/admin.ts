@@ -1,5 +1,5 @@
 import { Response } from 'express';
-import { db, pgPool, persistUserToPg } from '../db.js';
+import { db, pgPool, persistUserToPg, purgeUserPermanently } from '../db.js';
 import { AuthenticatedRequest } from '../middleware/auth.js';
 import { getOnlineUsersCount, disconnectUserSockets, broadcastAnnouncementSocket } from '../socket.js';
 import { getUserWithPlan } from './auth.js';
@@ -207,14 +207,10 @@ export async function deleteUserAdmin(req: AuthenticatedRequest, res: Response):
 
     disconnectUserSockets(id);
 
-    db.prepare('DELETE FROM users WHERE id = ?').run(id);
-
-    if (pgPool) {
-      try {
-        await pgPool.query('DELETE FROM users WHERE id = $1', [id]);
-      } catch (e) {
-        console.error('Failed to delete user in PostgreSQL:', e);
-      }
+    const success = await purgeUserPermanently(id);
+    if (!success) {
+      res.status(500).json({ error: 'Failed to completely delete user account.' });
+      return;
     }
 
     res.json({ success: true, message: 'User account and associated data permanently removed.' });

@@ -900,4 +900,74 @@ export function recordActivity(userId: string, action: string, details: Record<s
   }
 }
 
+// ----------------------------------------------------
+// Complete Permanent User Data Erasure (Google Play Requirement)
+// ----------------------------------------------------
+export async function purgeUserPermanently(userId: string): Promise<boolean> {
+  try {
+    if (!userId) return false;
+
+    // 1. Clean up user media files from disk
+    try {
+      const userRow = db.prepare('SELECT avatar_url FROM users WHERE id = ?').get(userId) as any;
+      if (userRow?.avatar_url && userRow.avatar_url.startsWith('/uploads/')) {
+        const filePath = path.resolve(__dirname, '..', userRow.avatar_url.replace(/^\//, ''));
+        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      }
+
+      const mediaRows = db.prepare('SELECT media_url FROM messages WHERE sender_id = ? AND media_url IS NOT NULL').all(userId) as any[];
+      for (const m of mediaRows) {
+        if (m.media_url && m.media_url.startsWith('/uploads/')) {
+          const filePath = path.resolve(__dirname, '..', m.media_url.replace(/^\//, ''));
+          if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+        }
+      }
+    } catch (e) {
+      console.warn('Error purging user upload files:', e);
+    }
+
+    // 2. Delete SQLite records across all dependent and standalone tables
+    db.prepare('DELETE FROM push_subscriptions WHERE user_id = ?').run(userId);
+    db.prepare('DELETE FROM user_activities WHERE user_id = ?').run(userId);
+    db.prepare('DELETE FROM story_views WHERE viewer_id = ?').run(userId);
+    db.prepare('DELETE FROM stories WHERE user_id = ?').run(userId);
+    db.prepare('DELETE FROM user_reports WHERE reporter_id = ? OR reported_user_id = ?').run(userId, userId);
+    db.prepare('DELETE FROM blocked_users WHERE user_id = ? OR blocked_user_id = ?').run(userId, userId);
+    db.prepare('DELETE FROM call_logs WHERE caller_id = ? OR receiver_id = ?').run(userId, userId);
+    db.prepare('DELETE FROM messages WHERE sender_id = ? OR receiver_id = ?').run(userId, userId);
+    db.prepare('DELETE FROM conversations WHERE user1_id = ? OR user2_id = ?').run(userId, userId);
+    db.prepare('DELETE FROM group_members WHERE user_id = ?').run(userId);
+    db.prepare('DELETE FROM groups WHERE created_by = ?').run(userId);
+    db.prepare('DELETE FROM user_settings WHERE user_id = ?').run(userId);
+    db.prepare('DELETE FROM subscriptions WHERE user_id = ?').run(userId);
+    db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+
+    // 3. Permanently delete PostgreSQL records if connected
+    if (pgPool) {
+      try {
+        await pgPool.query('DELETE FROM push_subscriptions WHERE user_id = $1', [userId]);
+        await pgPool.query('DELETE FROM user_activities WHERE user_id = $1', [userId]);
+        await pgPool.query('DELETE FROM user_reports WHERE reporter_id = $1 OR reported_user_id = $1', [userId, userId]);
+        await pgPool.query('DELETE FROM blocked_users WHERE user_id = $1 OR blocked_user_id = $1', [userId, userId]);
+        await pgPool.query('DELETE FROM call_logs WHERE caller_id = $1 OR receiver_id = $1', [userId, userId]);
+        await pgPool.query('DELETE FROM messages WHERE sender_id = $1 OR receiver_id = $1', [userId, userId]);
+        await pgPool.query('DELETE FROM conversations WHERE user1_id = $1 OR user2_id = $1', [userId, userId]);
+        await pgPool.query('DELETE FROM group_members WHERE user_id = $1', [userId]);
+        await pgPool.query('DELETE FROM groups WHERE created_by = $1', [userId]);
+        await pgPool.query('DELETE FROM user_settings WHERE user_id = $1', [userId]);
+        await pgPool.query('DELETE FROM subscriptions WHERE user_id = $1', [userId]);
+        await pgPool.query('DELETE FROM users WHERE id = $1', [userId]);
+      } catch (pgErr) {
+        console.error('Error purging user from PostgreSQL:', pgErr);
+      }
+    }
+
+    console.log(`🗑️ Permanently purged user ${userId} and all related database records and media.`);
+    return true;
+  } catch (err: any) {
+    console.error('purgeUserPermanently error:', err);
+    return false;
+  }
+}
+
 

@@ -244,6 +244,7 @@ app.post('/api/auth/firebase-login', authLimiter, authCtrl.firebaseLogin);
 app.get('/api/auth/me', requireAuth, authCtrl.getMe);
 app.post('/api/auth/set-username', requireAuth, authCtrl.setUsername);
 app.post('/api/auth/update-password', requireAuth, authCtrl.updatePassword);
+app.post('/api/auth/request-data-deletion', authLimiter, authCtrl.requestDataDeletion);
 
 // 2. Users & Profile Routes
 app.get('/api/users', requireAuth, apiLimiter, usersCtrl.getUsers);

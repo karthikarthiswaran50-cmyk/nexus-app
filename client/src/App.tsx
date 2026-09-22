@@ -55,27 +55,29 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
 
 import { PrivacyPolicyView } from './components/legal/PrivacyPolicyView';
 import { TermsOfServiceView } from './components/legal/TermsOfServiceView';
+import { AccountDeletionView } from './components/legal/AccountDeletionView';
 
-const getInitialRoute = (): 'app' | 'privacy' | 'terms' => {
+const getInitialRoute = (): 'app' | 'privacy' | 'terms' | 'delete-account' => {
   if (typeof window === 'undefined') return 'app';
   const path = window.location.pathname.toLowerCase();
   const search = new URLSearchParams(window.location.search);
   const pageParam = search.get('page')?.toLowerCase();
   if (path === '/privacy' || path.startsWith('/privacy') || pageParam === 'privacy') return 'privacy';
   if (path === '/terms' || path.startsWith('/terms') || pageParam === 'terms') return 'terms';
+  if (path === '/delete-account' || path.startsWith('/delete-account') || path === '/account-deletion' || pageParam === 'delete-account') return 'delete-account';
   return 'app';
 };
 
 const AppContent: React.FC = () => {
   const { user, loading } = useAuth();
-  const [route, setRoute] = React.useState<'app' | 'privacy' | 'terms'>(getInitialRoute);
+  const [route, setRoute] = React.useState<'app' | 'privacy' | 'terms' | 'delete-account'>(getInitialRoute);
 
   React.useEffect(() => {
     const handlePopState = () => {
       setRoute(getInitialRoute());
     };
     const handleCustomNav = (e: any) => {
-      if (e.detail === 'privacy' || e.detail === 'terms' || e.detail === 'app') {
+      if (e.detail === 'privacy' || e.detail === 'terms' || e.detail === 'delete-account' || e.detail === 'app') {
         setRoute(e.detail);
       }
     };
@@ -98,6 +100,10 @@ const AppContent: React.FC = () => {
 
   if (route === 'terms') {
     return <TermsOfServiceView onBack={navigateToApp} />;
+  }
+
+  if (route === 'delete-account') {
+    return <AccountDeletionView onBack={navigateToApp} />;
   }
 
   if (loading) {
