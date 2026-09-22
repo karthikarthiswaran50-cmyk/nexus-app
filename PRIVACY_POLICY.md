@@ -2,7 +2,7 @@
 
 **Effective Date:** September 2026  
 **Application Name:** Nexus (Nexus Royal)  
-**Developer / Data Controller:** Karthik Arthiswaran  
+**Developer / Data Controller:** Karthiswaran k 
 **Contact Email:** karthikarthiswaran50@gmail.com  
 **Website / Web App:** https://nexusroyal.online  
 **Privacy URL:** https://nexusroyal.online/privacy  
@@ -112,6 +112,6 @@ We may periodically update this Privacy Policy to reflect service enhancements o
 ## 9. Contact Us
 
 If you have any questions, feedback, or data privacy requests, contact:
-- **Developer:** Karthik Arthiswaran
+- **Developer:** Karthiswaran k
 - **Email:** karthikarthiswaran50@gmail.com
 - **Repository:** https://github.com/karthikarthiswaran50-cmyk/nexus-app

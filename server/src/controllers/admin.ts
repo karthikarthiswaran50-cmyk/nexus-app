@@ -1,5 +1,5 @@
 import { Response } from 'express';
-import { db, pgPool, persistUserToPg, purgeUserPermanently } from '../db.js';
+import { db, pgPool, persistUserToPg, purgeUserPermanently, upsertUserToSqlite } from '../db.js';
 import { AuthenticatedRequest } from '../middleware/auth.js';
 import { getOnlineUsersCount, disconnectUserSockets, broadcastAnnouncementSocket } from '../socket.js';
 import { getUserWithPlan } from './auth.js';
@@ -11,6 +11,37 @@ const OWNER_MASTER_KEY = process.env.OWNER_MASTER_KEY || 'nexusroyal2026';
 // ----------------------------------------------------
 export async function getAdminStats(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
+    let totalUsers = 0;
+    let bannedUsers = 0;
+    let adminCount = 0;
+    let totalMessages = 0;
+    let totalCalls = 0;
+    let activeConversations = 0;
+    let pendingReports = 0;
+
+    if (pgPool) {
+      try {
+        const [uRes, bRes, aRes, mRes, cRes, cvRes, rRes] = await Promise.all([
+          pgPool.query('SELECT COUNT(*) as count FROM users'),
+          pgPool.query('SELECT COUNT(*) as count FROM users WHERE is_banned = 1'),
+          pgPool.query("SELECT COUNT(*) as count FROM users WHERE role = 'admin'"),
+          pgPool.query('SELECT COUNT(*) as count FROM messages'),
+          pgPool.query('SELECT COUNT(*) as count FROM call_logs'),
+          pgPool.query('SELECT COUNT(*) as count FROM conversations'),
+          pgPool.query("SELECT COUNT(*) as count FROM user_reports WHERE status = 'pending'").catch(() => ({ rows: [{ count: '0' }] })),
+        ]);
+        totalUsers = parseInt(uRes.rows[0]?.count || '0', 10);
+        bannedUsers = parseInt(bRes.rows[0]?.count || '0', 10);
+        adminCount = parseInt(aRes.rows[0]?.count || '0', 10);
+        totalMessages = parseInt(mRes.rows[0]?.count || '0', 10);
+        totalCalls = parseInt(cRes.rows[0]?.count || '0', 10);
+        activeConversations = parseInt(cvRes.rows[0]?.count || '0', 10);
+        pendingReports = parseInt(rRes.rows[0]?.count || '0', 10);
+      } catch (pgErr: any) {
+        console.warn('PostgreSQL admin stats query error:', pgErr.message);
+      }
+    }
+
     const userCountRow = db.prepare('SELECT COUNT(*) as count FROM users').get() as { count: number };
     const bannedRow = db.prepare('SELECT COUNT(*) as count FROM users WHERE is_banned = 1').get() as { count: number };
     const adminRow = db.prepare("SELECT COUNT(*) as count FROM users WHERE role = 'admin'").get() as { count: number };
@@ -18,6 +49,14 @@ export async function getAdminStats(req: AuthenticatedRequest, res: Response): P
     const callRow = db.prepare('SELECT COUNT(*) as count FROM call_logs').get() as { count: number };
     const convRow = db.prepare('SELECT COUNT(*) as count FROM conversations').get() as { count: number };
     const pendingReportsRow = db.prepare("SELECT COUNT(*) as count FROM user_reports WHERE status = 'pending'").get() as { count: number };
+
+    totalUsers = Math.max(totalUsers, userCountRow?.count || 0);
+    bannedUsers = Math.max(bannedUsers, bannedRow?.count || 0);
+    adminCount = Math.max(adminCount, adminRow?.count || 0);
+    totalMessages = Math.max(totalMessages, messageRow?.count || 0);
+    totalCalls = Math.max(totalCalls, callRow?.count || 0);
+    activeConversations = Math.max(activeConversations, convRow?.count || 0);
+    pendingReports = Math.max(pendingReports, pendingReportsRow?.count || 0);
 
     // Active users in last 7 days
     const activeUsersRow = db.prepare(`
@@ -57,15 +96,15 @@ export async function getAdminStats(req: AuthenticatedRequest, res: Response): P
     `).all() as any[]) || [];
 
     res.json({
-      totalUsers: userCountRow?.count || 0,
-      activeUsers: activeUsersRow?.count || userCountRow?.count || 0,
+      totalUsers,
+      activeUsers: activeUsersRow?.count || totalUsers,
       newUsersToday: newUsersTodayRow?.count || 0,
-      bannedUsers: bannedRow?.count || 0,
-      adminCount: adminRow?.count || 0,
-      totalMessages: messageRow?.count || 0,
-      totalCalls: callRow?.count || 0,
-      activeConversations: convRow?.count || 0,
-      pendingReports: pendingReportsRow?.count || 0,
+      bannedUsers,
+      adminCount,
+      totalMessages,
+      totalCalls,
+      activeConversations,
+      pendingReports,
       onlineUsers: getOnlineUsersCount(),
       serverUptimeSeconds: Math.floor(process.uptime()),
       dbType: pgPool ? 'PostgreSQL (Cloud / Supabase)' : 'SQLite (Local High-Performance)',
@@ -84,14 +123,37 @@ export async function getAdminStats(req: AuthenticatedRequest, res: Response): P
 // ----------------------------------------------------
 export async function getAdminUsers(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
-    const rows = db.prepare(`
-      SELECT id, email, username, full_name, avatar_url, bio, status, country,
-             COALESCE(role, 'user') as role,
-             COALESCE(is_banned, 0) as is_banned,
-             created_at, updated_at
-      FROM users
-      ORDER BY created_at DESC
-    `).all();
+    let rows: any[] = [];
+
+    if (pgPool) {
+      try {
+        const pgRes = await pgPool.query(`
+          SELECT id, email, username, full_name, avatar_url, bio, status, country,
+                 COALESCE(role, 'user') as role,
+                 COALESCE(is_banned, 0) as is_banned,
+                 created_at, updated_at, password_hash
+          FROM users
+          ORDER BY created_at DESC
+        `);
+        for (const r of pgRes.rows) {
+          upsertUserToSqlite(r);
+        }
+        rows = pgRes.rows.map(({ password_hash, ...rest }) => rest);
+      } catch (pgErr: any) {
+        console.warn('PostgreSQL getAdminUsers query note:', pgErr.message);
+      }
+    }
+
+    if (rows.length === 0) {
+      rows = db.prepare(`
+        SELECT id, email, username, full_name, avatar_url, bio, status, country,
+               COALESCE(role, 'user') as role,
+               COALESCE(is_banned, 0) as is_banned,
+               created_at, updated_at
+        FROM users
+        ORDER BY created_at DESC
+      `).all() as any[];
+    }
 
     res.json({ users: rows });
   } catch (error) {
@@ -113,7 +175,17 @@ export async function toggleUserBan(req: AuthenticatedRequest, res: Response): P
       return;
     }
 
-    const user = db.prepare('SELECT id, username, email, full_name, role, is_banned FROM users WHERE id = ?').get(id) as any;
+    let user = db.prepare('SELECT id, username, email, full_name, role, is_banned FROM users WHERE id = ?').get(id) as any;
+    if (!user && pgPool) {
+      try {
+        const pgRes = await pgPool.query('SELECT * FROM users WHERE id = $1 LIMIT 1', [id]);
+        if (pgRes.rows[0]) {
+          upsertUserToSqlite(pgRes.rows[0]);
+          user = pgRes.rows[0];
+        }
+      } catch (_) {}
+    }
+
     if (!user) {
       res.status(404).json({ error: 'User not found' });
       return;
@@ -165,7 +237,17 @@ export async function updateUserRole(req: AuthenticatedRequest, res: Response): 
       return;
     }
 
-    const user = db.prepare('SELECT id, username FROM users WHERE id = ?').get(id) as any;
+    let user = db.prepare('SELECT id, username FROM users WHERE id = ?').get(id) as any;
+    if (!user && pgPool) {
+      try {
+        const pgRes = await pgPool.query('SELECT * FROM users WHERE id = $1 LIMIT 1', [id]);
+        if (pgRes.rows[0]) {
+          upsertUserToSqlite(pgRes.rows[0]);
+          user = pgRes.rows[0];
+        }
+      } catch (_) {}
+    }
+
     if (!user) {
       res.status(404).json({ error: 'User not found' });
       return;

@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { db, pgPool, persistUserToPg, persistSettingsToPg, persistBlockToPg, persistReportToPg, recordActivity, purgeUserPermanently } from '../db.js';
+import { db, pgPool, persistUserToPg, persistSettingsToPg, persistBlockToPg, persistReportToPg, recordActivity, purgeUserPermanently, upsertUserToSqlite } from '../db.js';
 import { disconnectUserSockets } from '../socket.js';
 import { AuthenticatedRequest } from '../middleware/auth.js';
 import { getUserWithPlan } from './auth.js';
@@ -11,7 +11,6 @@ import { sanitizeText } from '../utils/sanitize.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
 
 export async function getUsers(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
@@ -23,13 +22,46 @@ export async function getUsers(req: AuthenticatedRequest, res: Response): Promis
 
     const rawQuery = (req.query.q as string || '').trim();
 
-    // Privacy Protection: Do not expose directory by default. Require explicit search query.
+    // Redaction helper respecting user privacy settings
+    const redactUsers = (list: any[]) => list.map(u => {
+      if (u.id === currentUserId) return u;
+      let avatar = u.avatar_url;
+      let lastSeen = u.last_seen;
+      try {
+        const st = db.prepare('SELECT who_can_see_profile_photo, who_can_see_last_seen FROM user_settings WHERE user_id = ?').get(u.id) as any;
+        if (st?.who_can_see_profile_photo === 'nobody') {
+          avatar = '';
+        }
+        if (st?.who_can_see_last_seen === 'nobody') {
+          lastSeen = undefined;
+        }
+      } catch (_) {}
+      return { ...u, email: '', avatar_url: avatar, last_seen: lastSeen };
+    });
+
+    // Privacy Protection: If no explicit query, return current user's existing contacts / conversation partners
+    // (Used by ForwardMessageModal, CreateGroupModal, etc. without exposing public user directory)
     if (!rawQuery) {
-      res.json({ users: [] });
-      return;
+      try {
+        const convUsers = db.prepare(`
+          SELECT u.id, '' as email, u.username, u.full_name, u.avatar_url, u.bio, u.status, u.country, u.created_at, u.updated_at,
+                 'free' as plan_id, 'active' as subscription_status
+          FROM users u
+          JOIN conversations c ON (c.user1_id = u.id OR c.user2_id = u.id)
+          WHERE (c.user1_id = ? OR c.user2_id = ?) AND u.id != ? AND COALESCE(u.is_banned, 0) = 0
+          ORDER BY c.last_message_at DESC
+          LIMIT 30
+        `).all(currentUserId, currentUserId, currentUserId) as any[];
+
+        res.json({ users: redactUsers(convUsers) });
+        return;
+      } catch (convErr) {
+        res.json({ users: [] });
+        return;
+      }
     }
 
-    const query = rawQuery.replace(/^@/, '').toLowerCase(); // strip leading '@' if user typed @username
+    const query = rawQuery.replace(/^@+/, '').trim().toLowerCase();
 
     const sql = `
       SELECT u.id, '' as email, u.username, u.full_name, u.avatar_url, u.bio, u.status, u.country, u.created_at, u.updated_at,
@@ -38,12 +70,13 @@ export async function getUsers(req: AuthenticatedRequest, res: Response): Promis
              s.current_period_end as subscription_expires_at
       FROM users u
       LEFT JOIN subscriptions s ON u.id = s.user_id
-      WHERE COALESCE(u.is_banned, 0) = 0 AND (lower(u.username) LIKE ? OR lower(u.full_name) LIKE ?)
+      WHERE COALESCE(u.is_banned, 0) = 0 
+        AND (LOWER(REPLACE(u.username, '@', '')) LIKE ? OR LOWER(u.full_name) LIKE ?)
       ORDER BY 
         CASE 
-          WHEN lower(u.username) = ? THEN 1
-          WHEN lower(u.username) LIKE ? THEN 2
-          WHEN lower(u.full_name) LIKE ? THEN 3
+          WHEN LOWER(REPLACE(u.username, '@', '')) = ? THEN 1
+          WHEN LOWER(REPLACE(u.username, '@', '')) LIKE ? THEN 2
+          WHEN LOWER(u.full_name) LIKE ? THEN 3
           ELSE 4
         END,
         u.created_at DESC
@@ -58,22 +91,56 @@ export async function getUsers(req: AuthenticatedRequest, res: Response): Promis
       `%${query}%`
     ) as unknown) as UserWithPlan[];
 
-    // Apply privacy redaction for search results
-    const redactedUsers = users.map(u => {
-      if (u.id === currentUserId) return u;
-      const st = db.prepare('SELECT who_can_see_profile_photo, who_can_see_last_seen FROM user_settings WHERE user_id = ?').get(u.id) as any;
-      let avatar = u.avatar_url;
-      let lastSeen = u.last_seen;
-      if (st?.who_can_see_profile_photo === 'nobody') {
-        avatar = '';
-      }
-      if (st?.who_can_see_last_seen === 'nobody') {
-        lastSeen = undefined;
-      }
-      return { ...u, avatar_url: avatar, last_seen: lastSeen };
-    });
+    // If PostgreSQL is configured, also search PostgreSQL to guarantee live synchronization
+    if (pgPool) {
+      try {
+        const pgRes = await pgPool.query(`
+          SELECT u.id, '' as email, u.username, u.full_name, u.avatar_url, u.bio, u.status, u.country, u.created_at, u.updated_at,
+                 u.password_hash, u.role, u.is_banned,
+                 COALESCE(s.plan_id, 'free') as plan_id,
+                 COALESCE(s.status, 'active') as subscription_status,
+                 s.current_period_end as subscription_expires_at
+          FROM users u
+          LEFT JOIN subscriptions s ON u.id = s.user_id
+          WHERE COALESCE(u.is_banned, 0) = 0
+            AND (LOWER(REPLACE(u.username, '@', '')) LIKE $1 OR LOWER(u.full_name) LIKE $1)
+          ORDER BY
+            CASE
+              WHEN LOWER(REPLACE(u.username, '@', '')) = $2 THEN 1
+              WHEN LOWER(REPLACE(u.username, '@', '')) LIKE $3 THEN 2
+              WHEN LOWER(u.full_name) LIKE $1 THEN 3
+              ELSE 4
+            END,
+            u.created_at DESC
+          LIMIT 30
+        `, [`%${query}%`, query, `${query}%`]);
 
-    res.json({ users: redactedUsers });
+        for (const row of pgRes.rows) {
+          upsertUserToSqlite(row);
+          if (!users.some(existing => existing.id === row.id)) {
+            users.push({
+              id: row.id,
+              email: '',
+              username: row.username,
+              full_name: row.full_name,
+              avatar_url: row.avatar_url || '',
+              bio: row.bio || '',
+              status: row.status || '',
+              country: row.country || 'Global',
+              created_at: row.created_at,
+              updated_at: row.updated_at,
+              plan_id: row.plan_id || 'free',
+              subscription_status: row.subscription_status || 'active',
+              subscription_expires_at: row.subscription_expires_at,
+            } as any);
+          }
+        }
+      } catch (pgErr: any) {
+        console.warn('PostgreSQL search fallback note:', pgErr.message);
+      }
+    }
+
+    res.json({ users: redactUsers(users) });
   } catch (error) {
     console.error('getUsers error:', error);
     res.status(500).json({ error: 'Failed to retrieve users.' });
@@ -82,15 +149,30 @@ export async function getUsers(req: AuthenticatedRequest, res: Response): Promis
 
 export async function checkUsernameAvailable(req: Request, res: Response): Promise<void> {
   try {
-    const raw = (req.params.username || '').trim().replace(/^@/, '').toLowerCase();
+    const raw = (req.params.username || '').trim().replace(/^@+/, '').toLowerCase();
     const clean = sanitizeText(raw);
     if (clean.length < 3 || clean.length > 25 || !/^[a-zA-Z0-9_]+$/.test(clean)) {
       res.json({ available: false, reason: 'Must be 3-25 alphanumeric characters or underscores' });
       return;
     }
 
-    const existing = db.prepare('SELECT id FROM users WHERE lower(username) = ?').get(clean);
-    res.json({ available: !existing });
+    const existing = db.prepare("SELECT id FROM users WHERE LOWER(REPLACE(username, '@', '')) = ?").get(clean);
+    if (existing) {
+      res.json({ available: false });
+      return;
+    }
+
+    if (pgPool) {
+      try {
+        const pgRes = await pgPool.query("SELECT id FROM users WHERE LOWER(REPLACE(username, '@', '')) = $1 LIMIT 1", [clean]);
+        if (pgRes.rows.length > 0) {
+          res.json({ available: false });
+          return;
+        }
+      } catch (_) {}
+    }
+
+    res.json({ available: true });
   } catch (err) {
     res.status(500).json({ available: false });
   }
@@ -98,15 +180,29 @@ export async function checkUsernameAvailable(req: Request, res: Response): Promi
 
 export async function getUserByIdOrUsername(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
-    const rawId = (req.params.id || '').replace(/^@/, '');
+    const rawId = (req.params.id || '').replace(/^@+/, '');
     
     // Check by ID or username
     let user = getUserWithPlan(rawId);
     if (!user) {
-      const byUsername = db.prepare('SELECT id FROM users WHERE lower(username) = ?').get(rawId.toLowerCase()) as unknown as { id: string } | undefined;
+      const byUsername = db.prepare("SELECT id FROM users WHERE LOWER(REPLACE(username, '@', '')) = ?").get(rawId.toLowerCase()) as unknown as { id: string } | undefined;
       if (byUsername) {
         user = getUserWithPlan(byUsername.id);
       }
+    }
+
+    // Check PostgreSQL fallback if not found in local SQLite
+    if (!user && pgPool) {
+      try {
+        const pgRes = await pgPool.query(
+          "SELECT * FROM users WHERE id = $1 OR LOWER(REPLACE(username, '@', '')) = LOWER($2) LIMIT 1",
+          [rawId, rawId]
+        );
+        if (pgRes.rows[0]) {
+          upsertUserToSqlite(pgRes.rows[0]);
+          user = getUserWithPlan(pgRes.rows[0].id);
+        }
+      } catch (_) {}
     }
 
     if (!user) {

@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { db, persistMessageToPg, persistGroupToPg, persistGroupMemberToPg, recordActivity } from '../db.js';
+import { db, pgPool, persistMessageToPg, persistGroupToPg, persistGroupMemberToPg, recordActivity, upsertUserToSqlite } from '../db.js';
 import { AuthenticatedRequest } from '../middleware/auth.js';
 import { getUserWithPlan } from './auth.js';
 import { Conversation, Message, Group, GroupMember } from '../types.js';
@@ -507,24 +507,75 @@ export async function forwardMessageHttp(req: AuthenticatedRequest, res: Respons
 export async function searchChatHttp(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
     const userId = req.user?.userId;
-    const query = String(req.query.q || '').trim().toLowerCase();
+    const raw = String(req.query.q || '').trim();
+    const query = raw.replace(/^@+/, '').toLowerCase();
 
     if (!userId || !query) {
       res.json({ users: [], messages: [], groups: [] });
       return;
     }
 
-    // Search users
+    // Search users in SQLite
     const matchedUsers = (db.prepare(`
       SELECT id, username, full_name, avatar_url, bio, status, country, last_seen
       FROM users
-      WHERE id != ? AND is_banned = 0 AND (LOWER(username) LIKE ? OR LOWER(full_name) LIKE ?)
+      WHERE id != ? AND COALESCE(is_banned, 0) = 0 
+        AND (LOWER(REPLACE(username, '@', '')) LIKE ? OR LOWER(full_name) LIKE ?)
       LIMIT 10
     `).all(userId, `%${query}%`, `%${query}%`) as any[]).map(u => ({
       ...u,
       plan_id: 'free',
       subscription_status: 'active',
     }));
+
+    // If PostgreSQL is configured, also search PostgreSQL for any freshly created or uncached users
+    if (pgPool) {
+      try {
+        const pgRes = await pgPool.query(`
+          SELECT id, username, full_name, avatar_url, bio, status, country, last_seen, created_at, updated_at, role, is_banned, email, password_hash
+          FROM users
+          WHERE id != $1 AND COALESCE(is_banned, 0) = 0
+            AND (LOWER(REPLACE(username, '@', '')) LIKE $2 OR LOWER(full_name) LIKE $2)
+          LIMIT 10
+        `, [userId, `%${query}%`]);
+
+        for (const row of pgRes.rows) {
+          upsertUserToSqlite(row);
+          if (!matchedUsers.some(u => u.id === row.id)) {
+            matchedUsers.push({
+              id: row.id,
+              username: row.username,
+              full_name: row.full_name,
+              avatar_url: row.avatar_url || '',
+              bio: row.bio || '',
+              status: row.status || '',
+              country: row.country || 'Global',
+              last_seen: row.last_seen,
+              plan_id: 'free',
+              subscription_status: 'active',
+            });
+          }
+        }
+      } catch (pgErr: any) {
+        console.warn('PostgreSQL searchChatHttp note:', pgErr.message);
+      }
+    }
+
+    // Apply privacy redaction on matched users
+    const redactedUsers = matchedUsers.map(u => {
+      let avatar = u.avatar_url;
+      let lastSeen = u.last_seen;
+      try {
+        const st = db.prepare('SELECT who_can_see_profile_photo, who_can_see_last_seen FROM user_settings WHERE user_id = ?').get(u.id) as any;
+        if (st?.who_can_see_profile_photo === 'nobody') {
+          avatar = '';
+        }
+        if (st?.who_can_see_last_seen === 'nobody') {
+          lastSeen = undefined;
+        }
+      } catch (_) {}
+      return { ...u, avatar_url: avatar, last_seen: lastSeen };
+    });
 
     // Search messages in user's conversations
     const matchedMessages = (db.prepare(`
@@ -551,7 +602,7 @@ export async function searchChatHttp(req: AuthenticatedRequest, res: Response): 
     `).all(userId, `%${query}%`, `%${query}%`);
 
     res.json({
-      users: matchedUsers,
+      users: redactedUsers,
       messages: matchedMessages,
       groups: matchedGroups,
     });

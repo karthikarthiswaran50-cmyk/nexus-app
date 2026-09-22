@@ -471,74 +471,77 @@ async function initPostgresAndRestore() {
       );
     `);
 
+    // Helper for bulletproof ISO date conversion
+    const toIsoSafe = (d: any) => {
+      if (!d) return new Date().toISOString();
+      try {
+        const dt = new Date(d);
+        return isNaN(dt.getTime()) ? new Date().toISOString() : dt.toISOString();
+      } catch {
+        return new Date().toISOString();
+      }
+    };
+
     // 2. Check if users exist in PostgreSQL
     const res = await pgPool.query('SELECT * FROM users');
     if (res.rows.length > 0) {
       console.log(`📥 Restoring ${res.rows.length} persistent users from PostgreSQL into local cache...`);
-      
-      const insertUser = db.prepare(`
-        INSERT OR REPLACE INTO users (id, email, username, password_hash, full_name, avatar_url, bio, status, country, last_seen, role, is_banned, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `);
 
       for (const row of res.rows) {
-        insertUser.run(
-          row.id,
-          row.email,
-          row.username,
-          row.password_hash,
-          row.full_name,
-          row.avatar_url || '',
-          row.bio || '',
-          row.status || '',
-          row.country || 'Global',
-          row.last_seen ? new Date(row.last_seen).toISOString() : new Date().toISOString(),
-          row.role || 'user',
-          row.is_banned ? 1 : 0,
-          new Date(row.created_at).toISOString(),
-          new Date(row.updated_at).toISOString()
-        );
+        upsertUserToSqlite(row);
       }
 
       // Restore subscriptions
-      const subRes = await pgPool.query('SELECT * FROM subscriptions');
-      const insertSub = db.prepare(`
-        INSERT OR REPLACE INTO subscriptions (id, user_id, plan_id, status, current_period_end, billing_cycle, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-      `);
-      for (const sub of subRes.rows) {
-        insertSub.run(
-          sub.id,
-          sub.user_id,
-          sub.plan_id,
-          sub.status,
-          new Date(sub.current_period_end).toISOString(),
-          sub.billing_cycle,
-          new Date(sub.created_at).toISOString()
-        );
+      try {
+        const subRes = await pgPool.query('SELECT * FROM subscriptions');
+        const insertSub = db.prepare(`
+          INSERT OR REPLACE INTO subscriptions (id, user_id, plan_id, status, current_period_end, billing_cycle, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `);
+        for (const sub of subRes.rows) {
+          try {
+            insertSub.run(
+              sub.id,
+              sub.user_id,
+              sub.plan_id || 'free',
+              sub.status || 'active',
+              toIsoSafe(sub.current_period_end),
+              sub.billing_cycle || 'monthly',
+              toIsoSafe(sub.created_at)
+            );
+          } catch (_) {}
+        }
+      } catch (subErr: any) {
+        console.warn('Subscriptions restore note:', subErr.message);
       }
 
       // Restore settings
-      const setRes = await pgPool.query('SELECT * FROM user_settings');
-      const insertSet = db.prepare(`
-        INSERT OR REPLACE INTO user_settings (id, user_id, theme, allow_calls_from, notification_sound, read_receipts, auto_accept_calls, who_can_call_me, who_can_see_last_seen, who_can_see_online_status, who_can_see_profile_photo, fcm_token)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `);
-      for (const st of setRes.rows) {
-        insertSet.run(
-          st.id,
-          st.user_id,
-          st.theme || 'dark',
-          st.allow_calls_from || 'everyone',
-          st.notification_sound ?? 1,
-          st.read_receipts ?? 1,
-          st.auto_accept_calls ?? 0,
-          st.who_can_call_me || 'everyone',
-          st.who_can_see_last_seen || 'everyone',
-          st.who_can_see_online_status || 'everyone',
-          st.who_can_see_profile_photo || 'everyone',
-          st.fcm_token || null
-        );
+      try {
+        const setRes = await pgPool.query('SELECT * FROM user_settings');
+        const insertSet = db.prepare(`
+          INSERT OR REPLACE INTO user_settings (id, user_id, theme, allow_calls_from, notification_sound, read_receipts, auto_accept_calls, who_can_call_me, who_can_see_last_seen, who_can_see_online_status, who_can_see_profile_photo, fcm_token)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+        for (const st of setRes.rows) {
+          try {
+            insertSet.run(
+              st.id,
+              st.user_id,
+              st.theme || 'dark',
+              st.allow_calls_from || 'everyone',
+              st.notification_sound ?? 1,
+              st.read_receipts ?? 1,
+              st.auto_accept_calls ?? 0,
+              st.who_can_call_me || 'everyone',
+              st.who_can_see_last_seen || 'everyone',
+              st.who_can_see_online_status || 'everyone',
+              st.who_can_see_profile_photo || 'everyone',
+              st.fcm_token || null
+            );
+          } catch (_) {}
+        }
+      } catch (setErr: any) {
+        console.warn('Settings restore note:', setErr.message);
       }
 
       // Restore push_subscriptions
@@ -549,7 +552,9 @@ async function initPostgresAndRestore() {
           VALUES (?, ?, ?, ?, ?, ?)
         `);
         for (const pr of pushRes.rows) {
-          insertPush.run(pr.id, pr.user_id, pr.endpoint, pr.p256dh, pr.auth, new Date(pr.created_at).toISOString());
+          try {
+            insertPush.run(pr.id, pr.user_id, pr.endpoint, pr.p256dh, pr.auth, toIsoSafe(pr.created_at));
+          } catch (_) {}
         }
       } catch (e) {}
 
@@ -561,6 +566,49 @@ async function initPostgresAndRestore() {
   } catch (err) {
     console.error('⚠️ PostgreSQL sync error, operating in local fallback mode:', err);
     purgeDemoData();
+  }
+}
+
+// ----------------------------------------------------
+// Safe Upsert to Local SQLite Cache
+// ----------------------------------------------------
+export function upsertUserToSqlite(row: any) {
+  if (!row || !row.id || !row.username) return;
+  const toIsoSafe = (d: any) => {
+    if (!d) return new Date().toISOString();
+    try {
+      const dt = new Date(d);
+      return isNaN(dt.getTime()) ? new Date().toISOString() : dt.toISOString();
+    } catch {
+      return new Date().toISOString();
+    }
+  };
+
+  try {
+    const insertUser = db.prepare(`
+      INSERT OR REPLACE INTO users (
+        id, email, username, password_hash, full_name, avatar_url, bio, status, country, last_seen, role, is_banned, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    insertUser.run(
+      row.id,
+      row.email || '',
+      row.username,
+      row.password_hash || '',
+      row.full_name || row.username,
+      row.avatar_url || '',
+      row.bio || '',
+      row.status || '',
+      row.country || 'Global',
+      toIsoSafe(row.last_seen),
+      row.role || 'user',
+      row.is_banned ? 1 : 0,
+      toIsoSafe(row.created_at),
+      toIsoSafe(row.updated_at)
+    );
+  } catch (e: any) {
+    console.warn(`Could not cache user ${row.id} into SQLite:`, e.message);
   }
 }
 
@@ -859,7 +907,7 @@ export function purgeDemoData() {
     // Finally delete demo users
     const result = db.prepare(`
       DELETE FROM users 
-      WHERE id IN (${placeholders}) OR email LIKE '%@nexus.app'
+      WHERE id IN (${placeholders})
     `).run(...demoIds);
 
     if (result.changes > 0) {
@@ -870,7 +918,7 @@ export function purgeDemoData() {
     if (pgPool) {
       pgPool.query(`
         DELETE FROM users 
-        WHERE id = ANY($1::varchar[]) OR email LIKE '%@nexus.app'
+        WHERE id = ANY($1::varchar[])
       `, [demoIds]).catch(() => {});
     }
   } catch (err: any) {

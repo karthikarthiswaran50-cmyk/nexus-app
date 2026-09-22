@@ -361,6 +361,10 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({ isOpen
         fetchActivities();
       } else if (activeTab === 'reports') {
         fetchReports();
+      } else if (activeTab === 'users') {
+        fetchUsers();
+      } else if (activeTab === 'analytics') {
+        fetchStats();
       }
       if (refreshUser) {
         refreshUser();
@@ -625,7 +629,10 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({ isOpen
           {/* 3. USERS */}
           <button
             type="button"
-            onClick={() => setActiveTab('users')}
+            onClick={() => {
+              setActiveTab('users');
+              fetchUsers();
+            }}
             className={`flex items-center gap-2 px-3.5 py-2 rounded-xl transition-all whitespace-nowrap ${
               activeTab === 'users'
                 ? 'bg-gradient-to-r from-amber-500/20 via-yellow-500/15 to-amber-600/20 text-amber-300 border border-gold-500/30 shadow-sm'

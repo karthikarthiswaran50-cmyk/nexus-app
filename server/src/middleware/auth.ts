@@ -50,13 +50,28 @@ export function requireAdmin(req: AuthenticatedRequest, res: Response, next: Nex
     }
 
     // Import db dynamically to avoid circular import issues
-    import('../db.js').then(({ db }) => {
-      const row = db.prepare('SELECT role, email, username, is_banned FROM users WHERE id = ?').get(userId) as {
+    import('../db.js').then(async ({ db, pgPool, upsertUserToSqlite }) => {
+      let row = db.prepare('SELECT role, email, username, is_banned FROM users WHERE id = ?').get(userId) as {
         role?: string;
         email: string;
         username: string;
         is_banned?: number;
       } | undefined;
+
+      if (!row && pgPool) {
+        try {
+          const pgRes = await pgPool.query('SELECT * FROM users WHERE id = $1 LIMIT 1', [userId]);
+          if (pgRes.rows[0]) {
+            upsertUserToSqlite(pgRes.rows[0]);
+            row = {
+              role: pgRes.rows[0].role,
+              email: pgRes.rows[0].email,
+              username: pgRes.rows[0].username,
+              is_banned: pgRes.rows[0].is_banned,
+            };
+          }
+        } catch (_) {}
+      }
 
       if (!row) {
         res.status(404).json({ error: 'User not found.' });

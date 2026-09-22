@@ -2,7 +2,7 @@
 
 **Effective Date:** September 2026  
 **Application Name:** Nexus (Nexus Royal)  
-**Developer / Owner:** Karthik Arthiswaran  
+**Developer / Owner:** Karthiswaran k 
 **Contact Email:** karthikarthiswaran50@gmail.com  
 **Website / Web App:** https://nexusroyal.online  
 **Terms URL:** https://nexusroyal.online/terms  
@@ -84,5 +84,5 @@ Nexus is **not a replacement for emergency telephone services (such as 911 or 11
 
 For questions or notices regarding these Terms, contact:
 - **Email:** karthikarthiswaran50@gmail.com
-- **Developer:** Karthik Arthiswaran
+- **Developer:** Karthiswaran k
 - **Website:** https://nexusroyal.online
