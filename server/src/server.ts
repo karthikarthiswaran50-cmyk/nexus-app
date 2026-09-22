@@ -228,6 +228,29 @@ app.use(
   express.static(uploadsDir)
 );
 
+// Android TWA Digital Asset Links (Google Play full-screen verification)
+app.get('/.well-known/assetlinks.json', (_req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  const distPath = path.resolve(__dirname, '../../client/dist/.well-known/assetlinks.json');
+  const publicPath = path.resolve(__dirname, '../../client/public/.well-known/assetlinks.json');
+  if (fs.existsSync(distPath)) {
+    res.sendFile(distPath);
+  } else if (fs.existsSync(publicPath)) {
+    res.sendFile(publicPath);
+  } else {
+    res.json([{
+      relation: ['delegate_permission/common.handle_all_urls'],
+      target: {
+        namespace: 'android_app',
+        package_name: 'com.nexus.royal.app',
+        sha256_cert_fingerprints: [
+          '00:94:62:91:D4:69:2E:D8:28:A9:F6:CA:74:12:90:50:B8:77:F0:C4:E5:57:CC:47:2F:C5:13:6D:3F:1A:A4:35'
+        ]
+      }
+    }]);
+  }
+});
+
 // Health check
 app.get('/api/health', (_req, res) => {
   res.json({

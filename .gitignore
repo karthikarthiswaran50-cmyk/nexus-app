@@ -41,8 +41,17 @@ yarn-debug.log*
 yarn-error.log*
 *.log
 
-# Editor and OS
-.DS_Store
-.vscode/
-.idea/
-Thumbs.db
+# Android build outputs & Gradle cache
+.gradle/
+android/.gradle/
+android/app/build/
+android/build/
+android/local.properties
+*.jks
+*.keystore
+*keystore.properties
+signing.properties
+android/keystore.properties
+*.aab
+*.apk
+
