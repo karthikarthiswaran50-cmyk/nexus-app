@@ -53,8 +53,52 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   }
 }
 
+import { PrivacyPolicyView } from './components/legal/PrivacyPolicyView';
+import { TermsOfServiceView } from './components/legal/TermsOfServiceView';
+
+const getInitialRoute = (): 'app' | 'privacy' | 'terms' => {
+  if (typeof window === 'undefined') return 'app';
+  const path = window.location.pathname.toLowerCase();
+  const search = new URLSearchParams(window.location.search);
+  const pageParam = search.get('page')?.toLowerCase();
+  if (path === '/privacy' || path.startsWith('/privacy') || pageParam === 'privacy') return 'privacy';
+  if (path === '/terms' || path.startsWith('/terms') || pageParam === 'terms') return 'terms';
+  return 'app';
+};
+
 const AppContent: React.FC = () => {
   const { user, loading } = useAuth();
+  const [route, setRoute] = React.useState<'app' | 'privacy' | 'terms'>(getInitialRoute);
+
+  React.useEffect(() => {
+    const handlePopState = () => {
+      setRoute(getInitialRoute());
+    };
+    const handleCustomNav = (e: any) => {
+      if (e.detail === 'privacy' || e.detail === 'terms' || e.detail === 'app') {
+        setRoute(e.detail);
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    window.addEventListener('nexus_navigate', handleCustomNav);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+      window.removeEventListener('nexus_navigate', handleCustomNav);
+    };
+  }, []);
+
+  const navigateToApp = () => {
+    window.history.pushState({}, '', '/');
+    setRoute('app');
+  };
+
+  if (route === 'privacy') {
+    return <PrivacyPolicyView onBack={navigateToApp} />;
+  }
+
+  if (route === 'terms') {
+    return <TermsOfServiceView onBack={navigateToApp} />;
+  }
 
   if (loading) {
     return (

@@ -23,6 +23,8 @@ import {
   Trash2,
   Users,
   Download,
+  FileText,
+  ExternalLink,
 } from 'lucide-react';
 import { BlockedUser } from '../../types';
 import axios from 'axios';
@@ -870,6 +872,65 @@ export const SettingsView: React.FC = () => {
                 </div>
               ))
             )}
+          </div>
+        </div>
+
+        {/* 📜 Legal & Policies Card (Google Play Compliance) */}
+        <div className="bg-dark-900 border border-gold-500/20 rounded-3xl p-6 space-y-4 shadow-xl royal-card">
+          <h3 className="text-sm font-black text-white flex items-center justify-between border-b border-gold-500/15 pb-3">
+            <div className="flex items-center gap-2 text-gold-400">
+              <FileText className="w-4 h-4" />
+              <span className="text-white">Legal & Policies</span>
+            </div>
+            <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+              Play Store Verified
+            </span>
+          </h3>
+
+          <p className="text-xs text-dark-300 leading-relaxed">
+            Review how Nexus protects your privacy, enforces community standards, and secures your conversations.
+          </p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+            <button
+              type="button"
+              onClick={() => {
+                window.history.pushState({}, '', '/privacy');
+                window.dispatchEvent(new CustomEvent('nexus_navigate', { detail: 'privacy' }));
+              }}
+              className="p-3 rounded-2xl bg-dark-850 hover:bg-dark-800 border border-gold-500/20 flex items-center justify-between group transition-all cursor-pointer text-left"
+            >
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-gold-500/10 border border-gold-500/30 flex items-center justify-center text-gold-400">
+                  <Shield className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-white group-hover:text-gold-300 transition-colors">Privacy Policy</h4>
+                  <p className="text-[10px] text-dark-400">Data safety & encryption</p>
+                </div>
+              </div>
+              <ExternalLink className="w-3.5 h-3.5 text-dark-400 group-hover:text-gold-400 transition-colors" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                window.history.pushState({}, '', '/terms');
+                window.dispatchEvent(new CustomEvent('nexus_navigate', { detail: 'terms' }));
+              }}
+              className="p-3 rounded-2xl bg-dark-850 hover:bg-dark-800 border border-gold-500/20 flex items-center justify-between group transition-all cursor-pointer text-left"
+            >
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-gold-500/10 border border-gold-500/30 flex items-center justify-center text-gold-400">
+                  <FileText className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-white group-hover:text-gold-300 transition-colors">Terms of Service</h4>
+                  <p className="text-[10px] text-dark-400">Community rules & UGC</p>
+                </div>
+              </div>
+              <ExternalLink className="w-3.5 h-3.5 text-dark-400 group-hover:text-gold-400 transition-colors" />
+            </button>
           </div>
         </div>
 

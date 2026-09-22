@@ -102,6 +102,32 @@ export const AuthModal: React.FC = () => {
             <Lock className="w-3 h-3 text-gold-400" />
             <span>Official Firebase Google Authentication</span>
           </p>
+
+          <p className="text-[10px] text-dark-400 leading-relaxed pt-2">
+            By continuing, you agree to our{' '}
+            <button
+              type="button"
+              onClick={() => {
+                window.history.pushState({}, '', '/terms');
+                window.dispatchEvent(new CustomEvent('nexus_navigate', { detail: 'terms' }));
+              }}
+              className="text-gold-400 hover:text-gold-300 font-bold underline transition-colors cursor-pointer"
+            >
+              Terms of Service
+            </button>
+            {' '}and{' '}
+            <button
+              type="button"
+              onClick={() => {
+                window.history.pushState({}, '', '/privacy');
+                window.dispatchEvent(new CustomEvent('nexus_navigate', { detail: 'privacy' }));
+              }}
+              className="text-gold-400 hover:text-gold-300 font-bold underline transition-colors cursor-pointer"
+            >
+              Privacy Policy
+            </button>
+            .
+          </p>
         </div>
 
       </div>
