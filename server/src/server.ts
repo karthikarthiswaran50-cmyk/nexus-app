@@ -261,11 +261,8 @@ app.delete('/api/users/account', requireAuth, usersCtrl.deleteAccount);
 app.post('/api/users/logout-all', requireAuth, usersCtrl.logoutAll);
 app.get('/api/users/:id', requireAuth, usersCtrl.getUserByIdOrUsername);
 
-// Stories & Status Routes (24-Hour Stories)
-app.get('/api/stories', requireAuth, storiesCtrl.getActiveStories);
-app.post('/api/stories', requireAuth, uploadLimiter, upload.single('media'), storiesCtrl.createStory);
-app.post('/api/stories/:id/view', requireAuth, storiesCtrl.viewStory);
-app.delete('/api/stories/:id', requireAuth, storiesCtrl.deleteStory);
+
+
 
 
 
@@ -377,8 +374,8 @@ app.get('/api/groups/:id/messages', requireAuth, chatCtrl.getGroupMessages);
 app.get('/api/calls/history', requireAuth, callsCtrl.getCallHistory);
 app.post('/api/calls/log', requireAuth, callsCtrl.createCallLogHttp);
 
-// 5. WebRTC ICE Server Discovery & TURN Configuration
-app.get('/api/webrtc/config', webrtcCtrl.getWebRtcConfig);
+// 5. WebRTC ICE Server Discovery & TURN Configuration (auth required — protects TURN credentials)
+app.get('/api/webrtc/config', requireAuth, webrtcCtrl.getWebRtcConfig);
 
 // 6. Free Forever Platform Membership
 app.get('/api/subscriptions/plans', subsCtrl.getPlans);
