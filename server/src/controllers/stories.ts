@@ -1,5 +1,5 @@
 import { Response } from 'express';
-import { db, recordActivity } from '../db.js';
+import { db, recordActivity, persistStoryToPg, persistStoryViewToPg, deleteStoryFromPg } from '../db.js';
 import crypto from 'node:crypto';
 import { AuthenticatedRequest } from '../middleware/auth.js';
 import { sanitizeText } from '../utils/sanitize.js';
@@ -99,6 +99,17 @@ export async function createStory(req: AuthenticatedRequest, res: Response) {
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(id, userId, mediaUrl || null, content.trim(), background_color, createdAt, expiresAt);
 
+    // Persist to PostgreSQL
+    persistStoryToPg({
+      id,
+      user_id: userId,
+      media_url: mediaUrl || null,
+      content: content.trim(),
+      background_color,
+      created_at: createdAt,
+      expires_at: expiresAt,
+    });
+
     recordActivity(userId, 'story_created', {
       content: content ? content.slice(0, 100) : '',
       media_url: mediaUrl || undefined,
@@ -135,6 +146,13 @@ export async function viewStory(req: AuthenticatedRequest, res: Response) {
         INSERT OR IGNORE INTO story_views (id, story_id, viewer_id, viewed_at)
         VALUES (?, ?, ?, datetime('now'))
       `).run(id, storyId, viewerId);
+
+      // Persist story view to PostgreSQL
+      persistStoryViewToPg({
+        id,
+        story_id: storyId,
+        viewer_id: viewerId,
+      });
     } catch (e) {}
 
     res.json({ success: true });
@@ -150,6 +168,7 @@ export async function deleteStory(req: AuthenticatedRequest, res: Response) {
     if (!userId || !storyId) return res.status(400).json({ error: 'Missing parameters' });
 
     db.prepare('DELETE FROM stories WHERE id = ? AND user_id = ?').run(storyId, userId);
+    deleteStoryFromPg(storyId, userId);
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to delete story' });

@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { db, persistUserToPg, persistSubscriptionToPg, persistSettingsToPg, recordActivity, purgeUserPermanently } from '../db.js';
+import { db, persistUserToPg, persistSubscriptionToPg, persistSettingsToPg, recordActivity, purgeUserPermanently, upsertUserToSqlite, pgPool } from '../db.js';
 import { JWT_SECRET, AuthenticatedRequest } from '../middleware/auth.js';
 import { User, UserWithPlan, Subscription } from '../types.js';
 import { sanitizeText, sanitizeUsername, sanitizeEmail, validatePasswordStrength } from '../utils/sanitize.js';
@@ -157,9 +157,27 @@ export async function login(req: Request, res: Response): Promise<void> {
     }
 
     const cleanLogin = login.trim().toLowerCase();
-    const user = db.prepare(`
+    let user = db.prepare(`
       SELECT * FROM users WHERE lower(email) = ? OR lower(username) = ?
     `).get(cleanLogin, cleanLogin) as unknown as (User & { password_hash: string }) | undefined;
+
+    // PostgreSQL fallback if not in local SQLite cache
+    if (!user && pgPool) {
+      try {
+        const pgRes = await pgPool.query(
+          'SELECT * FROM users WHERE lower(email) = $1 OR lower(username) = $1 LIMIT 1',
+          [cleanLogin]
+        );
+        if (pgRes.rows.length > 0) {
+          upsertUserToSqlite(pgRes.rows[0]);
+          user = db.prepare(`
+            SELECT * FROM users WHERE lower(email) = ? OR lower(username) = ?
+          `).get(cleanLogin, cleanLogin) as unknown as (User & { password_hash: string }) | undefined;
+        }
+      } catch (pgErr: any) {
+        console.warn('Login PostgreSQL fallback note:', pgErr?.message);
+      }
+    }
 
     if (!user) {
       res.status(401).json({ error: 'Invalid email/username or password.' });
@@ -205,7 +223,19 @@ export async function getMe(req: AuthenticatedRequest, res: Response): Promise<v
       return;
     }
 
-    const user = getUserWithPlan(userId);
+    let user = getUserWithPlan(userId);
+    if (!user && pgPool) {
+      try {
+        const pgRes = await pgPool.query('SELECT * FROM users WHERE id = $1 LIMIT 1', [userId]);
+        if (pgRes.rows.length > 0) {
+          upsertUserToSqlite(pgRes.rows[0]);
+          user = getUserWithPlan(userId);
+        }
+      } catch (pgErr: any) {
+        console.warn('GetMe PostgreSQL fallback note:', pgErr?.message);
+      }
+    }
+
     if (!user) {
       res.status(404).json({ error: 'User not found' });
       return;
@@ -351,6 +381,22 @@ export async function firebaseLogin(req: Request, res: Response): Promise<void> 
 
     const cleanEmail = sanitizeEmail(decoded.email);
     let user = db.prepare('SELECT * FROM users WHERE lower(email) = ?').get(cleanEmail) as unknown as User | undefined;
+
+    // If not found in SQLite cache, check PostgreSQL first before provisioning
+    if (!user && pgPool) {
+      try {
+        const pgRes = await pgPool.query(
+          'SELECT * FROM users WHERE lower(email) = $1 LIMIT 1',
+          [cleanEmail]
+        );
+        if (pgRes.rows.length > 0) {
+          upsertUserToSqlite(pgRes.rows[0]);
+          user = db.prepare('SELECT * FROM users WHERE lower(email) = ?').get(cleanEmail) as unknown as User | undefined;
+        }
+      } catch (pgErr: any) {
+        console.warn('Firebase login PostgreSQL fallback note:', pgErr?.message);
+      }
+    }
 
     const now = new Date().toISOString();
     const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();

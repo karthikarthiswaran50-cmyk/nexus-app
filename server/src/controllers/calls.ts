@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { db, recordActivity } from '../db.js';
+import { db, recordActivity, persistCallLogToPg, pgPool } from '../db.js';
 import { AuthenticatedRequest } from '../middleware/auth.js';
 import { getUserWithPlan } from './auth.js';
 import { CallLog } from '../types.js';
@@ -12,12 +12,50 @@ export async function getCallHistory(req: AuthenticatedRequest, res: Response): 
       return;
     }
 
-    const rows = (db.prepare(`
+    let rows = (db.prepare(`
       SELECT * FROM call_logs
       WHERE caller_id = ? OR receiver_id = ?
       ORDER BY started_at DESC
       LIMIT 100
     `).all(userId, userId) as unknown) as CallLog[];
+
+    // If SQLite cache has no rows and PostgreSQL is active, query PostgreSQL as fallback
+    if (rows.length === 0 && pgPool) {
+      try {
+        const pgRes = await pgPool.query(`
+          SELECT * FROM call_logs
+          WHERE caller_id = $1 OR receiver_id = $1
+          ORDER BY started_at DESC
+          LIMIT 100
+        `, [userId]);
+        if (pgRes.rows.length > 0) {
+          const insertStmt = db.prepare(`
+            INSERT OR IGNORE INTO call_logs (id, caller_id, receiver_id, call_type, status, duration, started_at, ended_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          `);
+          for (const r of pgRes.rows) {
+            insertStmt.run(
+              r.id,
+              r.caller_id,
+              r.receiver_id,
+              r.call_type || 'video',
+              r.status || 'completed',
+              r.duration || 0,
+              r.started_at ? new Date(r.started_at).toISOString() : new Date().toISOString(),
+              r.ended_at ? new Date(r.ended_at).toISOString() : null
+            );
+          }
+          rows = (db.prepare(`
+            SELECT * FROM call_logs
+            WHERE caller_id = ? OR receiver_id = ?
+            ORDER BY started_at DESC
+            LIMIT 100
+          `).all(userId, userId) as unknown) as CallLog[];
+        }
+      } catch (pgErr: any) {
+        console.warn('Call history PostgreSQL fallback note:', pgErr?.message);
+      }
+    }
 
     const callLogs = rows.map((log) => ({
       ...log,
@@ -50,6 +88,18 @@ export function recordCallLog(params: {
     INSERT INTO call_logs (id, caller_id, receiver_id, call_type, status, duration, started_at, ended_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `).run(id, callerId, receiverId, callType, status, duration, start, end);
+
+  // Persist to permanent PostgreSQL database
+  persistCallLogToPg({
+    id,
+    caller_id: callerId,
+    receiver_id: receiverId,
+    call_type: callType,
+    status,
+    duration,
+    started_at: start,
+    ended_at: end,
+  });
 
   // Record activities for both caller and receiver
   recordActivity(callerId, 'call_initiated', {

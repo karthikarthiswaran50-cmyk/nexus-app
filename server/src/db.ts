@@ -469,6 +469,24 @@ async function initPostgresAndRestore() {
         auth TEXT NOT NULL,
         created_at TIMESTAMPTZ DEFAULT NOW()
       );
+
+      CREATE TABLE IF NOT EXISTS stories (
+        id VARCHAR(100) PRIMARY KEY,
+        user_id VARCHAR(100) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        media_url TEXT,
+        content TEXT DEFAULT '',
+        background_color VARCHAR(50) DEFAULT '#0f172a',
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        expires_at TIMESTAMPTZ NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS story_views (
+        id VARCHAR(100) PRIMARY KEY,
+        story_id VARCHAR(100) NOT NULL REFERENCES stories(id) ON DELETE CASCADE,
+        viewer_id VARCHAR(100) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        viewed_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(story_id, viewer_id)
+      );
     `);
 
     // Helper for bulletproof ISO date conversion
@@ -557,6 +575,55 @@ async function initPostgresAndRestore() {
           } catch (_) {}
         }
       } catch (e) {}
+
+      // Restore active stories
+      try {
+        const storyRes = await pgPool.query('SELECT * FROM stories WHERE expires_at > NOW()');
+        const insertStory = db.prepare(`
+          INSERT OR REPLACE INTO stories (id, user_id, media_url, content, background_color, created_at, expires_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `);
+        for (const st of storyRes.rows) {
+          try {
+            insertStory.run(
+              st.id,
+              st.user_id,
+              st.media_url || null,
+              st.content || '',
+              st.background_color || '#0f172a',
+              toIsoSafe(st.created_at),
+              toIsoSafe(st.expires_at)
+            );
+          } catch (_) {}
+        }
+      } catch (stErr: any) {
+        console.warn('Stories restore note:', stErr.message);
+      }
+
+      // Restore story views
+      try {
+        const viewRes = await pgPool.query(`
+          SELECT sv.* FROM story_views sv
+          JOIN stories s ON sv.story_id = s.id
+          WHERE s.expires_at > NOW()
+        `);
+        const insertView = db.prepare(`
+          INSERT OR REPLACE INTO story_views (id, story_id, viewer_id, viewed_at)
+          VALUES (?, ?, ?, ?)
+        `);
+        for (const vr of viewRes.rows) {
+          try {
+            insertView.run(
+              vr.id,
+              vr.story_id,
+              vr.viewer_id,
+              toIsoSafe(vr.viewed_at)
+            );
+          } catch (_) {}
+        }
+      } catch (vErr: any) {
+        console.warn('Story views restore note:', vErr.message);
+      }
 
       console.log('✅ PostgreSQL database restored successfully! User sessions, accounts, and push subscriptions are intact.');
     } else {
@@ -853,6 +920,64 @@ export function persistCallLogToPg(call: {
      ON CONFLICT (id) DO NOTHING`,
     [call.id, call.caller_id, call.receiver_id, call.call_type, call.status, call.duration, call.started_at, call.ended_at || null]
   ).catch(err => console.error('Error persisting call log to PostgreSQL:', err.message));
+}
+
+export function persistStoryToPg(story: {
+  id: string;
+  user_id: string;
+  media_url?: string | null;
+  content?: string;
+  background_color?: string;
+  created_at?: string;
+  expires_at: string;
+}) {
+  if (!pgPool) return;
+  pgPool.query(
+    `INSERT INTO stories (id, user_id, media_url, content, background_color, created_at, expires_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     ON CONFLICT (id) DO UPDATE SET
+       media_url = EXCLUDED.media_url,
+       content = EXCLUDED.content,
+       background_color = EXCLUDED.background_color,
+       expires_at = EXCLUDED.expires_at`,
+    [
+      story.id,
+      story.user_id,
+      story.media_url || null,
+      story.content || '',
+      story.background_color || '#0f172a',
+      story.created_at ? new Date(story.created_at) : new Date(),
+      new Date(story.expires_at),
+    ]
+  ).catch(err => console.error('Error persisting story to PostgreSQL:', err.message));
+}
+
+export function persistStoryViewToPg(view: {
+  id: string;
+  story_id: string;
+  viewer_id: string;
+  viewed_at?: string;
+}) {
+  if (!pgPool) return;
+  pgPool.query(
+    `INSERT INTO story_views (id, story_id, viewer_id, viewed_at)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (story_id, viewer_id) DO NOTHING`,
+    [
+      view.id,
+      view.story_id,
+      view.viewer_id,
+      view.viewed_at ? new Date(view.viewed_at) : new Date(),
+    ]
+  ).catch(err => console.error('Error persisting story view to PostgreSQL:', err.message));
+}
+
+export function deleteStoryFromPg(storyId: string, userId: string) {
+  if (!pgPool) return;
+  pgPool.query(
+    `DELETE FROM stories WHERE id = $1 AND user_id = $2`,
+    [storyId, userId]
+  ).catch(err => console.error('Error deleting story from PostgreSQL:', err.message));
 }
 
 async function syncAllToPostgres() {
