@@ -771,16 +771,16 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, on
           </div>
         </div>
 
-        {/* Action Buttons: Search, Gallery, Audio Call, Video Call, Wallpaper, Profile info */}
-        <div className="flex items-center gap-2 relative">
-          {/* In-Chat Search Button */}
+        {/* Action Buttons: Call Buttons (Always Visible) & Responsive Tools / Menu */}
+        <div className="flex items-center gap-1 sm:gap-2 relative shrink-0">
+          {/* In-Chat Search Button (Tablet/Desktop) */}
           <button
             type="button"
             onClick={() => {
               setIsSearchOpen(!isSearchOpen);
               if (isSearchOpen) setSearchQuery('');
             }}
-            className={`p-2.5 rounded-xl border transition-all shadow-sm ${
+            className={`hidden sm:flex p-2 sm:p-2.5 rounded-xl border transition-all shadow-sm ${
               isSearchOpen
                 ? 'bg-amber-500/20 text-amber-300 border-gold-500/40'
                 : 'bg-dark-800 hover:bg-gold-500/20 text-dark-300 hover:text-amber-300 border-dark-700 hover:border-gold-500/40'
@@ -790,20 +790,21 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, on
             <Search className="w-4 h-4" />
           </button>
 
-          {/* Shared Media Gallery Button */}
+          {/* Shared Media Gallery Button (Tablet/Desktop) */}
           <button
             type="button"
             onClick={() => setShowMediaGallery(true)}
-            className="p-2.5 rounded-xl bg-dark-800 hover:bg-gold-500/20 text-dark-300 hover:text-amber-300 border border-dark-700 hover:border-gold-500/40 transition-all shadow-sm"
+            className="hidden md:flex p-2 sm:p-2.5 rounded-xl bg-dark-800 hover:bg-gold-500/20 text-dark-300 hover:text-amber-300 border border-dark-700 hover:border-gold-500/40 transition-all shadow-sm"
             title="Shared Media & Files"
           >
             <ImageIcon className="w-4 h-4" />
           </button>
 
+          {/* Chat Wallpaper Button (Tablet/Desktop) */}
           <button
             type="button"
             onClick={() => setShowWallpaperMenu(!showWallpaperMenu)}
-            className="p-2.5 rounded-xl bg-dark-800 hover:bg-gold-500/20 text-dark-300 hover:text-amber-300 border border-dark-700 hover:border-gold-500/40 transition-all shadow-sm"
+            className="hidden md:flex p-2 sm:p-2.5 rounded-xl bg-dark-800 hover:bg-gold-500/20 text-dark-300 hover:text-amber-300 border border-dark-700 hover:border-gold-500/40 transition-all shadow-sm"
             title="Chat Theme Wallpaper"
           >
             <Palette className="w-4 h-4" />
@@ -842,50 +843,99 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, on
 
           {!group && otherUser && (
             <>
+              {/* HD Voice Call Button */}
               <button
                 type="button"
                 onClick={() => handleStartCall('audio')}
-                className="p-2.5 rounded-xl bg-dark-800 hover:bg-emerald-500/20 text-dark-300 hover:text-emerald-400 border border-dark-700 hover:border-emerald-500/40 transition-all shadow-sm"
+                className="p-2 sm:p-2.5 rounded-xl bg-dark-800 hover:bg-emerald-500/20 text-emerald-400 border border-dark-700 hover:border-emerald-500/40 transition-all shadow-sm active:scale-95 touch-target flex items-center justify-center"
                 title="Start HD Audio Call"
               >
-                <Phone className="w-4 h-4" />
+                <Phone className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
               </button>
 
+              {/* HD 4K Video Call Button */}
               <button
                 type="button"
                 onClick={() => handleStartCall('video')}
-                className="p-2.5 rounded-xl bg-dark-800 hover:bg-brand-500/20 text-dark-300 hover:text-brand-400 border border-dark-700 hover:border-brand-500/40 transition-all shadow-sm"
+                className="p-2 sm:p-2.5 rounded-xl bg-dark-800 hover:bg-brand-500/20 text-brand-400 border border-dark-700 hover:border-brand-500/40 transition-all shadow-sm active:scale-95 touch-target flex items-center justify-center"
                 title="Start HD Video Call"
               >
-                <Video className="w-4 h-4" />
+                <Video className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
               </button>
 
               {onViewProfile && (
                 <button
                   type="button"
                   onClick={() => onViewProfile(otherUser)}
-                  className="p-2.5 rounded-xl bg-dark-800 hover:bg-dark-700 text-dark-300 hover:text-white border border-dark-700 transition-all"
+                  className="hidden sm:flex p-2 sm:p-2.5 rounded-xl bg-dark-800 hover:bg-dark-700 text-dark-300 hover:text-white border border-dark-700 transition-all"
                   title="View Profile"
                 >
                   <Info className="w-4 h-4" />
                 </button>
               )}
 
-              {/* User actions 3-dot dropdown */}
+              {/* User actions 3-dot dropdown (Contains all tools on mobile) */}
               <div className="relative">
                 <button
                   type="button"
                   onClick={() => setShowUserActionsMenu(!showUserActionsMenu)}
-                  className="p-2.5 rounded-xl bg-dark-800 hover:bg-dark-700 text-dark-300 hover:text-white border border-dark-700 transition-all"
-                  title="User options"
+                  className="p-2 sm:p-2.5 rounded-xl bg-dark-800 hover:bg-dark-700 text-dark-300 hover:text-white border border-dark-700 transition-all touch-target flex items-center justify-center"
+                  title="More Options"
                 >
                   <MoreVertical className="w-4 h-4" />
                 </button>
                 {showUserActionsMenu && (
                   <div
                     onClick={(e) => e.stopPropagation()}
-                    className="absolute right-0 top-12 z-50 w-44 bg-dark-900 border border-gold-500/30 rounded-2xl shadow-2xl p-1.5 backdrop-blur-2xl animate-in zoom-in-95 duration-150 space-y-1"
+                    className="absolute right-0 top-12 z-50 w-52 bg-dark-900 border border-gold-500/30 rounded-2xl shadow-2xl p-1.5 backdrop-blur-2xl animate-in zoom-in-95 duration-150 space-y-1"
                   >
+                    {onViewProfile && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowUserActionsMenu(false);
+                          onViewProfile(otherUser);
+                        }}
+                        className="w-full px-2.5 py-2 rounded-xl text-left text-xs text-dark-200 hover:text-white hover:bg-dark-800 flex items-center gap-2 transition-all"
+                      >
+                        <Info className="w-3.5 h-3.5 text-gold-400" />
+                        <span>View Profile</span>
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowUserActionsMenu(false);
+                        setIsSearchOpen(true);
+                      }}
+                      className="w-full px-2.5 py-2 rounded-xl text-left text-xs text-dark-200 hover:text-white hover:bg-dark-800 flex items-center gap-2 transition-all"
+                    >
+                      <Search className="w-3.5 h-3.5 text-gold-400" />
+                      <span>Search Messages</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowUserActionsMenu(false);
+                        setShowMediaGallery(true);
+                      }}
+                      className="w-full px-2.5 py-2 rounded-xl text-left text-xs text-dark-200 hover:text-white hover:bg-dark-800 flex items-center gap-2 transition-all"
+                    >
+                      <ImageIcon className="w-3.5 h-3.5 text-gold-400" />
+                      <span>Media & Files</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowUserActionsMenu(false);
+                        setShowWallpaperMenu(true);
+                      }}
+                      className="w-full px-2.5 py-2 rounded-xl text-left text-xs text-dark-200 hover:text-white hover:bg-dark-800 flex items-center gap-2 transition-all"
+                    >
+                      <Palette className="w-3.5 h-3.5 text-gold-400" />
+                      <span>Chat Wallpaper</span>
+                    </button>
+                    <div className="my-1 border-t border-dark-800" />
                     <button
                       type="button"
                       onClick={() => {
@@ -1491,7 +1541,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, on
 
       {/* Audio Recording Bar or Composer Input */}
       {isRecording ? (
-        <div className="p-3.5 bg-dark-900/95 border-t border-dark-800 backdrop-blur-md flex items-center justify-between gap-3 shrink-0 animate-in slide-in-from-bottom-2">
+        <div className="p-3 sm:p-3.5 pb-[max(0.875rem,env(safe-area-inset-bottom))] bg-dark-900/95 border-t border-dark-800 backdrop-blur-md flex items-center justify-between gap-3 shrink-0 animate-in slide-in-from-bottom-2">
           <div className="flex items-center gap-3">
             <span className="relative flex h-3 w-3">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
@@ -1530,7 +1580,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, on
           </div>
         </div>
       ) : (
-        <form onSubmit={handleSendMessage} className="p-3.5 bg-dark-900/95 border-t border-gold-500/15 backdrop-blur-2xl flex items-center gap-2.5 shrink-0 shadow-2xl">
+        <form onSubmit={handleSendMessage} className="p-3 sm:p-3.5 pb-[max(0.875rem,env(safe-area-inset-bottom))] bg-dark-900/95 border-t border-gold-500/15 backdrop-blur-2xl flex items-center gap-2 sm:gap-2.5 shrink-0 shadow-2xl">
           <input
             type="file"
             ref={fileInputRef}
@@ -1543,7 +1593,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, on
             type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}
-            className="p-2.5 rounded-xl bg-dark-850 hover:bg-dark-800 text-dark-400 hover:text-amber-200 border border-gold-500/15 transition-all shadow-xs"
+            className="p-2 sm:p-2.5 rounded-xl bg-dark-850 hover:bg-dark-800 text-dark-400 hover:text-amber-200 border border-gold-500/15 transition-all shadow-xs touch-target flex items-center justify-center shrink-0"
             title="Upload image or file"
           >
             <Paperclip className="w-4 h-4" />
@@ -1552,7 +1602,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, on
           <button
             type="button"
             onClick={() => setShowEmojis(!showEmojis)}
-            className={`p-2.5 rounded-xl border transition-all ${
+            className={`p-2 sm:p-2.5 rounded-xl border transition-all touch-target flex items-center justify-center shrink-0 ${
               showEmojis
                 ? 'bg-gold-500 text-dark-950 border-gold-400 font-bold shadow-md shadow-gold-500/20'
                 : 'bg-dark-850 hover:bg-dark-800 text-dark-400 hover:text-amber-200 border-gold-500/15'
@@ -1568,14 +1618,14 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, on
             value={inputText}
             onChange={handleInputChange}
             placeholder={group ? `Message ${group.name}...` : `Message ${otherUser?.full_name || 'contact'}...`}
-            className="flex-1 bg-dark-850 border border-gold-500/15 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-dark-500 focus:outline-none focus:border-gold-400/80 focus:ring-1 focus:ring-gold-400/50 transition-all shadow-inner"
+            className="flex-1 bg-dark-850 border border-gold-500/15 rounded-xl px-3.5 sm:px-4 py-2.5 text-sm sm:text-base text-white placeholder:text-dark-500 focus:outline-none focus:border-gold-400/80 focus:ring-1 focus:ring-gold-400/50 transition-all shadow-inner"
           />
 
           {inputText.trim() ? (
             <button
               type="submit"
               disabled={uploading}
-              className="p-2.5 px-4 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-600 hover:from-amber-400 hover:to-yellow-300 text-dark-950 font-black shadow-lg shadow-gold-500/25 flex items-center justify-center transition-all active:scale-95"
+              className="p-2.5 sm:px-4 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-600 hover:from-amber-400 hover:to-yellow-300 text-dark-950 font-black shadow-lg shadow-gold-500/25 flex items-center justify-center transition-all active:scale-95 shrink-0"
             >
               <Send className="w-4 h-4 text-dark-950 stroke-[2.5]" />
             </button>
@@ -1584,7 +1634,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, on
               type="button"
               onClick={startRecording}
               disabled={uploading}
-              className="p-2.5 px-3.5 rounded-xl bg-dark-850 hover:bg-gradient-to-tr hover:from-amber-500 hover:to-yellow-400 text-gold-400 hover:text-dark-950 border border-gold-500/20 hover:border-gold-400 shadow-md flex items-center justify-center transition-all active:scale-95 group"
+              className="p-2.5 sm:px-3.5 rounded-xl bg-dark-850 hover:bg-gradient-to-tr hover:from-amber-500 hover:to-yellow-400 text-gold-400 hover:text-dark-950 border border-gold-500/20 hover:border-gold-400 shadow-md flex items-center justify-center transition-all active:scale-95 group shrink-0"
               title="Record Voice Message"
             >
               <Mic className="w-4 h-4 group-hover:scale-110 transition-all" />

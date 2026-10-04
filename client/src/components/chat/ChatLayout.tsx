@@ -25,6 +25,7 @@ interface ChatLayoutProps {
   onNavigateToSubscription?: () => void;
   onViewProfile: (user: User) => void;
   initialSelectedUser?: User | null;
+  onActiveChatChange?: (isActive: boolean) => void;
 }
 
 export const ChatLayout: React.FC<ChatLayoutProps> = ({
@@ -32,6 +33,7 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
   onNavigateToSubscription,
   onViewProfile,
   initialSelectedUser,
+  onActiveChatChange,
 }) => {
   const { user } = useAuth();
   const { onlineUserIds, reachableUserIds, latestMessage } = useSocket();
@@ -44,6 +46,10 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
   const [isCreateGroupOpen, setIsCreateGroupOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    onActiveChatChange?.(Boolean(selectedUser || selectedGroup));
+  }, [selectedUser, selectedGroup, onActiveChatChange]);
 
   const fetchConversations = async () => {
     try {
@@ -136,7 +142,7 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
   };
 
   return (
-    <div className="h-[calc(100dvh-3.5rem)] sm:h-[calc(100dvh-4rem)] md:h-[calc(100dvh-5rem)] grid grid-cols-1 lg:grid-cols-12 gap-0 lg:gap-4 p-0 sm:p-4 lg:p-6 overflow-hidden max-w-7xl mx-auto w-full font-['Plus_Jakarta_Sans',sans-serif]">
+    <div className="h-full grid grid-cols-1 lg:grid-cols-12 gap-0 lg:gap-4 p-0 sm:p-4 lg:p-6 overflow-hidden max-w-7xl mx-auto w-full font-['Plus_Jakarta_Sans',sans-serif]">
       
       {/* 👑 Left Sidebar: Conversations & Groups list (Royal Obsidian Glass) */}
       <div

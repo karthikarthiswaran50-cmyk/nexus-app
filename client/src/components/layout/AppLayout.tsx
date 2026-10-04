@@ -163,6 +163,8 @@ export const AppLayout: React.FC = () => {
     { id: 'settings', label: 'Settings', icon: Settings },
   ];
 
+  const [isChatRoomOpen, setIsChatRoomOpen] = useState(false);
+
   return (
     <div className="h-[100dvh] bg-dark-950 text-dark-100 flex flex-col selection:bg-gold-500 selection:text-dark-950 overflow-hidden font-['Plus_Jakarta_Sans',sans-serif]">
       
@@ -524,6 +526,7 @@ export const AppLayout: React.FC = () => {
               initialSelectedUser={selectedUserForChat}
               onNavigateToDirectory={() => setCurrentTab('directory')}
               onViewProfile={handleViewProfile}
+              onActiveChatChange={(isActive) => setIsChatRoomOpen(isActive)}
             />
           </div>
         )}
@@ -562,7 +565,9 @@ export const AppLayout: React.FC = () => {
       </main>
 
       {/* 👑 Royal Mobile Bottom Navigation Bar (WhatsApp Style, 1-thumb touch) */}
-      <nav className="md:hidden h-14 sm:h-16 bg-dark-900/95 backdrop-blur-2xl border-t border-gold-500/20 z-40 flex items-center justify-around px-2 shrink-0 pb-[env(safe-area-inset-bottom)] shadow-2xl">
+      <nav className={`md:hidden h-14 sm:h-16 bg-dark-900/95 backdrop-blur-2xl border-t border-gold-500/20 z-40 items-center justify-around px-2 shrink-0 pb-[env(safe-area-inset-bottom)] shadow-2xl ${
+        currentTab === 'chats' && isChatRoomOpen ? 'hidden' : 'flex'
+      }`}>
         <button
           type="button"
           onClick={() => { setCurrentTab('chats'); setSelectedUserForChat(null); }}
