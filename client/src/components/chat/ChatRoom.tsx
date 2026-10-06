@@ -35,6 +35,10 @@ import {
   ShieldAlert,
   Ban,
   Users,
+  Star,
+  BarChart2,
+  Timer,
+  Clock,
 } from 'lucide-react';
 import axios from 'axios';
 import { trackUserActivity } from '../../config/firebase';
@@ -43,6 +47,9 @@ import { MediaViewerModal } from './MediaViewerModal';
 import { ChatMediaGalleryModal } from './ChatMediaGalleryModal';
 import { ForwardMessageModal } from './ForwardMessageModal';
 import { ReportUserModal } from './ReportUserModal';
+import { CreatePollModal } from './CreatePollModal';
+import { StarredMessagesModal } from './StarredMessagesModal';
+import { PollData } from '../../types';
 
 interface ChatRoomProps {
   otherUser?: User | null;
@@ -85,6 +92,14 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, on
 
   // Message Forwarding state
   const [forwardingMessage, setForwardingMessage] = useState<Message | null>(null);
+
+  // Polls & Starred Messages & Disappearing Messages Modals
+  const [isPollModalOpen, setIsPollModalOpen] = useState(false);
+  const [isStarredModalOpen, setIsStarredModalOpen] = useState(false);
+  const [isDisappearingMenuOpen, setIsDisappearingMenuOpen] = useState(false);
+  const [disappearingSeconds, setDisappearingSeconds] = useState<number>(0);
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [starredMessageIds, setStarredMessageIds] = useState<Set<string>>(new Set());
 
   // User Actions (Report & Block)
   const [isReportOpen, setIsReportOpen] = useState(false);
@@ -236,16 +251,29 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, on
   const [loadingMore, setLoadingMore] = useState(false);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
 
+  const formatDisappearingTime = (secs: number) => {
+    if (secs === 86400) return '24 Hours';
+    if (secs === 604800) return '7 Days';
+    if (secs === 7776000) return '90 Days';
+    return `${Math.round(secs / 3600)} Hours`;
+  };
+
   // Load message history
   const fetchMessages = async () => {
     try {
       if (group) {
         const res = await axios.get(`/api/groups/${group.id}/messages`);
-        setMessages(res.data.messages || []);
+        const msgs: Message[] = res.data.messages || [];
+        setMessages(msgs);
+        setStarredMessageIds(new Set(msgs.filter(m => m.is_starred).map(m => m.id)));
         setHasMore(!!res.data.hasMore);
       } else if (otherUser) {
         const res = await axios.get(`/api/chat/messages/${otherUser.id}`);
-        setMessages(res.data.messages || []);
+        const msgs: Message[] = res.data.messages || [];
+        setMessages(msgs);
+        setConversationId(res.data.conversationId || null);
+        setDisappearingSeconds(res.data.disappearing_seconds || 0);
+        setStarredMessageIds(new Set(msgs.filter(m => m.is_starred).map(m => m.id)));
         setHasMore(!!res.data.hasMore);
         if (socket) {
           socket.emit('chat:read', { senderId: otherUser.id });
@@ -351,6 +379,58 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, on
     );
   }, [reactionUpdate]);
 
+  // Real-time poll update
+  useEffect(() => {
+    if (!socket) return;
+    const handlePollUpdated = (data: { messageId: string; pollData: PollData }) => {
+      setMessages(prev => prev.map(m => m.id === data.messageId ? { ...m, poll_data: data.pollData } : m));
+    };
+    socket.on('chat:poll_updated', handlePollUpdated);
+    return () => {
+      socket.off('chat:poll_updated', handlePollUpdated);
+    };
+  }, [socket]);
+
+  // Real-time disappearing timer update
+  useEffect(() => {
+    if (!socket) return;
+    const handleDisappearingUpdated = (data: { conversationId: string; seconds: number }) => {
+      if (conversationId === data.conversationId) {
+        setDisappearingSeconds(data.seconds);
+        showToast(data.seconds > 0 ? `Disappearing timer: ${formatDisappearingTime(data.seconds)}` : 'Disappearing timer turned off');
+      }
+    };
+    socket.on('chat:disappearing_updated', handleDisappearingUpdated);
+    return () => {
+      socket.off('chat:disappearing_updated', handleDisappearingUpdated);
+    };
+  }, [socket, conversationId]);
+
+  // Offline queue auto-sync when network reconnects
+  useEffect(() => {
+    const handleOnlineSync = () => {
+      try {
+        const rawQueue = localStorage.getItem('nexus_offline_queue');
+        if (!rawQueue || !socket) return;
+        const queue: any[] = JSON.parse(rawQueue);
+        if (queue.length === 0) return;
+
+        showToast(`Syncing ${queue.length} offline messages...`);
+        for (const item of queue) {
+          if (item.groupId) {
+            socket.emit('group:send_message', item);
+          } else if (item.receiverId) {
+            socket.emit('chat:send_message', item);
+          }
+        }
+        localStorage.removeItem('nexus_offline_queue');
+      } catch (_) {}
+    };
+
+    window.addEventListener('online', handleOnlineSync);
+    return () => window.removeEventListener('online', handleOnlineSync);
+  }, [socket]);
+
   // Real-time message deletion
   useEffect(() => {
     if (!deletedMessage) return;
@@ -406,16 +486,18 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, on
 
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputText.trim() || !socket || !user) return;
+    if (!inputText.trim() || !user) return;
 
     if (editingMessage) {
       const newContent = inputText.trim();
-      socket.emit('chat:edit_message', {
-        messageId: editingMessage.id,
-        content: newContent,
-        receiverId: otherUser?.id,
-        groupId: group?.id,
-      });
+      if (socket) {
+        socket.emit('chat:edit_message', {
+          messageId: editingMessage.id,
+          content: newContent,
+          receiverId: otherUser?.id,
+          groupId: group?.id,
+        });
+      }
       axios.put(`/api/chat/messages/${editingMessage.id}`, { content: newContent }).catch(() => {});
       setMessages((prev) =>
         prev.map((m) =>
@@ -427,6 +509,41 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, on
       setEditingMessage(null);
       setInputText('');
       showToast('Message edited');
+      return;
+    }
+
+    // Check offline status
+    if (!navigator.onLine || !socket?.connected) {
+      const tempId = 'temp_' + Date.now();
+      const offlineMsg: Message = {
+        id: tempId,
+        sender_id: user.id,
+        receiver_id: otherUser?.id,
+        group_id: group?.id,
+        content: inputText.trim(),
+        type: 'text',
+        created_at: new Date().toISOString(),
+        is_read: false,
+        sender: user as any,
+      };
+
+      try {
+        const rawQueue = localStorage.getItem('nexus_offline_queue');
+        const queue: any[] = rawQueue ? JSON.parse(rawQueue) : [];
+        queue.push({
+          groupId: group?.id,
+          receiverId: otherUser?.id,
+          content: inputText.trim(),
+          type: 'text',
+          replyToId: replyingTo?.id,
+        });
+        localStorage.setItem('nexus_offline_queue', JSON.stringify(queue));
+      } catch (_) {}
+
+      setMessages((prev) => [...prev, offlineMsg]);
+      setInputText('');
+      setReplyingTo(null);
+      showToast('Saved offline. Message will send once connection is restored.');
       return;
     }
 
@@ -464,6 +581,78 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, on
 
     setInputText('');
     setReplyingTo(null);
+  };
+
+  const handleToggleStar = async (msg: Message) => {
+    try {
+      const res = await axios.post(`/api/chat/messages/${msg.id}/star`);
+      const isStarred = res.data.isStarred;
+      setStarredMessageIds((prev) => {
+        const next = new Set(prev);
+        if (isStarred) next.add(msg.id);
+        else next.delete(msg.id);
+        return next;
+      });
+      setMessages((prev) => prev.map((m) => (m.id === msg.id ? { ...m, is_starred: isStarred } : m)));
+      showToast(isStarred ? '⭐ Message saved to Starred' : 'Unstarred message');
+    } catch (err) {
+      console.error('Toggle star failed:', err);
+    }
+    setActiveMenuMessageId(null);
+  };
+
+  const handleVotePoll = (messageId: string, optionId: string) => {
+    if (!socket || !user) return;
+    socket.emit('chat:poll_vote', {
+      messageId,
+      optionId,
+      receiverId: otherUser?.id,
+      groupId: group?.id,
+    });
+    axios.post(`/api/chat/messages/${messageId}/poll-vote`, { optionId }).catch(() => {});
+  };
+
+  const handleCreatePoll = (pollData: PollData) => {
+    if (!user) return;
+    const pollSummary = `📊 Poll: ${pollData.question}`;
+
+    if (group && socket) {
+      socket.emit('group:send_message', {
+        groupId: group.id,
+        content: pollSummary,
+        type: 'poll',
+        pollData,
+      });
+    } else if (otherUser && socket) {
+      socket.emit('chat:send_message', {
+        receiverId: otherUser.id,
+        content: pollSummary,
+        type: 'poll',
+        pollData,
+      });
+    }
+    showToast('📊 Poll published!');
+  };
+
+  const handleSetDisappearing = async (seconds: number) => {
+    if (!conversationId && !otherUser) return;
+    try {
+      if (conversationId) {
+        await axios.post(`/api/chat/conversations/${conversationId}/disappearing`, { seconds });
+        if (socket && otherUser) {
+          socket.emit('chat:set_disappearing', {
+            conversationId,
+            receiverId: otherUser.id,
+            seconds,
+          });
+        }
+      }
+      setDisappearingSeconds(seconds);
+      setIsDisappearingMenuOpen(false);
+      showToast(seconds > 0 ? `⏳ Disappearing messages: ${formatDisappearingTime(seconds)}` : 'Disappearing timer turned off');
+    } catch (err) {
+      console.error('Set disappearing failed:', err);
+    }
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -773,6 +962,40 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, on
 
         {/* Action Buttons: Call Buttons (Always Visible) & Responsive Tools / Menu */}
         <div className="flex items-center gap-1 sm:gap-2 relative shrink-0">
+          
+          {/* Disappearing Messages Active Indicator Badge */}
+          {disappearingSeconds > 0 && !group && (
+            <button
+              type="button"
+              onClick={() => setIsDisappearingMenuOpen(!isDisappearingMenuOpen)}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-[11px] font-bold shadow-xs hover:bg-amber-500/25 transition-all"
+              title="Disappearing Messages Active"
+            >
+              <Timer className="w-3.5 h-3.5 animate-pulse text-amber-400" />
+              <span className="hidden sm:inline">{formatDisappearingTime(disappearingSeconds)}</span>
+            </button>
+          )}
+
+          {/* Starred Messages Button (Desktop/Tablet) */}
+          <button
+            type="button"
+            onClick={() => setIsStarredModalOpen(true)}
+            className="hidden sm:flex p-2 sm:p-2.5 rounded-xl bg-dark-800 hover:bg-gold-500/20 text-dark-300 hover:text-amber-300 border border-dark-700 hover:border-gold-500/40 transition-all shadow-sm"
+            title="Starred Messages"
+          >
+            <Star className="w-4 h-4 text-amber-400" />
+          </button>
+
+          {/* Create Poll Button (Group or 1-on-1) */}
+          <button
+            type="button"
+            onClick={() => setIsPollModalOpen(true)}
+            className="hidden sm:flex p-2 sm:p-2.5 rounded-xl bg-dark-800 hover:bg-gold-500/20 text-dark-300 hover:text-amber-300 border border-dark-700 hover:border-gold-500/40 transition-all shadow-sm"
+            title="Create Poll"
+          >
+            <BarChart2 className="w-4 h-4 text-amber-400" />
+          </button>
+
           {/* In-Chat Search Button (Tablet/Desktop) */}
           <button
             type="button"
@@ -841,6 +1064,39 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, on
             </div>
           )}
 
+          {/* Disappearing timer selector menu */}
+          {isDisappearingMenuOpen && !group && (
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="absolute right-0 top-12 z-50 w-52 bg-dark-900 border border-gold-500/30 rounded-2xl shadow-2xl p-2 backdrop-blur-2xl animate-in zoom-in-95 duration-150 space-y-1"
+            >
+              <div className="px-2 py-1 text-[11px] font-bold text-amber-300 border-b border-white/5 flex items-center gap-1.5">
+                <Timer className="w-3.5 h-3.5" />
+                <span>Disappearing Messages</span>
+              </div>
+              {[
+                { label: 'Off', secs: 0 },
+                { label: '24 Hours', secs: 86400 },
+                { label: '7 Days', secs: 604800 },
+                { label: '90 Days', secs: 7776000 },
+              ].map((opt) => (
+                <button
+                  key={opt.secs}
+                  type="button"
+                  onClick={() => handleSetDisappearing(opt.secs)}
+                  className={`w-full px-2.5 py-1.5 rounded-xl text-left text-xs flex items-center justify-between transition-all ${
+                    disappearingSeconds === opt.secs
+                      ? 'bg-amber-500/20 text-amber-300 font-bold'
+                      : 'text-dark-200 hover:text-white hover:bg-dark-800'
+                  }`}
+                >
+                  <span>{opt.label}</span>
+                  {disappearingSeconds === opt.secs && <Check className="w-3.5 h-3.5 text-amber-400" />}
+                </button>
+              ))}
+            </div>
+          )}
+
           {!group && otherUser && (
             <>
               {/* HD Voice Call Button */}
@@ -902,6 +1158,39 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, on
                         <span>View Profile</span>
                       </button>
                     )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowUserActionsMenu(false);
+                        setIsStarredModalOpen(true);
+                      }}
+                      className="w-full px-2.5 py-2 rounded-xl text-left text-xs text-dark-200 hover:text-white hover:bg-dark-800 flex items-center gap-2 transition-all"
+                    >
+                      <Star className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Starred Messages</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowUserActionsMenu(false);
+                        setIsPollModalOpen(true);
+                      }}
+                      className="w-full px-2.5 py-2 rounded-xl text-left text-xs text-dark-200 hover:text-white hover:bg-dark-800 flex items-center gap-2 transition-all"
+                    >
+                      <BarChart2 className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Create Poll</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowUserActionsMenu(false);
+                        setIsDisappearingMenuOpen(true);
+                      }}
+                      className="w-full px-2.5 py-2 rounded-xl text-left text-xs text-dark-200 hover:text-white hover:bg-dark-800 flex items-center gap-2 transition-all"
+                    >
+                      <Timer className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Disappearing Messages</span>
+                    </button>
                     <button
                       type="button"
                       onClick={() => {
@@ -1279,6 +1568,15 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, on
                         <span>Forward</span>
                       </button>
 
+                      {/* Star / Unstar Message */}
+                      <button
+                        onClick={() => handleToggleStar(msg)}
+                        className="w-full px-2.5 py-2 rounded-xl text-left text-xs text-amber-300 hover:text-amber-200 hover:bg-dark-800 flex items-center gap-2 transition-all"
+                      >
+                        <Star className={`w-3.5 h-3.5 ${starredMessageIds.has(msg.id) || msg.is_starred ? 'fill-amber-400 text-amber-400' : 'text-amber-400'}`} />
+                        <span>{starredMessageIds.has(msg.id) || msg.is_starred ? 'Unstar Message' : 'Star Message'}</span>
+                      </button>
+
                       {/* Pin / Unpin Message */}
                       <button
                         onClick={() => handleTogglePin(msg)}
@@ -1354,8 +1652,62 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, on
                       </div>
                     )}
 
-                    {/* Voice Note Player, Image Attachment, File Attachment, or Text */}
-                    {msg.type === 'audio' && msg.media_url && !isDeleted ? (
+                    {/* Poll Card Renderer */}
+                    {(msg.type === 'poll' || msg.poll_data) && msg.poll_data && !isDeleted ? (
+                      <div className="space-y-3 py-1 min-w-[240px] max-w-sm">
+                        <div className="flex items-center gap-2">
+                          <div className="p-1.5 rounded-lg bg-amber-500/20 text-amber-300 shrink-0">
+                            <BarChart2 className="w-4 h-4" />
+                          </div>
+                          <h4 className="text-xs sm:text-sm font-black text-white">{msg.poll_data.question}</h4>
+                        </div>
+
+                        <div className="space-y-2">
+                          {msg.poll_data.options.map((opt) => {
+                            const hasVoted = user ? opt.votes?.includes(user.id) : false;
+                            const count = opt.votes?.length || 0;
+                            const total = msg.poll_data?.totalVotes || 0;
+                            const percent = total > 0 ? Math.round((count / total) * 100) : 0;
+
+                            return (
+                              <button
+                                key={opt.id}
+                                type="button"
+                                onClick={() => handleVotePoll(msg.id, opt.id)}
+                                className={`w-full relative overflow-hidden rounded-xl border p-2.5 text-left transition-all active:scale-[0.98] ${
+                                  hasVoted
+                                    ? 'bg-amber-500/20 border-gold-400 text-white'
+                                    : 'bg-dark-850/80 hover:bg-dark-800 border-white/10 text-dark-200 hover:text-white'
+                                }`}
+                              >
+                                {/* Background percentage progress fill */}
+                                <div
+                                  className={`absolute top-0 bottom-0 left-0 transition-all duration-500 rounded-l-xl ${
+                                    hasVoted ? 'bg-amber-500/30' : 'bg-white/10'
+                                  }`}
+                                  style={{ width: `${percent}%` }}
+                                />
+                                
+                                <div className="relative flex items-center justify-between z-10">
+                                  <div className="flex items-center gap-2 min-w-0 pr-2">
+                                    <div className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${
+                                      hasVoted ? 'border-amber-400 bg-amber-400 text-dark-950' : 'border-dark-500'
+                                    }`}>
+                                      {hasVoted && <Check className="w-3 h-3 stroke-[3]" />}
+                                    </div>
+                                    <span className="text-xs font-semibold truncate">{opt.text}</span>
+                                  </div>
+                                  <span className="text-xs font-mono font-bold text-amber-300 shrink-0">{percent}% ({count})</span>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <div className="text-[10px] text-dark-400 font-medium text-right">
+                          {msg.poll_data.totalVotes || 0} total {msg.poll_data.totalVotes === 1 ? 'vote' : 'votes'}
+                        </div>
+                      </div>
+                    ) : msg.type === 'audio' && msg.media_url && !isDeleted ? (
                       <VoicePlayer audioUrl={msg.media_url} isMe={isMe} />
                     ) : msg.type === 'image' && msg.media_url && !isDeleted ? (
                       <div className="mb-2 rounded-xl overflow-hidden max-h-72 bg-dark-950 border border-white/10 group/img relative cursor-pointer">
@@ -1404,6 +1756,11 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, on
                         isMe ? 'text-indigo-200 justify-end' : 'text-dark-400 justify-start'
                       }`}
                     >
+                      {(starredMessageIds.has(msg.id) || msg.is_starred) && (
+                        <span title="Starred Message">
+                          <Star className="w-3 h-3 fill-amber-400 text-amber-400 shrink-0" />
+                        </span>
+                      )}
                       {msg.edited_at && <span className="text-[9px] italic opacity-80">(edited)</span>}
                       <span>{formatTime(msg.created_at)}</span>
                       {isMe && !isDeleted && (
@@ -1601,6 +1958,16 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, on
 
           <button
             type="button"
+            onClick={() => setIsPollModalOpen(true)}
+            disabled={uploading}
+            className="p-2 sm:p-2.5 rounded-xl bg-dark-850 hover:bg-dark-800 text-dark-400 hover:text-amber-200 border border-gold-500/15 transition-all shadow-xs touch-target flex items-center justify-center shrink-0"
+            title="Create Poll"
+          >
+            <BarChart2 className="w-4 h-4 text-gold-400" />
+          </button>
+
+          <button
+            type="button"
             onClick={() => setShowEmojis(!showEmojis)}
             className={`p-2 sm:p-2.5 rounded-xl border transition-all touch-target flex items-center justify-center shrink-0 ${
               showEmojis
@@ -1642,6 +2009,36 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, on
           )}
         </form>
       )}
+
+      {/* Create Poll Modal */}
+      <CreatePollModal
+        isOpen={isPollModalOpen}
+        onClose={() => setIsPollModalOpen(false)}
+        onSubmit={handleCreatePoll}
+      />
+
+      {/* Starred Messages Modal */}
+      <StarredMessagesModal
+        isOpen={isStarredModalOpen}
+        onClose={() => setIsStarredModalOpen(false)}
+        onJumpToMessage={(msg) => {
+          const el = document.getElementById(`msg-${msg.id}`);
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            el.classList.add('ring-2', 'ring-gold-400', 'ring-offset-2', 'ring-offset-dark-950');
+            setTimeout(() => {
+              el.classList.remove('ring-2', 'ring-gold-400', 'ring-offset-2', 'ring-offset-dark-950');
+            }, 2500);
+          }
+        }}
+        onUnstar={(msgId) => {
+          setStarredMessageIds(prev => {
+            const next = new Set(prev);
+            next.delete(msgId);
+            return next;
+          });
+        }}
+      />
 
       {/* Fullscreen HD Media Viewer Modal */}
       {viewingMediaUrl && (

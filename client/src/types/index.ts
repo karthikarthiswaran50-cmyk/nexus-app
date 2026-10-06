@@ -33,7 +33,19 @@ export interface UserSettings {
   who_can_see_profile_photo?: 'everyone' | 'nobody';
 }
 
-export type MessageType = 'text' | 'image' | 'audio' | 'video' | 'file' | 'system' | 'call_log';
+export type MessageType = 'text' | 'image' | 'audio' | 'video' | 'file' | 'system' | 'call_log' | 'poll';
+
+export interface PollOption {
+  id: string;
+  text: string;
+  votes: string[]; // array of userIds
+}
+
+export interface PollData {
+  question: string;
+  options: PollOption[];
+  totalVotes: number;
+}
 
 export interface MessageReaction {
   [emoji: string]: string[]; // emoji -> array of userIds
@@ -50,6 +62,8 @@ export interface Message {
   media_url?: string;
   file_name?: string;
   file_size?: number;
+  poll_data?: PollData;
+  is_starred?: boolean;
   is_read: boolean;
   reactions?: MessageReaction;
   reply_to_id?: string;
@@ -109,6 +123,7 @@ export interface Conversation {
   id: string;
   user1_id: string;
   user2_id: string;
+  disappearing_seconds?: number;
   last_message_at: string;
   created_at: string;
   other_user?: User;

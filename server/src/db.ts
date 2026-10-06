@@ -258,6 +258,14 @@ export function initDatabase() {
       auth TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS starred_messages (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(user_id, message_id)
+    );
   `);
 
   // 2. Safe idempotent column migrations for existing databases created before newer fields were added
@@ -271,6 +279,8 @@ export function initDatabase() {
   ensureColumn('user_settings', 'who_can_see_online_status', "TEXT DEFAULT 'everyone'");
   ensureColumn('user_settings', 'who_can_see_profile_photo', "TEXT DEFAULT 'everyone'");
 
+  ensureColumn('conversations', 'disappearing_seconds', 'INTEGER DEFAULT 0');
+
   ensureColumn('messages', 'group_id', 'TEXT');
   ensureColumn('messages', 'file_name', 'TEXT');
   ensureColumn('messages', 'file_size', 'INTEGER');
@@ -278,6 +288,7 @@ export function initDatabase() {
   ensureColumn('messages', 'reply_to_id', 'TEXT');
   ensureColumn('messages', 'reply_to_content', 'TEXT');
   ensureColumn('messages', 'reply_to_sender', 'TEXT');
+  ensureColumn('messages', 'poll_data', 'TEXT');
   ensureColumn('messages', 'is_deleted_for_all', 'INTEGER DEFAULT 0');
   ensureColumn('messages', 'deleted_for_users', "TEXT DEFAULT '[]'");
   ensureColumn('messages', 'edited_at', 'TEXT');
@@ -394,14 +405,24 @@ async function initPostgresAndRestore() {
 
       ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(20) DEFAULT 'user';
       ALTER TABLE users ADD COLUMN IF NOT EXISTS is_banned INT DEFAULT 0;
+      ALTER TABLE conversations ADD COLUMN IF NOT EXISTS disappearing_seconds INT DEFAULT 0;
       ALTER TABLE messages ADD COLUMN IF NOT EXISTS group_id VARCHAR(100);
       ALTER TABLE messages ADD COLUMN IF NOT EXISTS edited_at TIMESTAMPTZ;
       ALTER TABLE messages ADD COLUMN IF NOT EXISTS file_name VARCHAR(255);
       ALTER TABLE messages ADD COLUMN IF NOT EXISTS file_size INT;
+      ALTER TABLE messages ADD COLUMN IF NOT EXISTS poll_data TEXT;
       ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS who_can_call_me VARCHAR(50) DEFAULT 'everyone';
       ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS who_can_see_last_seen VARCHAR(50) DEFAULT 'everyone';
       ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS who_can_see_online_status VARCHAR(50) DEFAULT 'everyone';
       ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS who_can_see_profile_photo VARCHAR(50) DEFAULT 'everyone';
+
+      CREATE TABLE IF NOT EXISTS starred_messages (
+        id VARCHAR(100) PRIMARY KEY,
+        user_id VARCHAR(100) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        message_id VARCHAR(100) NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(user_id, message_id)
+      );
 
       CREATE TABLE IF NOT EXISTS groups (
         id VARCHAR(100) PRIMARY KEY,
@@ -625,6 +646,27 @@ async function initPostgresAndRestore() {
         console.warn('Story views restore note:', vErr.message);
       }
 
+      // Restore starred_messages
+      try {
+        const starRes = await pgPool.query('SELECT * FROM starred_messages');
+        const insertStar = db.prepare(`
+          INSERT OR REPLACE INTO starred_messages (id, user_id, message_id, created_at)
+          VALUES (?, ?, ?, ?)
+        `);
+        for (const sr of starRes.rows) {
+          try {
+            insertStar.run(
+              sr.id,
+              sr.user_id,
+              sr.message_id,
+              toIsoSafe(sr.created_at)
+            );
+          } catch (_) {}
+        }
+      } catch (starErr: any) {
+        console.warn('Starred messages restore note:', starErr.message);
+      }
+
       console.log('✅ PostgreSQL database restored successfully! User sessions, accounts, and push subscriptions are intact.');
     } else {
       console.log('🌱 PostgreSQL is empty. Ready for authentic user registrations.');
@@ -808,15 +850,17 @@ export function persistMessageToPg(msg: {
   media_url?: string | null;
   file_name?: string | null;
   file_size?: number | null;
+  poll_data?: string | null;
   is_read?: number;
   edited_at?: string | null;
 }) {
   if (!pgPool) return;
   pgPool.query(
-    `INSERT INTO messages (id, conversation_id, group_id, sender_id, receiver_id, content, type, media_url, file_name, file_size, is_read, edited_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+    `INSERT INTO messages (id, conversation_id, group_id, sender_id, receiver_id, content, type, media_url, file_name, file_size, poll_data, is_read, edited_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
      ON CONFLICT (id) DO UPDATE SET
        content = EXCLUDED.content,
+       poll_data = EXCLUDED.poll_data,
        edited_at = EXCLUDED.edited_at,
        is_read = EXCLUDED.is_read`,
     [
@@ -830,10 +874,43 @@ export function persistMessageToPg(msg: {
       msg.media_url || null,
       msg.file_name || null,
       msg.file_size || null,
+      msg.poll_data || null,
       msg.is_read || 0,
       msg.edited_at ? new Date(msg.edited_at) : null,
     ]
   ).catch(err => console.error('Error persisting message to PostgreSQL:', err.message));
+}
+
+export function persistStarToPg(userId: string, messageId: string, isStarred: boolean) {
+  if (!pgPool) return;
+  if (isStarred) {
+    const id = 'star_' + Math.random().toString(36).substring(2, 10);
+    pgPool.query(
+      `INSERT INTO starred_messages (id, user_id, message_id) VALUES ($1, $2, $3) ON CONFLICT (user_id, message_id) DO NOTHING`,
+      [id, userId, messageId]
+    ).catch(err => console.error('Error persisting star to PostgreSQL:', err.message));
+  } else {
+    pgPool.query(
+      `DELETE FROM starred_messages WHERE user_id = $1 AND message_id = $2`,
+      [userId, messageId]
+    ).catch(err => console.error('Error unstarring from PostgreSQL:', err.message));
+  }
+}
+
+export function persistDisappearingTimerToPg(conversationId: string, seconds: number) {
+  if (!pgPool) return;
+  pgPool.query(
+    `UPDATE conversations SET disappearing_seconds = $1 WHERE id = $2`,
+    [seconds, conversationId]
+  ).catch(err => console.error('Error persisting disappearing timer to PostgreSQL:', err.message));
+}
+
+export function persistPollVoteToPg(messageId: string, pollDataJson: string) {
+  if (!pgPool) return;
+  pgPool.query(
+    `UPDATE messages SET poll_data = $1 WHERE id = $2`,
+    [pollDataJson, messageId]
+  ).catch(err => console.error('Error persisting poll vote to PostgreSQL:', err.message));
 }
 
 export function persistGroupToPg(group: {
@@ -1101,6 +1178,7 @@ export async function purgeUserPermanently(userId: string): Promise<boolean> {
 
     // 2. Delete SQLite records across all dependent and standalone tables
     db.prepare('DELETE FROM push_subscriptions WHERE user_id = ?').run(userId);
+    db.prepare('DELETE FROM starred_messages WHERE user_id = ?').run(userId);
     db.prepare('DELETE FROM user_activities WHERE user_id = ?').run(userId);
     db.prepare('DELETE FROM story_views WHERE viewer_id = ?').run(userId);
     db.prepare('DELETE FROM stories WHERE user_id = ?').run(userId);
@@ -1119,6 +1197,7 @@ export async function purgeUserPermanently(userId: string): Promise<boolean> {
     if (pgPool) {
       try {
         await pgPool.query('DELETE FROM push_subscriptions WHERE user_id = $1', [userId]);
+        await pgPool.query('DELETE FROM starred_messages WHERE user_id = $1', [userId]);
         await pgPool.query('DELETE FROM user_activities WHERE user_id = $1', [userId]);
         await pgPool.query('DELETE FROM user_reports WHERE reporter_id = $1 OR reported_user_id = $1', [userId, userId]);
         await pgPool.query('DELETE FROM blocked_users WHERE user_id = $1 OR blocked_user_id = $1', [userId, userId]);

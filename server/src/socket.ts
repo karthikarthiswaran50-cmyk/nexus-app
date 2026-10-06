@@ -193,17 +193,18 @@ export function setupSocket(io: Server) {
     socket.on('chat:send_message', async (data: {
       receiverId: string;
       content: string;
-      type?: 'text' | 'image' | 'audio' | 'video' | 'file' | 'system' | 'call_log';
+      type?: 'text' | 'image' | 'audio' | 'video' | 'file' | 'system' | 'call_log' | 'poll';
       mediaUrl?: string;
       fileName?: string;
       fileSize?: number;
+      pollData?: any;
       replyToId?: string;
       replyToContent?: string;
       replyToSender?: string;
     }) => {
       try {
-        const { receiverId, content, type = 'text', mediaUrl, fileName, fileSize, replyToId, replyToContent, replyToSender } = data;
-        if (typeof receiverId !== 'string' || !receiverId.trim() || (!content && !mediaUrl)) return;
+        const { receiverId, content, type = 'text', mediaUrl, fileName, fileSize, pollData, replyToId, replyToContent, replyToSender } = data;
+        if (typeof receiverId !== 'string' || !receiverId.trim() || (!content && !mediaUrl && !pollData)) return;
 
         // Check if either user blocked the other
         const isBlocked = db.prepare(`
@@ -216,7 +217,7 @@ export function setupSocket(io: Server) {
         }
 
         const safeContent = typeof content === 'string' ? content.slice(0, 10000) : '';
-        const safeType = ['text', 'image', 'audio', 'video', 'file', 'system', 'call_log'].includes(type) ? type : 'text';
+        const safeType = ['text', 'image', 'audio', 'video', 'file', 'system', 'call_log', 'poll'].includes(type) ? type : 'text';
         const safeMediaUrl = typeof mediaUrl === 'string' && (mediaUrl.startsWith('/uploads/') || mediaUrl.startsWith('https://'))
           ? mediaUrl.slice(0, 500)
           : undefined;
@@ -231,6 +232,7 @@ export function setupSocket(io: Server) {
           mediaUrl: safeMediaUrl,
           fileName: safeFileName,
           fileSize: safeFileSize,
+          pollData,
           replyToId: typeof replyToId === 'string' ? replyToId.slice(0, 100) : undefined,
           replyToContent: typeof replyToContent === 'string' ? replyToContent.slice(0, 500) : undefined,
           replyToSender: typeof replyToSender === 'string' ? replyToSender.slice(0, 100) : undefined,
@@ -423,17 +425,18 @@ export function setupSocket(io: Server) {
     socket.on('group:send_message', async (data: {
       groupId: string;
       content: string;
-      type?: 'text' | 'image' | 'audio' | 'video' | 'file' | 'system' | 'call_log';
+      type?: 'text' | 'image' | 'audio' | 'video' | 'file' | 'system' | 'call_log' | 'poll';
       mediaUrl?: string;
       fileName?: string;
       fileSize?: number;
+      pollData?: any;
       replyToId?: string;
       replyToContent?: string;
       replyToSender?: string;
     }) => {
       try {
-        const { groupId, content, type = 'text', mediaUrl, fileName, fileSize, replyToId, replyToContent, replyToSender } = data;
-        if (!groupId || (!content && !mediaUrl)) return;
+        const { groupId, content, type = 'text', mediaUrl, fileName, fileSize, pollData, replyToId, replyToContent, replyToSender } = data;
+        if (!groupId || (!content && !mediaUrl && !pollData)) return;
 
         // Verify membership
         const isMember = db.prepare('SELECT role FROM group_members WHERE group_id = ? AND user_id = ?').get(groupId, userId);
@@ -443,7 +446,7 @@ export function setupSocket(io: Server) {
         }
 
         const safeContent = typeof content === 'string' ? content.slice(0, 10000) : '';
-        const safeType = ['text', 'image', 'audio', 'video', 'file', 'system', 'call_log'].includes(type) ? type : 'text';
+        const safeType = ['text', 'image', 'audio', 'video', 'file', 'system', 'call_log', 'poll'].includes(type) ? type : 'text';
         const safeMediaUrl = typeof mediaUrl === 'string' && (mediaUrl.startsWith('/uploads/') || mediaUrl.startsWith('https://'))
           ? mediaUrl.slice(0, 500)
           : undefined;
@@ -458,6 +461,7 @@ export function setupSocket(io: Server) {
           mediaUrl: safeMediaUrl,
           fileName: safeFileName,
           fileSize: safeFileSize,
+          pollData,
           replyToId: typeof replyToId === 'string' ? replyToId.slice(0, 100) : undefined,
           replyToContent: typeof replyToContent === 'string' ? replyToContent.slice(0, 500) : undefined,
           replyToSender: typeof replyToSender === 'string' ? replyToSender.slice(0, 100) : undefined,
@@ -467,6 +471,79 @@ export function setupSocket(io: Server) {
         io.to(`group:${groupId}`).emit('group:new_message', result);
       } catch (err) {
         console.error('Socket group:send_message error:', err);
+      }
+    });
+
+    // Group & Direct Poll Voting Handler
+    socket.on('chat:poll_vote', (data: { messageId: string; optionId: string; receiverId?: string; groupId?: string }) => {
+      try {
+        const { messageId, optionId, receiverId, groupId } = data;
+        const msg = db.prepare('SELECT * FROM messages WHERE id = ?').get(messageId) as any;
+        if (!msg || !msg.poll_data) return;
+
+        let pollData: any;
+        try {
+          pollData = typeof msg.poll_data === 'string' ? JSON.parse(msg.poll_data) : msg.poll_data;
+        } catch (_) { return; }
+
+        let totalVotes = 0;
+        for (const opt of pollData.options) {
+          if (!Array.isArray(opt.votes)) opt.votes = [];
+          const userIdx = opt.votes.indexOf(userId);
+          if (opt.id === optionId) {
+            if (userIdx > -1) {
+              opt.votes.splice(userIdx, 1);
+            } else {
+              opt.votes.push(userId);
+            }
+          } else {
+            if (userIdx > -1) {
+              opt.votes.splice(userIdx, 1);
+            }
+          }
+          totalVotes += opt.votes.length;
+        }
+        pollData.totalVotes = totalVotes;
+        const pollDataJson = JSON.stringify(pollData);
+        db.prepare('UPDATE messages SET poll_data = ? WHERE id = ?').run(pollDataJson, messageId);
+
+        const payload = {
+          messageId,
+          pollData,
+          conversationId: msg.conversation_id,
+          groupId: msg.group_id,
+        };
+
+        socket.emit('chat:poll_updated', payload);
+        if (groupId) {
+          io.to(`group:${groupId}`).emit('chat:poll_updated', payload);
+        } else if (receiverId) {
+          const receiverSockets = getSocketsForUser(receiverId);
+          receiverSockets.forEach((sId) => {
+            io.to(sId).emit('chat:poll_updated', payload);
+          });
+        }
+      } catch (err) {
+        console.error('Socket chat:poll_vote error:', err);
+      }
+    });
+
+    // Disappearing Messages Timer Handler
+    socket.on('chat:set_disappearing', (data: { conversationId: string; receiverId: string; seconds: number }) => {
+      try {
+        const { conversationId, receiverId, seconds } = data;
+        db.prepare('UPDATE conversations SET disappearing_seconds = ? WHERE id = ?').run(seconds, conversationId);
+        
+        const payload = { conversationId, seconds, updatedBy: userId };
+        socket.emit('chat:disappearing_updated', payload);
+        if (receiverId) {
+          const receiverSockets = getSocketsForUser(receiverId);
+          receiverSockets.forEach((sId) => {
+            io.to(sId).emit('chat:disappearing_updated', payload);
+          });
+        }
+      } catch (err) {
+        console.error('Socket chat:set_disappearing error:', err);
       }
     });
 

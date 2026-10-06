@@ -1,8 +1,8 @@
 import { Request, Response } from 'express';
-import { db, pgPool, persistMessageToPg, persistGroupToPg, persistGroupMemberToPg, recordActivity, upsertUserToSqlite } from '../db.js';
+import { db, pgPool, persistMessageToPg, persistGroupToPg, persistGroupMemberToPg, persistStarToPg, persistDisappearingTimerToPg, persistPollVoteToPg, recordActivity, upsertUserToSqlite } from '../db.js';
 import { AuthenticatedRequest } from '../middleware/auth.js';
 import { getUserWithPlan } from './auth.js';
-import { Conversation, Message, Group, GroupMember } from '../types.js';
+import { Conversation, Message, Group, GroupMember, PollData } from '../types.js';
 import { sanitizeText } from '../utils/sanitize.js';
 
 export async function getConversations(req: AuthenticatedRequest, res: Response): Promise<void> {
@@ -69,13 +69,21 @@ export async function getMessages(req: AuthenticatedRequest, res: Response): Pro
 
     // Find conversation
     const conv = db.prepare(`
-      SELECT id FROM conversations
+      SELECT id, disappearing_seconds FROM conversations
       WHERE (user1_id = ? AND user2_id = ?) OR (user1_id = ? AND user2_id = ?)
-    `).get(userId, otherUserId, otherUserId, userId) as unknown as { id: string } | undefined;
+    `).get(userId, otherUserId, otherUserId, userId) as unknown as { id: string; disappearing_seconds?: number } | undefined;
 
     if (!conv) {
-      res.json({ messages: [], conversationId: null });
+      res.json({ messages: [], conversationId: null, disappearing_seconds: 0 });
       return;
+    }
+
+    // Auto-cleanup disappearing messages if active for this conversation
+    if (conv.disappearing_seconds && conv.disappearing_seconds > 0) {
+      try {
+        const cutoff = new Date(Date.now() - conv.disappearing_seconds * 1000).toISOString();
+        db.prepare('DELETE FROM messages WHERE conversation_id = ? AND created_at < ?').run(conv.id, cutoff);
+      } catch (_) {}
     }
 
     // Mark unread messages as read
@@ -85,12 +93,17 @@ export async function getMessages(req: AuthenticatedRequest, res: Response): Pro
       WHERE conversation_id = ? AND receiver_id = ? AND is_read = 0
     `).run(conv.id, userId);
 
+    // Fetch user's starred message IDs
+    const starredIds = new Set(
+      (db.prepare('SELECT message_id FROM starred_messages WHERE user_id = ?').all(userId) as any[]).map(r => r.message_id)
+    );
+
     let rawMessages: any[];
     if (beforeId) {
       // Cursor-based pagination: get messages older than the given message ID
       const cursor = db.prepare('SELECT created_at FROM messages WHERE id = ?').get(beforeId) as any;
       if (!cursor) {
-        res.json({ messages: [], conversationId: conv.id });
+        res.json({ messages: [], conversationId: conv.id, disappearing_seconds: conv.disappearing_seconds || 0 });
         return;
       }
       rawMessages = (db.prepare(`
@@ -109,7 +122,7 @@ export async function getMessages(req: AuthenticatedRequest, res: Response): Pro
       `).all(conv.id, limitParam) as unknown) as any[];
     }
 
-    // Parse reactions, deleted_for_users, and filter deleted for current user
+    // Parse reactions, deleted_for_users, poll_data, and filter deleted for current user
     const messages: Message[] = rawMessages
       .filter((m) => {
         let deletedUsers: string[] = [];
@@ -124,6 +137,13 @@ export async function getMessages(req: AuthenticatedRequest, res: Response): Pro
           reactions = m.reactions ? JSON.parse(m.reactions) : {};
         } catch (e) {}
 
+        let pollData: any = undefined;
+        if (m.poll_data) {
+          try {
+            pollData = typeof m.poll_data === 'string' ? JSON.parse(m.poll_data) : m.poll_data;
+          } catch (_) {}
+        }
+
         const isDeletedForAll = !!m.is_deleted_for_all;
 
         return {
@@ -136,6 +156,8 @@ export async function getMessages(req: AuthenticatedRequest, res: Response): Pro
           media_url: isDeletedForAll ? undefined : m.media_url,
           file_name: isDeletedForAll ? undefined : m.file_name,
           file_size: isDeletedForAll ? undefined : m.file_size,
+          poll_data: isDeletedForAll ? undefined : pollData,
+          is_starred: starredIds.has(m.id),
           is_read: !!m.is_read,
           reactions,
           reply_to_id: m.reply_to_id,
@@ -148,7 +170,12 @@ export async function getMessages(req: AuthenticatedRequest, res: Response): Pro
         };
       });
 
-    res.json({ messages, conversationId: conv.id, hasMore: rawMessages.length === limitParam });
+    res.json({
+      messages,
+      conversationId: conv.id,
+      disappearing_seconds: conv.disappearing_seconds || 0,
+      hasMore: rawMessages.length === limitParam
+    });
   } catch (error) {
     console.error('getMessages error:', error);
     res.status(500).json({ error: 'Failed to retrieve messages.' });
@@ -159,15 +186,16 @@ export function saveMessage(params: {
   senderId: string;
   receiverId: string;
   content: string;
-  type?: 'text' | 'image' | 'audio' | 'video' | 'file' | 'system' | 'call_log';
+  type?: 'text' | 'image' | 'audio' | 'video' | 'file' | 'system' | 'call_log' | 'poll';
   mediaUrl?: string;
   fileName?: string;
   fileSize?: number;
+  pollData?: PollData;
   replyToId?: string;
   replyToContent?: string;
   replyToSender?: string;
 }): { message: Message; conversationId: string } {
-  const { senderId, receiverId, content, type = 'text', mediaUrl, fileName, fileSize, replyToId, replyToContent, replyToSender } = params;
+  const { senderId, receiverId, content, type = 'text', mediaUrl, fileName, fileSize, pollData, replyToId, replyToContent, replyToSender } = params;
 
   // Find or create conversation
   let conv = db.prepare(`
@@ -194,10 +222,11 @@ export function saveMessage(params: {
 
   const msgId = 'msg_' + Math.random().toString(36).substring(2, 10) + Date.now().toString(36);
   const cleanContent = type === 'text' ? sanitizeText(content) : content;
+  const pollDataJson = pollData ? JSON.stringify(pollData) : null;
 
   db.prepare(`
-    INSERT INTO messages (id, conversation_id, sender_id, receiver_id, content, type, media_url, file_name, file_size, is_read, reactions, reply_to_id, reply_to_content, reply_to_sender, is_deleted_for_all, deleted_for_users, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, '{}', ?, ?, ?, 0, '[]', ?)
+    INSERT INTO messages (id, conversation_id, sender_id, receiver_id, content, type, media_url, file_name, file_size, poll_data, is_read, reactions, reply_to_id, reply_to_content, reply_to_sender, is_deleted_for_all, deleted_for_users, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, '{}', ?, ?, ?, 0, '[]', ?)
   `).run(
     msgId,
     conv.id,
@@ -208,6 +237,7 @@ export function saveMessage(params: {
     mediaUrl || null,
     fileName || null,
     fileSize || null,
+    pollDataJson,
     replyToId || null,
     replyToContent || null,
     replyToSender || null,
@@ -223,6 +253,7 @@ export function saveMessage(params: {
     content: cleanContent,
     type,
     media_url: mediaUrl || undefined,
+    poll_data: pollDataJson,
     is_read: 0,
   });
 
@@ -244,6 +275,7 @@ export function saveMessage(params: {
     media_url: mediaUrl,
     file_name: fileName,
     file_size: fileSize,
+    poll_data: pollData,
     is_read: false,
     reactions: {},
     reply_to_id: replyToId,
@@ -890,9 +922,22 @@ export async function getGroupMessages(req: AuthenticatedRequest, res: Response)
       `).all(id, limitParam) as any[]);
     }
 
+    // Fetch user's starred message IDs
+    const starredIds = new Set(
+      (db.prepare('SELECT message_id FROM starred_messages WHERE user_id = ?').all(userId) as any[]).map(r => r.message_id)
+    );
+
     const raw = rawMessages.map(m => {
       let reactions = {};
       try { reactions = m.reactions ? JSON.parse(m.reactions) : {}; } catch (e) {}
+      
+      let pollData: any = undefined;
+      if (m.poll_data) {
+        try {
+          pollData = typeof m.poll_data === 'string' ? JSON.parse(m.poll_data) : m.poll_data;
+        } catch (_) {}
+      }
+
       const isDeletedForAll = !!m.is_deleted_for_all;
 
       return {
@@ -904,6 +949,8 @@ export async function getGroupMessages(req: AuthenticatedRequest, res: Response)
         media_url: isDeletedForAll ? undefined : m.media_url,
         file_name: isDeletedForAll ? undefined : m.file_name,
         file_size: isDeletedForAll ? undefined : m.file_size,
+        poll_data: isDeletedForAll ? undefined : pollData,
+        is_starred: starredIds.has(m.id),
         is_read: true,
         reactions,
         reply_to_id: m.reply_to_id,
@@ -926,15 +973,16 @@ export function saveGroupMessage(params: {
   senderId: string;
   groupId: string;
   content: string;
-  type?: 'text' | 'image' | 'audio' | 'video' | 'file' | 'system' | 'call_log';
+  type?: 'text' | 'image' | 'audio' | 'video' | 'file' | 'system' | 'call_log' | 'poll';
   mediaUrl?: string;
   fileName?: string;
   fileSize?: number;
+  pollData?: PollData;
   replyToId?: string;
   replyToContent?: string;
   replyToSender?: string;
 }): { message: Message } | null {
-  const { senderId, groupId, content, type = 'text', mediaUrl, fileName, fileSize, replyToId, replyToContent, replyToSender } = params;
+  const { senderId, groupId, content, type = 'text', mediaUrl, fileName, fileSize, pollData, replyToId, replyToContent, replyToSender } = params;
 
   // Check sender is member
   const mem = db.prepare('SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?').get(groupId, senderId);
@@ -943,10 +991,11 @@ export function saveGroupMessage(params: {
   const now = new Date().toISOString();
   const msgId = 'gmsg_' + Math.random().toString(36).substring(2, 10) + Date.now().toString(36);
   const cleanContent = type === 'text' ? sanitizeText(content) : content;
+  const pollDataJson = pollData ? JSON.stringify(pollData) : null;
 
   db.prepare(`
-    INSERT INTO messages (id, group_id, sender_id, receiver_id, content, type, media_url, file_name, file_size, is_read, reactions, reply_to_id, reply_to_content, reply_to_sender, is_deleted_for_all, deleted_for_users, created_at)
-    VALUES (?, ?, ?, '', ?, ?, ?, ?, ?, 1, '{}', ?, ?, ?, 0, '[]', ?)
+    INSERT INTO messages (id, group_id, sender_id, receiver_id, content, type, media_url, file_name, file_size, poll_data, is_read, reactions, reply_to_id, reply_to_content, reply_to_sender, is_deleted_for_all, deleted_for_users, created_at)
+    VALUES (?, ?, ?, '', ?, ?, ?, ?, ?, ?, 1, '{}', ?, ?, ?, 0, '[]', ?)
   `).run(
     msgId,
     groupId,
@@ -956,6 +1005,7 @@ export function saveGroupMessage(params: {
     mediaUrl || null,
     fileName || null,
     fileSize || null,
+    pollDataJson,
     replyToId || null,
     replyToContent || null,
     replyToSender || null,
@@ -971,6 +1021,7 @@ export function saveGroupMessage(params: {
     media_url: mediaUrl,
     file_name: fileName,
     file_size: fileSize,
+    poll_data: pollDataJson,
     is_read: 1,
   });
 
@@ -984,6 +1035,7 @@ export function saveGroupMessage(params: {
       media_url: mediaUrl,
       file_name: fileName,
       file_size: fileSize,
+      poll_data: pollData,
       is_read: true,
       reactions: {},
       reply_to_id: replyToId,
@@ -993,4 +1045,168 @@ export function saveGroupMessage(params: {
       sender: getUserWithPlan(senderId) || undefined,
     },
   };
+}
+
+export async function toggleStarMessage(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const userId = req.user?.userId;
+    const { id } = req.params;
+    if (!userId || !id) {
+      res.status(400).json({ error: 'Missing parameters' });
+      return;
+    }
+
+    const existing = db.prepare('SELECT id FROM starred_messages WHERE user_id = ? AND message_id = ?').get(userId, id) as any;
+    let isStarred = false;
+    if (existing) {
+      db.prepare('DELETE FROM starred_messages WHERE user_id = ? AND message_id = ?').run(userId, id);
+      persistStarToPg(userId, id, false);
+      isStarred = false;
+    } else {
+      const starId = 'star_' + Math.random().toString(36).substring(2, 10);
+      db.prepare('INSERT OR REPLACE INTO starred_messages (id, user_id, message_id, created_at) VALUES (?, ?, ?, ?)').run(
+        starId, userId, id, new Date().toISOString()
+      );
+      persistStarToPg(userId, id, true);
+      isStarred = true;
+    }
+
+    res.json({ success: true, isStarred, messageId: id });
+  } catch (error: any) {
+    console.error('toggleStarMessage error:', error);
+    res.status(500).json({ error: 'Failed to toggle message star' });
+  }
+}
+
+export async function getStarredMessages(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
+    const rows = db.prepare(`
+      SELECT m.*, sm.created_at as starred_at
+      FROM starred_messages sm
+      JOIN messages m ON sm.message_id = m.id
+      WHERE sm.user_id = ?
+      ORDER BY sm.created_at DESC
+    `).all(userId) as any[];
+
+    const messages = rows.map((m) => {
+      let reactions = {};
+      try { reactions = m.reactions ? JSON.parse(m.reactions) : {}; } catch (e) {}
+      let pollData = undefined;
+      if (m.poll_data) {
+        try { pollData = typeof m.poll_data === 'string' ? JSON.parse(m.poll_data) : m.poll_data; } catch (_) {}
+      }
+
+      return {
+        id: m.id,
+        conversation_id: m.conversation_id,
+        group_id: m.group_id,
+        sender_id: m.sender_id,
+        receiver_id: m.receiver_id,
+        content: m.content,
+        type: m.type,
+        media_url: m.media_url,
+        file_name: m.file_name,
+        file_size: m.file_size,
+        poll_data: pollData,
+        is_starred: true,
+        is_read: !!m.is_read,
+        reactions,
+        reply_to_id: m.reply_to_id,
+        reply_to_content: m.reply_to_content,
+        reply_to_sender: m.reply_to_sender,
+        created_at: m.created_at,
+        starred_at: m.starred_at,
+        sender: getUserWithPlan(m.sender_id) || undefined,
+      };
+    });
+
+    res.json({ starredMessages: messages });
+  } catch (error: any) {
+    console.error('getStarredMessages error:', error);
+    res.status(500).json({ error: 'Failed to fetch starred messages' });
+  }
+}
+
+export async function votePoll(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const userId = req.user?.userId;
+    const { id } = req.params;
+    const { optionId } = req.body;
+
+    if (!userId || !id || !optionId) {
+      res.status(400).json({ error: 'Missing parameters' });
+      return;
+    }
+
+    const msg = db.prepare('SELECT * FROM messages WHERE id = ?').get(id) as any;
+    if (!msg || !msg.poll_data) {
+      res.status(404).json({ error: 'Poll not found' });
+      return;
+    }
+
+    let pollData: any;
+    try {
+      pollData = typeof msg.poll_data === 'string' ? JSON.parse(msg.poll_data) : msg.poll_data;
+    } catch (_) {
+      res.status(500).json({ error: 'Invalid poll data' });
+      return;
+    }
+
+    // Toggle or cast vote
+    let totalVotes = 0;
+    for (const opt of pollData.options) {
+      if (!Array.isArray(opt.votes)) opt.votes = [];
+      const userIdx = opt.votes.indexOf(userId);
+      if (opt.id === optionId) {
+        if (userIdx > -1) {
+          opt.votes.splice(userIdx, 1); // unvote
+        } else {
+          opt.votes.push(userId); // vote
+        }
+      } else {
+        // Single choice poll: clear vote from other options
+        if (userIdx > -1) {
+          opt.votes.splice(userIdx, 1);
+        }
+      }
+      totalVotes += opt.votes.length;
+    }
+    pollData.totalVotes = totalVotes;
+
+    const pollDataJson = JSON.stringify(pollData);
+    db.prepare('UPDATE messages SET poll_data = ? WHERE id = ?').run(pollDataJson, id);
+    persistPollVoteToPg(id, pollDataJson);
+
+    res.json({ success: true, pollData, messageId: id, conversationId: msg.conversation_id, groupId: msg.group_id });
+  } catch (error: any) {
+    console.error('votePoll error:', error);
+    res.status(500).json({ error: 'Failed to cast poll vote' });
+  }
+}
+
+export async function setDisappearingTimer(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const userId = req.user?.userId;
+    const { id } = req.params;
+    const { seconds } = req.body;
+
+    if (!userId || !id || typeof seconds !== 'number') {
+      res.status(400).json({ error: 'Missing parameters' });
+      return;
+    }
+
+    db.prepare('UPDATE conversations SET disappearing_seconds = ? WHERE id = ?').run(seconds, id);
+    persistDisappearingTimerToPg(id, seconds);
+
+    res.json({ success: true, conversationId: id, disappearing_seconds: seconds });
+  } catch (error: any) {
+    console.error('setDisappearingTimer error:', error);
+    res.status(500).json({ error: 'Failed to update disappearing timer' });
+  }
 }

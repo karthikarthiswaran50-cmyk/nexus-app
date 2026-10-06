@@ -367,6 +367,10 @@ app.delete('/api/stories/:id', requireAuth, storiesCtrl.deleteStory);
 
 // 3. Chat Routes
 app.get('/api/chat/conversations', requireAuth, chatCtrl.getConversations);
+app.get('/api/chat/starred', requireAuth, chatCtrl.getStarredMessages);
+app.post('/api/chat/messages/:id/star', requireAuth, chatCtrl.toggleStarMessage);
+app.post('/api/chat/messages/:id/poll-vote', requireAuth, chatCtrl.votePoll);
+app.post('/api/chat/conversations/:id/disappearing', requireAuth, chatCtrl.setDisappearingTimer);
 app.get('/api/chat/messages/:otherUserId', requireAuth, chatCtrl.getMessages);
 app.post('/api/chat/send', requireAuth, chatCtrl.sendMessageHttp);
 app.put('/api/chat/messages/:id', requireAuth, chatCtrl.editMessageHttp);

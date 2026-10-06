@@ -25,6 +25,11 @@ import {
   Download,
   FileText,
   ExternalLink,
+  Palette,
+  Volume2,
+  Play,
+  Fingerprint,
+  Zap,
 } from 'lucide-react';
 import { BlockedUser } from '../../types';
 import axios from 'axios';
@@ -47,6 +52,90 @@ export const SettingsView: React.FC = () => {
   // 📲 PWA Standalone Install State
   const pwaState = usePWAInstall();
   const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
+
+  // 💎 Luxury Themes state
+  const [selectedTheme, setSelectedTheme] = useState<string>(() => {
+    return localStorage.getItem('nexus_luxury_theme') || 'royal_gold';
+  });
+
+  const handleSelectTheme = (themeId: string) => {
+    setSelectedTheme(themeId);
+    localStorage.setItem('nexus_luxury_theme', themeId);
+    document.documentElement.setAttribute('data-luxury-theme', themeId);
+  };
+
+  // 📶 Adaptive Low-Data Saver Mode
+  const [lowDataMode, setLowDataMode] = useState<boolean>(() => {
+    return localStorage.getItem('nexus_low_data_mode') === 'true';
+  });
+
+  const handleToggleLowDataMode = (enabled: boolean) => {
+    setLowDataMode(enabled);
+    localStorage.setItem('nexus_low_data_mode', enabled ? 'true' : 'false');
+  };
+
+  // 🔔 Custom Notification Chime Selector & Sound Preview
+  const [chimeSound, setChimeSound] = useState<string>(() => {
+    return localStorage.getItem('nexus_chime_sound') || 'royal_gold';
+  });
+
+  const playAudioTonePreview = (soundType: string) => {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      if (soundType === 'crystal') {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(880, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(1760, ctx.currentTime + 0.3);
+        gain.gain.setValueAtTime(0.3, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.4);
+      } else if (soundType === 'harp') {
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(523.25, ctx.currentTime);
+        osc.frequency.setValueAtTime(659.25, ctx.currentTime + 0.1);
+        osc.frequency.setValueAtTime(783.99, ctx.currentTime + 0.2);
+        gain.gain.setValueAtTime(0.35, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.5);
+      } else {
+        // Royal Gold
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+        osc.frequency.setValueAtTime(880, ctx.currentTime + 0.12);
+        gain.gain.setValueAtTime(0.4, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.45);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.45);
+      }
+    } catch (e) {
+      console.error('Audio tone preview error:', e);
+    }
+  };
+
+  const handleSelectChime = (chime: string) => {
+    setChimeSound(chime);
+    localStorage.setItem('nexus_chime_sound', chime);
+    playAudioTonePreview(chime);
+  };
+
+  // 🧬 Biometric Lock
+  const [biometricEnabled, setBiometricEnabled] = useState<boolean>(() => {
+    return localStorage.getItem('nexus_biometric_enabled') === 'true';
+  });
+
+  const handleToggleBiometric = (enabled: boolean) => {
+    setBiometricEnabled(enabled);
+    localStorage.setItem('nexus_biometric_enabled', enabled ? 'true' : 'false');
+  };
 
   const [allowCallsFrom, setAllowCallsFrom] = useState<'everyone' | 'contacts' | 'nobody'>(
     (settings?.who_can_call_me || settings?.allow_calls_from || 'everyone') as any
@@ -395,6 +484,22 @@ export const SettingsView: React.FC = () => {
 
             <div className="flex items-center justify-between pt-2">
               <div>
+                <p className="text-xs font-bold text-white flex items-center gap-1.5">
+                  <Zap className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Adaptive Low-Data Saver Mode</span>
+                </p>
+                <p className="text-[11px] text-dark-400">Reduce video bandwidth & compress media on slow connections</p>
+              </div>
+              <input
+                type="checkbox"
+                checked={lowDataMode}
+                onChange={(e) => handleToggleLowDataMode(e.target.checked)}
+                className="w-4 h-4 accent-gold-500 rounded cursor-pointer"
+              />
+            </div>
+
+            <div className="flex items-center justify-between pt-2">
+              <div>
                 <p className="text-xs font-bold text-white">Incoming Call & Message Sounds</p>
                 <p className="text-[11px] text-dark-400">Play audio ringtones on calls</p>
               </div>
@@ -433,12 +538,80 @@ export const SettingsView: React.FC = () => {
           </div>
         </div>
 
-        {/* 🔐 Royal Vault PIN Lock Card */}
+        {/* 💎 Luxury Themes & Royal Sound Chimes Card */}
+        <div className="bg-dark-900 border border-gold-500/15 rounded-3xl p-6 space-y-5 shadow-xl royal-card">
+          <h3 className="text-sm font-black text-white flex items-center justify-between border-b border-gold-500/15 pb-3">
+            <div className="flex items-center gap-2">
+              <Palette className="w-4 h-4 text-gold-400" />
+              <span>Luxury Themes & Audio Customization</span>
+            </div>
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-gold-500/15 text-amber-300 font-extrabold border border-gold-500/30">
+              FREE FOREVER
+            </span>
+          </h3>
+
+          <div className="space-y-4">
+            {/* Theme Presets */}
+            <div>
+              <label className="block text-xs font-bold text-dark-300 mb-2">Select Luxury Color Theme</label>
+              <div className="grid grid-cols-2 gap-2.5">
+                {[
+                  { id: 'royal_gold', name: '👑 Royal Gold', desc: 'Deep obsidian & 24K gold', border: 'border-amber-500/40' },
+                  { id: 'amoled', name: '🖤 AMOLED Black', desc: 'Pure #000000 battery saver', border: 'border-zinc-700' },
+                  { id: 'midnight', name: '💎 Midnight Sapphire', desc: 'Royal blue cosmic elegance', border: 'border-indigo-500/40' },
+                  { id: 'emerald', name: '🌿 Emerald Luxury', desc: 'Imperial jade prestige', border: 'border-emerald-500/40' },
+                ].map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => handleSelectTheme(t.id)}
+                    className={`p-3 rounded-2xl text-left border transition-all active:scale-95 ${
+                      selectedTheme === t.id
+                        ? 'bg-gold-500/20 border-gold-400 shadow-md shadow-gold-500/20'
+                        : 'bg-dark-850 hover:bg-dark-800 border-gold-500/15'
+                    }`}
+                  >
+                    <p className="text-xs font-bold text-white">{t.name}</p>
+                    <p className="text-[10px] text-dark-400 mt-0.5">{t.desc}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Custom Audio Chimes */}
+            <div className="pt-2 border-t border-gold-500/10">
+              <label className="block text-xs font-bold text-dark-300 mb-2">Notification & Call Ringtone Sound</label>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { id: 'royal_gold', label: '👑 Royal Chime' },
+                  { id: 'harp', label: '🎵 Golden Harp' },
+                  { id: 'crystal', label: '✨ Crystal Bell' },
+                ].map((sound) => (
+                  <button
+                    key={sound.id}
+                    type="button"
+                    onClick={() => handleSelectChime(sound.id)}
+                    className={`p-2.5 rounded-xl border text-center transition-all flex flex-col items-center justify-center gap-1 active:scale-95 ${
+                      chimeSound === sound.id
+                        ? 'bg-gold-500/25 border-gold-400 text-amber-200 font-bold shadow-xs'
+                        : 'bg-dark-850 hover:bg-dark-800 border-gold-500/15 text-dark-300'
+                    }`}
+                  >
+                    <Volume2 className="w-3.5 h-3.5 text-gold-400" />
+                    <span className="text-[11px]">{sound.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 🔐 Royal Vault PIN & Biometric Lock Card */}
         <div className="bg-dark-900 border border-gold-500/15 rounded-3xl p-6 space-y-5 shadow-xl royal-card">
           <h3 className="text-sm font-black text-white flex items-center justify-between border-b border-gold-500/15 pb-3">
             <div className="flex items-center gap-2">
               <ShieldCheck className="w-4 h-4 text-gold-400" />
-              <span>Royal Vault App Lock (PIN)</span>
+              <span>Royal Vault App Lock (PIN & Biometrics)</span>
             </div>
             {localStorage.getItem('nexus_app_pin') && (
               <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-extrabold border border-emerald-500/30">
@@ -457,6 +630,22 @@ export const SettingsView: React.FC = () => {
                 type="checkbox"
                 checked={pinEnabled}
                 onChange={(e) => setPinEnabled(e.target.checked)}
+                className="w-4 h-4 accent-gold-500 rounded cursor-pointer"
+              />
+            </div>
+
+            <div className="flex items-center justify-between pt-1">
+              <div>
+                <p className="text-xs font-bold text-white flex items-center gap-1.5">
+                  <Fingerprint className="w-3.5 h-3.5 text-gold-400" />
+                  <span>Biometric Unlock (Fingerprint / Face ID)</span>
+                </p>
+                <p className="text-[11px] text-dark-400">Use WebAuthn biometric sensors for 1-tap unlock</p>
+              </div>
+              <input
+                type="checkbox"
+                checked={biometricEnabled}
+                onChange={(e) => handleToggleBiometric(e.target.checked)}
                 className="w-4 h-4 accent-gold-500 rounded cursor-pointer"
               />
             </div>
