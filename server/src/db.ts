@@ -317,6 +317,19 @@ export function initDatabase() {
   if (pgPool) {
     initPostgresAndRestore();
   }
+  // Ensure Nexus AI Assistant bot account exists
+  try {
+    const bot = db.prepare("SELECT id FROM users WHERE id = 'nexus_bot' OR username = 'nexus'").get();
+    if (!bot) {
+      db.prepare(`
+        INSERT INTO users (id, email, username, password_hash, full_name, avatar_url, bio, status, country, role, created_at, updated_at)
+        VALUES ('nexus_bot', 'ai@nexusroyal.online', 'nexus', 'disabled', 'Nexus AI Assistant 🤖', 'https://api.dicebear.com/7.x/bottts/svg?seed=nexus_royal_ai', 'Royal Smart AI Assistant for Nexus Royal. Mention @nexus or /ai to get instant assistance!', '🤖 Always Active', 'Royal Realm', 'admin', datetime('now'), datetime('now'))
+      `).run();
+    }
+  } catch (e) {
+    console.error('Seed nexus_bot error:', e);
+  }
+
   purgeDemoData();
 }
 

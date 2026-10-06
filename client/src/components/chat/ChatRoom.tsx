@@ -39,17 +39,25 @@ import {
   BarChart2,
   Timer,
   Clock,
+  Radio,
+  Camera,
+  Flame,
+  Bookmark,
 } from 'lucide-react';
 import axios from 'axios';
 import { trackUserActivity } from '../../config/firebase';
 import { VoicePlayer } from './VoicePlayer';
+import { VideoCirclePlayer } from './VideoCirclePlayer';
+import { VideoCircleRecorder } from './VideoCircleRecorder';
 import { MediaViewerModal } from './MediaViewerModal';
 import { ChatMediaGalleryModal } from './ChatMediaGalleryModal';
 import { ForwardMessageModal } from './ForwardMessageModal';
 import { ReportUserModal } from './ReportUserModal';
 import { CreatePollModal } from './CreatePollModal';
 import { StarredMessagesModal } from './StarredMessagesModal';
-import { PollData } from '../../types';
+import { VoiceStageModal } from '../spaces/VoiceStageModal';
+import { CreateStageModal } from '../spaces/CreateStageModal';
+import { PollData, VoiceSpace } from '../../types';
 
 interface ChatRoomProps {
   otherUser?: User | null;
@@ -100,6 +108,27 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, on
   const [disappearingSeconds, setDisappearingSeconds] = useState<number>(0);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [starredMessageIds, setStarredMessageIds] = useState<Set<string>>(new Set());
+
+  // 🎙️ Live Voice Stage state
+  const [activeGroupSpace, setActiveGroupSpace] = useState<VoiceSpace | null>(null);
+  const [isStageModalOpen, setIsStageModalOpen] = useState(false);
+  const [isCreateStageModalOpen, setIsCreateStageModalOpen] = useState(false);
+
+  // 📹 Video Circle Recorder state
+  const [isVideoCircleRecorderOpen, setIsVideoCircleRecorderOpen] = useState(false);
+
+  // 🔥 Chat Streak calculation (consecutive days of messages)
+  const chatStreakDays = React.useMemo(() => {
+    if (!messages.length || group) return 0;
+    const daysSet = new Set<string>();
+    messages.forEach((m) => {
+      try {
+        const d = new Date(m.created_at).toISOString().split('T')[0];
+        daysSet.add(d);
+      } catch {}
+    });
+    return daysSet.size;
+  }, [messages, group]);
 
   // User Actions (Report & Block)
   const [isReportOpen, setIsReportOpen] = useState(false);
@@ -256,6 +285,78 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, on
     if (secs === 604800) return '7 Days';
     if (secs === 7776000) return '90 Days';
     return `${Math.round(secs / 3600)} Hours`;
+  };
+
+  // Group Voice Stage Socket Sync
+  useEffect(() => {
+    if (!group || !socket) return;
+
+    socket.emit('space:get_active', { groupId: group.id });
+
+    const handleCurrent = (space: VoiceSpace | null) => {
+      setActiveGroupSpace(space);
+    };
+
+    const handleStarted = (space: VoiceSpace) => {
+      if (space.groupId === group.id) {
+        setActiveGroupSpace(space);
+      }
+    };
+
+    const handleEnded = (data: { spaceId: string }) => {
+      setActiveGroupSpace((prev) => (prev?.id === data.spaceId ? null : prev));
+      if (isStageModalOpen) setIsStageModalOpen(false);
+    };
+
+    socket.on('space:current', handleCurrent);
+    socket.on('space:started', handleStarted);
+    socket.on('space:ended', handleEnded);
+
+    return () => {
+      socket.off('space:current', handleCurrent);
+      socket.off('space:started', handleStarted);
+      socket.off('space:ended', handleEnded);
+    };
+  }, [group?.id, socket, isStageModalOpen]);
+
+  const handleStartVoiceStage = (title: string) => {
+    if (!socket || !group) return;
+    socket.emit('space:create', { title, groupId: group.id });
+    setIsStageModalOpen(true);
+  };
+
+  const handleSendVideoCircle = async (videoBlob: Blob) => {
+    try {
+      setUploading(true);
+      const formData = new FormData();
+      formData.append('file', videoBlob, `video_circle_${Date.now()}.webm`);
+      const uploadRes = await axios.post('/api/chat/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      const mediaUrl = uploadRes.data.url;
+
+      if (group) {
+        socket?.emit('group:send_message', {
+          groupId: group.id,
+          content: '📹 Video Note',
+          type: 'video_circle',
+          mediaUrl,
+        });
+      } else if (otherUser) {
+        socket?.emit('chat:send_message', {
+          receiverId: otherUser.id,
+          content: '📹 Video Note',
+          type: 'video_circle',
+          mediaUrl,
+        });
+      }
+      showToast('Video Note sent! 📹');
+    } catch (err) {
+      console.error('Send video circle failed:', err);
+      showToast('Failed to send video note');
+    } finally {
+      setUploading(false);
+    }
   };
 
   // Load message history
@@ -937,6 +1038,12 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, on
                 {group ? group.name : (otherUser?.full_name || 'User')}
               </h2>
               {otherUser && <PlanBadge planId={otherUser.plan_id} size="sm" />}
+              {!group && chatStreakDays > 0 && (
+                <span className="px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-300 text-[10px] font-black flex items-center gap-1 shadow-xs" title="Daily Active Chat Streak">
+                  <Flame className="w-3 h-3 text-amber-400 fill-amber-400" />
+                  <span>{chatStreakDays}d</span>
+                </span>
+              )}
             </div>
             <p className="text-xs text-dark-400 flex items-center gap-1.5">
               {group ? (
@@ -963,6 +1070,31 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, on
         {/* Action Buttons: Call Buttons (Always Visible) & Responsive Tools / Menu */}
         <div className="flex items-center gap-1 sm:gap-2 relative shrink-0">
           
+          {/* Group Live Voice Stage Button */}
+          {group && (
+            <button
+              type="button"
+              onClick={() => {
+                if (activeGroupSpace) {
+                  setIsStageModalOpen(true);
+                } else {
+                  setIsCreateStageModalOpen(true);
+                }
+              }}
+              className={`p-2 sm:px-3 sm:py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm active:scale-95 ${
+                activeGroupSpace
+                  ? 'bg-gradient-to-r from-rose-600 to-amber-600 text-white shadow-rose-600/30 animate-pulse'
+                  : 'bg-dark-800 hover:bg-gold-500/20 text-amber-300 border border-gold-500/30'
+              }`}
+              title="Start or Join Voice Stage"
+            >
+              <Radio className="w-4 h-4 text-amber-300" />
+              <span className="hidden sm:inline">
+                {activeGroupSpace ? 'Join Stage 🔴' : 'Voice Stage'}
+              </span>
+            </button>
+          )}
+
           {/* Disappearing Messages Active Indicator Badge */}
           {disappearingSeconds > 0 && !group && (
             <button
@@ -1254,6 +1386,32 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, on
           )}
         </div>
       </div>
+
+      {/* 🔴 Active Voice Stage Live Banner for Groups */}
+      {group && activeGroupSpace && (
+        <div className="p-3 px-4 bg-gradient-to-r from-rose-950/70 via-dark-900 to-amber-950/60 border-b border-rose-500/30 flex items-center justify-between gap-3 shadow-md backdrop-blur-md animate-in slide-in-from-top-2 z-10">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping shrink-0" />
+            <div className="min-w-0">
+              <p className="text-xs font-bold text-white truncate flex items-center gap-1.5">
+                <span className="text-rose-400 font-black">LIVE STAGE:</span>
+                <span>{activeGroupSpace.title}</span>
+              </p>
+              <p className="text-[10px] text-amber-300">
+                {Object.keys(activeGroupSpace.participants || {}).length} members tuned in
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsStageModalOpen(true)}
+            className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white font-black text-xs shadow-md shadow-rose-600/30 active:scale-95 transition-all shrink-0 flex items-center gap-1.5 cursor-pointer"
+          >
+            <Radio className="w-3.5 h-3.5" />
+            <span>Join Stage</span>
+          </button>
+        </div>
+      )}
 
       {/* 🔍 In-Chat Search Toolbar */}
       {isSearchOpen && (
@@ -1707,6 +1865,8 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, on
                           {msg.poll_data.totalVotes || 0} total {msg.poll_data.totalVotes === 1 ? 'vote' : 'votes'}
                         </div>
                       </div>
+                    ) : msg.type === 'video_circle' && msg.media_url && !isDeleted ? (
+                      <VideoCirclePlayer videoUrl={msg.media_url} isMe={isMe} />
                     ) : msg.type === 'audio' && msg.media_url && !isDeleted ? (
                       <VoicePlayer audioUrl={msg.media_url} isMe={isMe} />
                     ) : msg.type === 'image' && msg.media_url && !isDeleted ? (
@@ -1997,15 +2157,26 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, on
               <Send className="w-4 h-4 text-dark-950 stroke-[2.5]" />
             </button>
           ) : (
-            <button
-              type="button"
-              onClick={startRecording}
-              disabled={uploading}
-              className="p-2.5 sm:px-3.5 rounded-xl bg-dark-850 hover:bg-gradient-to-tr hover:from-amber-500 hover:to-yellow-400 text-gold-400 hover:text-dark-950 border border-gold-500/20 hover:border-gold-400 shadow-md flex items-center justify-center transition-all active:scale-95 group shrink-0"
-              title="Record Voice Message"
-            >
-              <Mic className="w-4 h-4 group-hover:scale-110 transition-all" />
-            </button>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsVideoCircleRecorderOpen(true)}
+                disabled={uploading}
+                className="p-2.5 sm:px-3 rounded-xl bg-dark-850 hover:bg-dark-800 text-amber-400 hover:text-amber-300 border border-gold-500/20 shadow-md flex items-center justify-center transition-all active:scale-95 group shrink-0"
+                title="Record Video Circle Bubble (60s)"
+              >
+                <Camera className="w-4 h-4 group-hover:scale-110 transition-all" />
+              </button>
+              <button
+                type="button"
+                onClick={startRecording}
+                disabled={uploading}
+                className="p-2.5 sm:px-3.5 rounded-xl bg-dark-850 hover:bg-gradient-to-tr hover:from-amber-500 hover:to-yellow-400 text-gold-400 hover:text-dark-950 border border-gold-500/20 hover:border-gold-400 shadow-md flex items-center justify-center transition-all active:scale-95 group shrink-0"
+                title="Record Voice Message"
+              >
+                <Mic className="w-4 h-4 group-hover:scale-110 transition-all" />
+              </button>
+            </div>
           )}
         </form>
       )}
@@ -2121,6 +2292,33 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, on
           </div>
         </div>
       )}
+
+      {/* Video Circle Recorder Modal */}
+      <VideoCircleRecorder
+        isOpen={isVideoCircleRecorderOpen}
+        onClose={() => setIsVideoCircleRecorderOpen(false)}
+        onSend={handleSendVideoCircle}
+      />
+
+      {/* Live Voice Stage Modal */}
+      {activeGroupSpace && isStageModalOpen && (
+        <VoiceStageModal
+          space={activeGroupSpace}
+          onClose={() => setIsStageModalOpen(false)}
+          onLeave={() => {
+            setIsStageModalOpen(false);
+            setActiveGroupSpace(null);
+          }}
+        />
+      )}
+
+      {/* Create Stage Modal */}
+      <CreateStageModal
+        isOpen={isCreateStageModalOpen}
+        onClose={() => setIsCreateStageModalOpen(false)}
+        onSubmit={handleStartVoiceStage}
+        groupName={group?.name}
+      />
     </div>
   );
 };

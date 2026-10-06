@@ -127,7 +127,28 @@ export interface BlockedUser {
   blocked_user?: UserWithPlan;
 }
 
-export type MessageType = 'text' | 'image' | 'audio' | 'video' | 'file' | 'system' | 'call_log' | 'poll';
+export type MessageType = 'text' | 'image' | 'audio' | 'video' | 'file' | 'system' | 'call_log' | 'poll' | 'video_circle';
+
+export interface VoiceSpaceParticipant {
+  userId: string;
+  username: string;
+  fullName: string;
+  avatarUrl?: string;
+  isHost: boolean;
+  isSpeaker: boolean;
+  isMuted: boolean;
+  raisedHand: boolean;
+}
+
+export interface VoiceSpace {
+  id: string;
+  title: string;
+  hostId: string;
+  hostName: string;
+  groupId?: string;
+  createdAt: number;
+  participants: Record<string, VoiceSpaceParticipant>;
+}
 
 export interface MessageReaction {
   [emoji: string]: string[]; // emoji -> array of userIds

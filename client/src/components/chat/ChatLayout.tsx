@@ -17,6 +17,10 @@ import {
   Compass,
   Crown,
   UserPlus,
+  Flame,
+  Bookmark,
+  Bot,
+  Radio,
 } from 'lucide-react';
 import axios from 'axios';
 
@@ -224,6 +228,70 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
         {/* Stories & 24h Status Bar (Only on Direct Chats tab) */}
         {chatTab === 'direct' && <StoriesBar />}
 
+        {/* Quick Access: Saved Messages & AI Assistant */}
+        {chatTab === 'direct' && (
+          <div className="grid grid-cols-2 gap-2 p-2 px-3 border-b border-gold-500/10 shrink-0 bg-dark-950/40">
+            <button
+              type="button"
+              onClick={() => {
+                if (!user) return;
+                const savedUser: User = {
+                  id: user.id,
+                  email: user.email,
+                  username: user.username,
+                  full_name: 'Saved Messages 📁',
+                  avatar_url: '',
+                  bio: 'Your personal cloud vault to store notes, files and links',
+                  status: '☁️ Cloud Vault',
+                  country: '',
+                  created_at: '',
+                  updated_at: '',
+                };
+                setSelectedUser(savedUser);
+                setSelectedGroup(null);
+              }}
+              className="p-2 sm:p-2.5 rounded-2xl bg-dark-850 hover:bg-gold-500/15 border border-gold-500/15 hover:border-gold-500/35 flex items-center gap-2 transition-all active:scale-95 text-left group"
+            >
+              <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-amber-500 to-yellow-400 flex items-center justify-center text-dark-950 font-bold shrink-0 shadow-md">
+                <Bookmark className="w-4 h-4 fill-current stroke-[2.5]" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-white group-hover:text-amber-200 transition-colors truncate">Saved Messages</p>
+                <p className="text-[10px] text-dark-400 truncate">Cloud Vault</p>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                const botUser: User = {
+                  id: 'nexus_bot',
+                  email: 'ai@nexusroyal.online',
+                  username: 'nexus',
+                  full_name: 'Nexus AI 🤖',
+                  avatar_url: 'https://api.dicebear.com/7.x/bottts/svg?seed=nexus_royal_ai',
+                  bio: 'Royal Smart AI Assistant for Nexus Royal',
+                  status: '🤖 Always Active',
+                  country: '',
+                  created_at: '',
+                  updated_at: '',
+                };
+                setSelectedUser(botUser);
+                setSelectedGroup(null);
+              }}
+              className="p-2 sm:p-2.5 rounded-2xl bg-dark-850 hover:bg-amber-500/15 border border-amber-500/15 hover:border-amber-500/35 flex items-center gap-2 transition-all active:scale-95 text-left group"
+            >
+              <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-white font-bold shrink-0 shadow-md">
+                <Bot className="w-4 h-4 stroke-[2.5]" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-white group-hover:text-amber-200 transition-colors truncate">Nexus AI</p>
+                <p className="text-[10px] text-dark-400 truncate">Smart Assistant</p>
+              </div>
+            </button>
+          </div>
+        )}
+
         {/* List Content */}
         <div className="flex-1 overflow-y-auto p-2 space-y-1 divide-y divide-dark-800/40">
           {chatTab === 'direct' ? (
@@ -282,9 +350,16 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
                     />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between mb-0.5">
-                        <p className="text-sm font-extrabold text-white truncate group-hover:text-amber-200 transition-colors">
-                          {other.full_name}
-                        </p>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <p className="text-sm font-extrabold text-white truncate group-hover:text-amber-200 transition-colors">
+                            {other.full_name}
+                          </p>
+                          {/* Chat Streak Badge 🔥 */}
+                          <span className="shrink-0 px-1.5 py-0.5 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-300 text-[10px] font-black flex items-center gap-0.5" title="Daily Chat Streak">
+                            <Flame className="w-2.5 h-2.5 text-amber-400 fill-amber-400" />
+                            <span>🔥</span>
+                          </span>
+                        </div>
                         <span className="text-[10px] text-dark-400 shrink-0 font-mono">
                           {formatLastMessageTime(conv.last_message?.created_at || conv.last_message_at)}
                         </span>

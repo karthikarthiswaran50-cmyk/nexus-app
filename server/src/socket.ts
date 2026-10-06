@@ -1,12 +1,13 @@
 import { Server, Socket } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import { JWT_SECRET } from './middleware/auth.js';
-import { AuthPayload, CallType, UserWithPlan } from './types.js';
+import { AuthPayload, CallType, UserWithPlan, VoiceSpace, VoiceSpaceParticipant } from './types.js';
 import { saveMessage, toggleReaction, deleteMessage, editMessage, saveGroupMessage } from './controllers/chat.js';
 import { recordCallLog } from './controllers/calls.js';
 import { getUserWithPlan } from './controllers/auth.js';
 import { db } from './db.js';
 import { sendPushToUser } from './services/webpush.js';
+import { generateNexusAIResponse } from './services/aiAssistant.js';
 
 interface SocketUser {
   userId: string;
@@ -61,6 +62,8 @@ export function setupSocket(io: Server) {
   const pendingCalls = new Map<string, PendingCall>();
   // Map: targetUserId -> list of buffered ICE candidates
   const bufferedCandidates = new Map<string, Array<{ fromUserId: string; candidate: any }>>();
+  // Map: spaceId -> VoiceSpace (Live Audio Spaces)
+  const activeVoiceSpaces = new Map<string, VoiceSpace>();
 
   function addBufferedCandidate(targetUserId: string, item: { fromUserId: string; candidate: any }) {
     if (!bufferedCandidates.has(targetUserId)) {
@@ -193,7 +196,7 @@ export function setupSocket(io: Server) {
     socket.on('chat:send_message', async (data: {
       receiverId: string;
       content: string;
-      type?: 'text' | 'image' | 'audio' | 'video' | 'file' | 'system' | 'call_log' | 'poll';
+      type?: 'text' | 'image' | 'audio' | 'video' | 'file' | 'system' | 'call_log' | 'poll' | 'video_circle';
       mediaUrl?: string;
       fileName?: string;
       fileSize?: number;
@@ -217,7 +220,7 @@ export function setupSocket(io: Server) {
         }
 
         const safeContent = typeof content === 'string' ? content.slice(0, 10000) : '';
-        const safeType = ['text', 'image', 'audio', 'video', 'file', 'system', 'call_log', 'poll'].includes(type) ? type : 'text';
+        const safeType = ['text', 'image', 'audio', 'video', 'file', 'system', 'call_log', 'poll', 'video_circle'].includes(type) ? type : 'text';
         const safeMediaUrl = typeof mediaUrl === 'string' && (mediaUrl.startsWith('/uploads/') || mediaUrl.startsWith('https://'))
           ? mediaUrl.slice(0, 500)
           : undefined;
@@ -255,6 +258,8 @@ export function setupSocket(io: Server) {
           ? '🎤 Voice Message'
           : type === 'image'
           ? '📷 Photo'
+          : type === 'video_circle'
+          ? '⭕ Video Circle Note'
           : '📎 Attachment';
 
         sendPushToUser(
@@ -268,15 +273,34 @@ export function setupSocket(io: Server) {
             },
             data: {
               type: 'message',
-              conversationId: result.conversationId,
+              conversationId: result?.conversationId || '',
               senderId: userId,
               senderName: sender?.full_name || 'Nexus Contact',
-              tag: `nexus-msg-${result.conversationId}`,
+              tag: `nexus-msg-${result?.conversationId || ''}`,
               url: '/',
             },
           },
           false
         ).catch(() => {});
+
+        // 🤖 Automatic Nexus Royal Smart AI Assistant Response (@nexus or bot DM)
+        if (result && (receiverId === 'nexus_bot' || content?.toLowerCase().includes('@nexus') || content?.toLowerCase().startsWith('/ai'))) {
+          setTimeout(() => {
+            const botReply = generateNexusAIResponse(content, sender?.full_name || 'Friend');
+            const botResult = saveMessage({
+              senderId: 'nexus_bot',
+              receiverId: userId,
+              content: botReply,
+              type: 'text',
+              replyToId: result.message.id,
+              replyToContent: result.message.content ? result.message.content.slice(0, 50) : undefined,
+              replyToSender: sender?.full_name || 'User',
+            });
+            socket.emit('chat:new_message', botResult);
+            const senderSockets = getSocketsForUser(userId);
+            senderSockets.forEach((sId) => io.to(sId).emit('chat:new_message', botResult));
+          }, 600);
+        }
       } catch (err) {
         console.error('Socket chat:send_message error:', err);
       }
@@ -425,7 +449,7 @@ export function setupSocket(io: Server) {
     socket.on('group:send_message', async (data: {
       groupId: string;
       content: string;
-      type?: 'text' | 'image' | 'audio' | 'video' | 'file' | 'system' | 'call_log' | 'poll';
+      type?: 'text' | 'image' | 'audio' | 'video' | 'file' | 'system' | 'call_log' | 'poll' | 'video_circle';
       mediaUrl?: string;
       fileName?: string;
       fileSize?: number;
@@ -446,7 +470,7 @@ export function setupSocket(io: Server) {
         }
 
         const safeContent = typeof content === 'string' ? content.slice(0, 10000) : '';
-        const safeType = ['text', 'image', 'audio', 'video', 'file', 'system', 'call_log', 'poll'].includes(type) ? type : 'text';
+        const safeType = ['text', 'image', 'audio', 'video', 'file', 'system', 'call_log', 'poll', 'video_circle'].includes(type) ? type : 'text';
         const safeMediaUrl = typeof mediaUrl === 'string' && (mediaUrl.startsWith('/uploads/') || mediaUrl.startsWith('https://'))
           ? mediaUrl.slice(0, 500)
           : undefined;
@@ -469,6 +493,24 @@ export function setupSocket(io: Server) {
 
         // Broadcast to group room
         io.to(`group:${groupId}`).emit('group:new_message', result);
+
+        // 🤖 Automatic Nexus Royal Smart AI Assistant Response in Group (@nexus or /ai)
+        if (result && (content?.toLowerCase().includes('@nexus') || content?.toLowerCase().startsWith('/ai'))) {
+          setTimeout(() => {
+            const sender = getUserWithPlan(userId);
+            const botReply = generateNexusAIResponse(content, sender?.full_name || 'Friend');
+            const botResult = saveGroupMessage({
+              groupId,
+              senderId: 'nexus_bot',
+              content: botReply,
+              type: 'text',
+              replyToId: result.message.id,
+              replyToContent: result.message.content ? result.message.content.slice(0, 50) : undefined,
+              replyToSender: sender?.full_name || 'User',
+            });
+            io.to(`group:${groupId}`).emit('group:new_message', botResult);
+          }, 600);
+        }
       } catch (err) {
         console.error('Socket group:send_message error:', err);
       }
@@ -545,6 +587,197 @@ export function setupSocket(io: Server) {
       } catch (err) {
         console.error('Socket chat:set_disappearing error:', err);
       }
+    });
+
+    // ----------------------------------------------------
+    // 2.5. LIVE AUDIO SPACES / ROYAL VOICE STAGE
+    // ----------------------------------------------------
+    socket.on('space:get_active', (data: { groupId?: string }) => {
+      if (data?.groupId) {
+        for (const space of activeVoiceSpaces.values()) {
+          if (space.groupId === data.groupId) {
+            socket.emit('space:current', space);
+            return;
+          }
+        }
+        socket.emit('space:current', null);
+      } else {
+        socket.emit('space:list', Array.from(activeVoiceSpaces.values()));
+      }
+    });
+
+    socket.on('space:create', (data: { title: string; groupId?: string }) => {
+      try {
+        const u = getUserWithPlan(userId);
+        if (!u) return;
+
+        const spaceId = `space_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+        const initialParticipant: VoiceSpaceParticipant = {
+          userId: u.id,
+          username: u.username,
+          fullName: u.full_name,
+          avatarUrl: u.avatar_url,
+          isHost: true,
+          isSpeaker: true,
+          isMuted: false,
+          raisedHand: false,
+        };
+
+        const newSpace: VoiceSpace = {
+          id: spaceId,
+          title: data.title?.trim() || `${u.full_name}'s Voice Stage`,
+          hostId: u.id,
+          hostName: u.full_name,
+          groupId: data.groupId,
+          createdAt: Date.now(),
+          participants: {
+            [u.id]: initialParticipant,
+          },
+        };
+
+        activeVoiceSpaces.set(spaceId, newSpace);
+        socket.join(`space:${spaceId}`);
+
+        io.to(`space:${spaceId}`).emit('space:updated', newSpace);
+        if (data.groupId) {
+          io.to(`group:${data.groupId}`).emit('space:started', newSpace);
+        } else {
+          io.emit('space:started', newSpace);
+        }
+      } catch (err) {
+        console.error('Socket space:create error:', err);
+      }
+    });
+
+    socket.on('space:join', (data: { spaceId: string }) => {
+      try {
+        const space = activeVoiceSpaces.get(data.spaceId);
+        if (!space) {
+          socket.emit('space:error', { message: 'Voice Stage not found or has ended' });
+          return;
+        }
+
+        const u = getUserWithPlan(userId);
+        if (!u) return;
+
+        socket.join(`space:${data.spaceId}`);
+
+        if (!space.participants[userId]) {
+          space.participants[userId] = {
+            userId: u.id,
+            username: u.username,
+            fullName: u.full_name,
+            avatarUrl: u.avatar_url,
+            isHost: u.id === space.hostId,
+            isSpeaker: u.id === space.hostId,
+            isMuted: true,
+            raisedHand: false,
+          };
+        }
+
+        io.to(`space:${data.spaceId}`).emit('space:updated', space);
+      } catch (err) {
+        console.error('Socket space:join error:', err);
+      }
+    });
+
+    socket.on('space:leave', (data: { spaceId: string }) => {
+      try {
+        const space = activeVoiceSpaces.get(data.spaceId);
+        if (!space) return;
+
+        socket.leave(`space:${data.spaceId}`);
+        delete space.participants[userId];
+
+        const remainingIds = Object.keys(space.participants);
+        if (remainingIds.length === 0 || (space.hostId === userId && remainingIds.length <= 1)) {
+          activeVoiceSpaces.delete(data.spaceId);
+          io.to(`space:${data.spaceId}`).emit('space:ended', { spaceId: data.spaceId });
+          if (space.groupId) {
+            io.to(`group:${space.groupId}`).emit('space:ended', { spaceId: data.spaceId });
+          }
+        } else {
+          if (space.hostId === userId) {
+            const nextHostId = remainingIds[0];
+            space.hostId = nextHostId;
+            space.hostName = space.participants[nextHostId].fullName;
+            space.participants[nextHostId].isHost = true;
+            space.participants[nextHostId].isSpeaker = true;
+          }
+          io.to(`space:${data.spaceId}`).emit('space:updated', space);
+        }
+      } catch (err) {
+        console.error('Socket space:leave error:', err);
+      }
+    });
+
+    socket.on('space:raise_hand', (data: { spaceId: string }) => {
+      const space = activeVoiceSpaces.get(data.spaceId);
+      if (space && space.participants[userId]) {
+        space.participants[userId].raisedHand = true;
+        io.to(`space:${data.spaceId}`).emit('space:updated', space);
+      }
+    });
+
+    socket.on('space:lower_hand', (data: { spaceId: string }) => {
+      const space = activeVoiceSpaces.get(data.spaceId);
+      if (space && space.participants[userId]) {
+        space.participants[userId].raisedHand = false;
+        io.to(`space:${data.spaceId}`).emit('space:updated', space);
+      }
+    });
+
+    socket.on('space:promote_speaker', (data: { spaceId: string; targetUserId: string }) => {
+      const space = activeVoiceSpaces.get(data.spaceId);
+      if (space && (space.hostId === userId || getUserWithPlan(userId)?.role === 'admin') && space.participants[data.targetUserId]) {
+        space.participants[data.targetUserId].isSpeaker = true;
+        space.participants[data.targetUserId].raisedHand = false;
+        space.participants[data.targetUserId].isMuted = false;
+        io.to(`space:${data.spaceId}`).emit('space:updated', space);
+      }
+    });
+
+    socket.on('space:demote_speaker', (data: { spaceId: string; targetUserId: string }) => {
+      const space = activeVoiceSpaces.get(data.spaceId);
+      if (space && (space.hostId === userId || getUserWithPlan(userId)?.role === 'admin') && space.participants[data.targetUserId]) {
+        space.participants[data.targetUserId].isSpeaker = false;
+        space.participants[data.targetUserId].isMuted = true;
+        io.to(`space:${data.spaceId}`).emit('space:updated', space);
+      }
+    });
+
+    socket.on('space:toggle_mute', (data: { spaceId: string; isMuted: boolean }) => {
+      const space = activeVoiceSpaces.get(data.spaceId);
+      if (space && space.participants[userId] && space.participants[userId].isSpeaker) {
+        space.participants[userId].isMuted = data.isMuted;
+        io.to(`space:${data.spaceId}`).emit('space:updated', space);
+      }
+    });
+
+    socket.on('space:end', (data: { spaceId: string }) => {
+      const space = activeVoiceSpaces.get(data.spaceId);
+      if (space && (space.hostId === userId || getUserWithPlan(userId)?.role === 'admin')) {
+        activeVoiceSpaces.delete(data.spaceId);
+        io.to(`space:${data.spaceId}`).emit('space:ended', { spaceId: data.spaceId });
+        if (space.groupId) {
+          io.to(`group:${space.groupId}`).emit('space:ended', { spaceId: data.spaceId });
+        }
+      }
+    });
+
+    socket.on('space:signal', (data: {
+      spaceId: string;
+      toUserId: string;
+      signal: any;
+    }) => {
+      const targetSockets = getSocketsForUser(data.toUserId);
+      targetSockets.forEach((sId) => {
+        io.to(sId).emit('space:peer_signal', {
+          spaceId: data.spaceId,
+          fromUserId: userId,
+          signal: data.signal,
+        });
+      });
     });
 
     // ----------------------------------------------------
@@ -900,6 +1133,30 @@ export function setupSocket(io: Server) {
             io.to(sId).emit('call:ended', { fromUserId: userId, duration: 0 });
           });
           activeCalls.delete(key);
+        }
+      }
+
+      // Clean up any active voice spaces user was participating in
+      for (const [spaceId, space] of activeVoiceSpaces.entries()) {
+        if (space.participants[userId]) {
+          delete space.participants[userId];
+          const remainingIds = Object.keys(space.participants);
+          if (remainingIds.length === 0) {
+            activeVoiceSpaces.delete(spaceId);
+            io.to(`space:${spaceId}`).emit('space:ended', { spaceId });
+            if (space.groupId) {
+              io.to(`group:${space.groupId}`).emit('space:ended', { spaceId });
+            }
+          } else {
+            if (space.hostId === userId) {
+              const nextHostId = remainingIds[0];
+              space.hostId = nextHostId;
+              space.hostName = space.participants[nextHostId].fullName;
+              space.participants[nextHostId].isHost = true;
+              space.participants[nextHostId].isSpeaker = true;
+            }
+            io.to(`space:${spaceId}`).emit('space:updated', space);
+          }
         }
       }
 
