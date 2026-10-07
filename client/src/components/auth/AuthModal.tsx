@@ -1,11 +1,64 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { Video, MessageSquare, Shield, Lock, Crown } from 'lucide-react';
 
 export const AuthModal: React.FC = () => {
-  const { loginWithGoogle } = useAuth();
+  const { login, register, loginWithGoogle } = useAuth();
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [identifier, setIdentifier] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+
+    const cleanIdentifier = identifier.trim();
+    if (!cleanIdentifier) {
+      setError('Please enter your phone number, username, or email.');
+      return;
+    }
+    if (!password) {
+      setError('Please enter your password.');
+      return;
+    }
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      if (isSignUp) {
+        // Registration flow
+        const cleanFullName = fullName.trim() || cleanIdentifier.split('@')[0];
+        const isEmail = cleanIdentifier.includes('@');
+        const cleanEmail = isEmail
+          ? cleanIdentifier
+          : `${cleanIdentifier.toLowerCase().replace(/[^a-z0-9_]/g, '')}@nexusroyal.online`;
+        const cleanUsername = isEmail
+          ? cleanIdentifier.split('@')[0].toLowerCase().replace(/[^a-z0-9_]/g, '')
+          : cleanIdentifier.toLowerCase().replace(/[^a-z0-9_]/g, '');
+
+        await register({
+          email: cleanEmail,
+          username: cleanUsername || 'user_' + Date.now().toString(36),
+          full_name: cleanFullName,
+          password,
+        });
+      } else {
+        // Direct Login flow
+        await login(cleanIdentifier, password);
+      }
+    } catch (err: any) {
+      console.error('Authentication error:', err);
+      const serverErr = err.response?.data?.error || err.message || 'Authentication failed. Please check your credentials.';
+      setError(serverErr);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleGoogleSignIn = async () => {
     setError(null);
@@ -13,123 +66,261 @@ export const AuthModal: React.FC = () => {
     try {
       await loginWithGoogle();
     } catch (err: any) {
-      setError(err.message || 'Google Sign-In failed or was cancelled.');
+      console.error('Google Sign-In error:', err);
+      if (err?.code === 'auth/popup-blocked') {
+        setError('Google pop-up was blocked by browser. Please log in with username/email and password above.');
+      } else if (err?.code === 'auth/popup-closed-by-user') {
+        setError('Google Sign-In was cancelled.');
+      } else {
+        setError(err.message || 'Google Sign-In could not complete. You can log in with username and password.');
+      }
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-dark-950/90 backdrop-blur-2xl animate-in fade-in duration-300 font-['Plus_Jakarta_Sans',sans-serif]">
-      <div className="relative w-full max-w-md bg-dark-900 border border-gold-500/30 rounded-3xl overflow-hidden shadow-2xl p-6 sm:p-8 royal-card text-center space-y-6">
-        
-        {/* Ambient Gold Halo */}
-        <div className="pointer-events-none absolute -top-24 left-1/2 -translate-x-1/2 w-64 h-64 bg-gold-500/10 rounded-full blur-3xl" />
+    <div className="nexus-auth-wrapper">
+      <style>{`
+        .nexus-auth-wrapper {
+          margin: 0;
+          min-height: 100vh;
+          width: 100vw;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          background: linear-gradient(135deg, #a0339e, #d62976);
+          font-family: Arial, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+          padding: 16px;
+          box-sizing: border-box;
+        }
+        .nexus-auth-wrapper .box {
+          background: #fff;
+          width: 340px;
+          max-width: 100%;
+          padding: 30px 24px;
+          border-radius: 12px;
+          text-align: center;
+          box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+          box-sizing: border-box;
+          animation: nexusFadeIn 0.3s ease-out;
+        }
+        @keyframes nexusFadeIn {
+          from { opacity: 0; transform: scale(0.96); }
+          to { opacity: 1; transform: scale(1); }
+        }
+        .nexus-auth-wrapper .logo {
+          font-size: 34px;
+          font-weight: bold;
+          background: linear-gradient(45deg, #fa7e1e, #d62976);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          letter-spacing: -0.5px;
+        }
+        .nexus-auth-wrapper input {
+          width: 100%;
+          padding: 11px;
+          margin: 6px 0;
+          border: 1px solid #ddd;
+          border-radius: 8px;
+          box-sizing: border-box;
+          outline: none;
+          font-size: 14px;
+          color: #222;
+          background-color: #fafafa;
+          transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .nexus-auth-wrapper input:focus {
+          border-color: #d62976;
+          background-color: #fff;
+          box-shadow: 0 0 0 2px rgba(214, 41, 118, 0.15);
+        }
+        .nexus-auth-wrapper .btn {
+          width: 100%;
+          padding: 11px;
+          margin-top: 12px;
+          background: linear-gradient(90deg, #ff4e50, #f9d423);
+          border: none;
+          border-radius: 8px;
+          color: #fff;
+          font-weight: bold;
+          cursor: pointer;
+          font-size: 14px;
+          transition: opacity 0.2s, transform 0.1s;
+        }
+        .nexus-auth-wrapper .btn:hover:not(:disabled) {
+          opacity: 0.95;
+        }
+        .nexus-auth-wrapper .btn:active:not(:disabled) {
+          transform: scale(0.98);
+        }
+        .nexus-auth-wrapper .btn:disabled {
+          opacity: 0.65;
+          cursor: not-allowed;
+        }
+        .nexus-auth-wrapper .divider {
+          margin: 18px 0;
+          color: #999;
+          font-size: 12px;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+        .nexus-auth-wrapper .divider::before,
+        .nexus-auth-wrapper .divider::after {
+          content: "";
+          flex: 1;
+          height: 1px;
+          background: #ddd;
+        }
+        .nexus-auth-wrapper .gbtn {
+          width: 100%;
+          padding: 10px;
+          background: #fff;
+          border: 1px solid #ddd;
+          border-radius: 8px;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          gap: 8px;
+          cursor: pointer;
+          font-weight: bold;
+          font-size: 14px;
+          color: #333;
+          transition: background-color 0.2s, border-color 0.2s;
+        }
+        .nexus-auth-wrapper .gbtn:hover:not(:disabled) {
+          background-color: #f8f8f8;
+          border-color: #ccc;
+        }
+        .nexus-auth-wrapper .gbtn:disabled {
+          opacity: 0.65;
+          cursor: not-allowed;
+        }
+        .nexus-auth-wrapper .gbtn img {
+          width: 18px !important;
+          height: 18px !important;
+          object-fit: contain;
+        }
+      `}</style>
 
-        {/* Brand Icon */}
-        <div className="relative z-10 flex flex-col items-center">
-          <div className="w-16 h-16 rounded-3xl bg-gradient-to-tr from-amber-500 via-yellow-400 to-amber-600 flex items-center justify-center text-dark-950 shadow-2xl shadow-gold-500/30 mb-4 animate-in zoom-in-95">
-            <Crown className="w-8 h-8 fill-dark-950" />
-          </div>
-          
-          <h1 className="text-2xl font-black tracking-tight text-white flex items-center gap-2">
-            <span className="gold-gradient-text">NEXUS</span>
-            <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-gold-500/20 text-gold-300 border border-gold-500/40 tracking-widest uppercase">
-              ROYAL
-            </span>
-          </h1>
-          <p className="text-xs text-dark-400 mt-1">Private Real-Time Video & Messaging Realm</p>
-        </div>
+      <div className="box">
+        <div className="logo">NexusRoyal</div>
+        <p style={{ color: '#888', fontSize: '11px', letterSpacing: '2px', marginTop: '2px', fontWeight: 600 }}>OFFICIAL</p>
 
-        {/* Feature Highlights */}
-        <div className="relative z-10 p-4 rounded-2xl bg-dark-850/80 border border-gold-500/15 text-left space-y-2.5 shadow-inner">
-          <div className="flex items-center gap-2.5 text-xs text-dark-200">
-            <Video className="w-4 h-4 text-gold-400 shrink-0" />
-            <span className="font-semibold">Ultra-HD 4K Video & Audio Calls</span>
-          </div>
-          <div className="flex items-center gap-2.5 text-xs text-dark-200">
-            <MessageSquare className="w-4 h-4 text-emerald-400 shrink-0" />
-            <span className="font-semibold">Private Unique @Username & Encrypted Chats</span>
-          </div>
-          <div className="flex items-center gap-2.5 text-xs text-dark-200">
-            <Shield className="w-4 h-4 text-cyan-400 shrink-0" />
-            <span className="font-semibold">End-to-End Encrypted Quantum Security</span>
-          </div>
-        </div>
-
-        {/* Error notification */}
         {error && (
-          <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2 text-left">
-            <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" />
-            <span>{error}</span>
+          <div style={{
+            background: '#fff1f2',
+            border: '1px solid #fecdd3',
+            color: '#e11d48',
+            fontSize: '12px',
+            padding: '8px 10px',
+            borderRadius: '8px',
+            margin: '10px 0 6px 0',
+            textAlign: 'left',
+            lineHeight: '1.4'
+          }}>
+            {error}
           </div>
         )}
 
-        {/* Exclusive Google Sign-In Button */}
-        <div className="relative z-10 space-y-3">
-          <button
-            type="button"
-            onClick={handleGoogleSignIn}
+        <form onSubmit={handleSubmit} style={{ marginTop: '8px' }}>
+          {isSignUp && (
+            <input
+              type="text"
+              placeholder="Full Name"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              disabled={loading}
+              autoComplete="name"
+            />
+          )}
+
+          <input
+            type="text"
+            placeholder={isSignUp ? "Username or Email" : "Phone number, username, or email"}
+            value={identifier}
+            onChange={(e) => setIdentifier(e.target.value)}
             disabled={loading}
-            className="w-full py-3.5 px-5 rounded-2xl bg-white hover:bg-slate-100 text-slate-900 font-extrabold text-sm shadow-xl shadow-white/10 flex items-center justify-center gap-3 transition-all active:scale-[0.98] disabled:opacity-50 border border-slate-200 group"
-          >
-            {loading ? (
-              <div className="w-5 h-5 border-2 border-slate-900 border-t-transparent rounded-full animate-spin" />
-            ) : (
-              <svg className="w-5 h-5 shrink-0 group-hover:scale-105 transition-transform" viewBox="0 0 24 24">
-                <path
-                  fill="#4285F4"
-                  d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                />
-                <path
-                  fill="#34A853"
-                  d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                />
-                <path
-                  fill="#FBBC05"
-                  d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                />
-                <path
-                  fill="#EA4335"
-                  d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                />
-              </svg>
-            )}
-            <span>{loading ? 'Authenticating...' : 'Continue with Google'}</span>
+            autoComplete="username"
+            required
+          />
+
+          <input
+            type="password"
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            disabled={loading}
+            autoComplete={isSignUp ? "new-password" : "current-password"}
+            required
+          />
+
+          <button type="submit" className="btn" disabled={loading}>
+            {loading ? 'Please wait...' : (isSignUp ? 'Sign up for NexusRoyal' : 'Log in to NexusRoyal')}
           </button>
+        </form>
 
-          <p className="text-[11px] text-dark-400 flex items-center justify-center gap-1.5 pt-1">
-            <Lock className="w-3 h-3 text-gold-400" />
-            <span>Official Firebase Google Authentication</span>
-          </p>
+        <div className="divider">OR</div>
 
-          <p className="text-[10px] text-dark-400 leading-relaxed pt-2">
-            By continuing, you agree to our{' '}
-            <button
-              type="button"
-              onClick={() => {
-                window.history.pushState({}, '', '/terms');
-                window.dispatchEvent(new CustomEvent('nexus_navigate', { detail: 'terms' }));
-              }}
-              className="text-gold-400 hover:text-gold-300 font-bold underline transition-colors cursor-pointer"
-            >
-              Terms of Service
-            </button>
-            {' '}and{' '}
-            <button
-              type="button"
-              onClick={() => {
-                window.history.pushState({}, '', '/privacy');
-                window.dispatchEvent(new CustomEvent('nexus_navigate', { detail: 'privacy' }));
-              }}
-              className="text-gold-400 hover:text-gold-300 font-bold underline transition-colors cursor-pointer"
-            >
-              Privacy Policy
-            </button>
-            .
-          </p>
+        <button type="button" className="gbtn" onClick={handleGoogleSignIn} disabled={loading}>
+          <img src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg" alt="G" />
+          {loading ? 'Connecting...' : 'Continue with Google'}
+        </button>
+
+        {/* Toggle between Login and Sign Up */}
+        <div style={{ marginTop: '16px', fontSize: '12px', color: '#666' }}>
+          {isSignUp ? (
+            <>
+              Have an account?{' '}
+              <button
+                type="button"
+                onClick={() => { setIsSignUp(false); setError(null); }}
+                style={{ color: '#d62976', fontWeight: 'bold', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+              >
+                Log in
+              </button>
+            </>
+          ) : (
+            <>
+              Don't have an account?{' '}
+              <button
+                type="button"
+                onClick={() => { setIsSignUp(true); setError(null); }}
+                style={{ color: '#d62976', fontWeight: 'bold', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+              >
+                Sign up
+              </button>
+            </>
+          )}
         </div>
 
+        {/* Terms and Privacy policy footer */}
+        <div style={{ marginTop: '14px', fontSize: '10px', color: '#aaa', lineHeight: '1.4' }}>
+          By continuing, you agree to our{' '}
+          <button
+            type="button"
+            onClick={() => {
+              window.history.pushState({}, '', '/terms');
+              window.dispatchEvent(new CustomEvent('nexus_navigate', { detail: 'terms' }));
+            }}
+            style={{ color: '#888', textDecoration: 'underline', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: '10px' }}
+          >
+            Terms of Service
+          </button>
+          {' '}and{' '}
+          <button
+            type="button"
+            onClick={() => {
+              window.history.pushState({}, '', '/privacy');
+              window.dispatchEvent(new CustomEvent('nexus_navigate', { detail: 'privacy' }));
+            }}
+            style={{ color: '#888', textDecoration: 'underline', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: '10px' }}
+          >
+            Privacy Policy
+          </button>
+          .
+        </div>
       </div>
     </div>
   );

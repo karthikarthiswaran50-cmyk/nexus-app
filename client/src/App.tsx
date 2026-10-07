@@ -116,11 +116,7 @@ const AppContent: React.FC = () => {
   }
 
   if (!user) {
-    return (
-      <div className="min-h-screen bg-dark-950 flex items-center justify-center">
-        <AuthModal />
-      </div>
-    );
+    return <AuthModal />;
   }
 
   return (
