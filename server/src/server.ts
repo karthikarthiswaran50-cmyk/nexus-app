@@ -397,6 +397,7 @@ app.get('/api/groups/:id', requireAuth, chatCtrl.getGroupDetails);
 app.post('/api/groups/:id/members', requireAuth, chatCtrl.addGroupMembers);
 app.delete('/api/groups/:id/members/:memberUserId', requireAuth, chatCtrl.removeGroupMember);
 app.get('/api/groups/:id/messages', requireAuth, chatCtrl.getGroupMessages);
+app.post('/api/groups/:id/messages', requireAuth, chatCtrl.sendGroupMessageHttp);
 
 // 4. Calls Routes
 app.get('/api/calls/history', requireAuth, callsCtrl.getCallHistory);

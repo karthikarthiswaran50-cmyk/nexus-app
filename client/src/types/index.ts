@@ -95,6 +95,8 @@ export interface Message {
   deleted_for_users?: string[];
   created_at: string;
   sender?: User;
+  sending?: boolean;
+  failed?: boolean;
 }
 
 export interface Group {

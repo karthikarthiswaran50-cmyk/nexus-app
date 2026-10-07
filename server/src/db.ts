@@ -405,9 +405,9 @@ async function initPostgresAndRestore() {
 
       CREATE TABLE IF NOT EXISTS messages (
         id VARCHAR(100) PRIMARY KEY,
-        conversation_id VARCHAR(100) NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+        conversation_id VARCHAR(100) REFERENCES conversations(id) ON DELETE CASCADE,
         sender_id VARCHAR(100) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        receiver_id VARCHAR(100) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        receiver_id VARCHAR(100) REFERENCES users(id) ON DELETE CASCADE,
         content TEXT NOT NULL,
         type VARCHAR(20) DEFAULT 'text',
         media_url TEXT,
@@ -434,6 +434,8 @@ async function initPostgresAndRestore() {
       ALTER TABLE messages ADD COLUMN IF NOT EXISTS file_name VARCHAR(255);
       ALTER TABLE messages ADD COLUMN IF NOT EXISTS file_size INT;
       ALTER TABLE messages ADD COLUMN IF NOT EXISTS poll_data TEXT;
+      ALTER TABLE messages ALTER COLUMN receiver_id DROP NOT NULL;
+      ALTER TABLE messages ALTER COLUMN conversation_id DROP NOT NULL;
       ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS who_can_call_me VARCHAR(50) DEFAULT 'everyone';
       ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS who_can_see_last_seen VARCHAR(50) DEFAULT 'everyone';
       ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS who_can_see_online_status VARCHAR(50) DEFAULT 'everyone';
@@ -690,7 +692,83 @@ async function initPostgresAndRestore() {
         console.warn('Starred messages restore note:', starErr.message);
       }
 
-      console.log('✅ PostgreSQL database restored successfully! User sessions, accounts, and push subscriptions are intact.');
+      // Restore conversations
+      try {
+        const convRes = await pgPool.query('SELECT * FROM conversations');
+        const insertConv = db.prepare(`
+          INSERT OR REPLACE INTO conversations (id, user1_id, user2_id, last_message_at, created_at, disappearing_seconds)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `);
+        for (const c of convRes.rows) {
+          try {
+            insertConv.run(c.id, c.user1_id, c.user2_id, toIsoSafe(c.last_message_at), toIsoSafe(c.created_at), c.disappearing_seconds || 0);
+          } catch (_) {}
+        }
+      } catch (convErr: any) {
+        console.warn('Conversations restore note:', convErr.message);
+      }
+
+      // Restore groups and group_members
+      try {
+        const grpRes = await pgPool.query('SELECT * FROM groups');
+        const insertGrp = db.prepare(`
+          INSERT OR REPLACE INTO groups (id, name, description, avatar_url, created_by, created_at)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `);
+        for (const g of grpRes.rows) {
+          try {
+            insertGrp.run(g.id, g.name, g.description || '', g.avatar_url || '', g.created_by, toIsoSafe(g.created_at));
+          } catch (_) {}
+        }
+
+        const gmRes = await pgPool.query('SELECT * FROM group_members');
+        const insertGm = db.prepare(`
+          INSERT OR REPLACE INTO group_members (id, group_id, user_id, role, joined_at)
+          VALUES (?, ?, ?, ?, ?)
+        `);
+        for (const gm of gmRes.rows) {
+          try {
+            insertGm.run(gm.id, gm.group_id, gm.user_id, gm.role || 'member', toIsoSafe(gm.joined_at));
+          } catch (_) {}
+        }
+      } catch (grpErr: any) {
+        console.warn('Groups restore note:', grpErr.message);
+      }
+
+      // Restore messages (most recent 3000 messages)
+      try {
+        const msgRes = await pgPool.query('SELECT * FROM messages ORDER BY created_at DESC LIMIT 3000');
+        const insertMsg = db.prepare(`
+          INSERT OR REPLACE INTO messages (id, conversation_id, group_id, sender_id, receiver_id, content, type, media_url, file_name, file_size, poll_data, is_read, reactions, reply_to_id, created_at, edited_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+        for (const m of msgRes.rows) {
+          try {
+            insertMsg.run(
+              m.id,
+              m.conversation_id || null,
+              m.group_id || null,
+              m.sender_id,
+              m.receiver_id || null,
+              m.content,
+              m.type || 'text',
+              m.media_url || null,
+              m.file_name || null,
+              m.file_size || null,
+              m.poll_data || null,
+              m.is_read || 0,
+              m.reactions || '{}',
+              m.reply_to_id || null,
+              toIsoSafe(m.created_at),
+              m.edited_at ? toIsoSafe(m.edited_at) : null
+            );
+          } catch (_) {}
+        }
+      } catch (msgErr: any) {
+        console.warn('Messages restore note:', msgErr.message);
+      }
+
+      console.log('✅ PostgreSQL database restored successfully! User sessions, accounts, conversations, and messages are intact.');
     } else {
       console.log('🌱 PostgreSQL is empty. Ready for authentic user registrations.');
       purgeDemoData();
@@ -744,6 +822,22 @@ export function upsertUserToSqlite(row: any) {
   }
 }
 
+export function ensureUserInSqlite(userId: string, defaultName?: string): void {
+  if (!userId) return;
+  try {
+    const exists = db.prepare('SELECT id FROM users WHERE id = ?').get(userId);
+    if (!exists) {
+      const now = new Date().toISOString();
+      const safeName = defaultName || ('user_' + userId.replace(/[^a-zA-Z0-9_]/g, '').slice(0, 10));
+      db.prepare(`
+        INSERT OR IGNORE INTO users (id, email, username, password_hash, full_name, avatar_url, bio, status, country, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, '', '', 'Hey there! I am using Nexus.', 'Global', ?, ?)
+      `).run(userId, `${safeName.toLowerCase()}@nexus.local`, safeName.toLowerCase(), 'stub', safeName, now, now);
+    }
+  } catch (e: any) {
+    console.warn(`ensureUserInSqlite note for ${userId}:`, e.message);
+  }
+}
 
 // ----------------------------------------------------
 // Persistent Asynchronous Sync to PostgreSQL
@@ -860,6 +954,32 @@ export function persistSettingsToPg(st: {
       st.fcm_token || null
     ]
   ).catch(err => console.error('Error persisting settings to PostgreSQL:', err.message));
+}
+
+export function persistConversationToPg(conv: {
+  id: string;
+  user1_id: string;
+  user2_id: string;
+  last_message_at?: string;
+  created_at?: string;
+  disappearing_seconds?: number;
+}) {
+  if (!pgPool) return;
+  pgPool.query(
+    `INSERT INTO conversations (id, user1_id, user2_id, last_message_at, created_at, disappearing_seconds)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     ON CONFLICT (id) DO UPDATE SET
+       last_message_at = EXCLUDED.last_message_at,
+       disappearing_seconds = EXCLUDED.disappearing_seconds`,
+    [
+      conv.id,
+      conv.user1_id,
+      conv.user2_id,
+      conv.last_message_at ? new Date(conv.last_message_at) : new Date(),
+      conv.created_at ? new Date(conv.created_at) : new Date(),
+      conv.disappearing_seconds || 0,
+    ]
+  ).catch(err => console.error('Error persisting conversation to PostgreSQL:', err.message));
 }
 
 export function persistMessageToPg(msg: {

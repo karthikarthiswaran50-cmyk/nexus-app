@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useSocket } from '../../context/SocketContext';
 import { useAuth } from '../../context/AuthContext';
 import { User, Message, CallType, Group } from '../../types';
@@ -12,6 +12,7 @@ import {
   Smile,
   Check,
   CheckCheck,
+  AlertCircle,
   Info,
   X,
   Mic,
@@ -373,20 +374,66 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, on
       });
       const mediaUrl = uploadRes.data.url;
 
-      if (group) {
-        socket?.emit('group:send_message', {
-          groupId: group.id,
-          content: '📹 Video Note',
-          type: 'video_circle',
-          mediaUrl,
-        });
-      } else if (otherUser) {
-        socket?.emit('chat:send_message', {
-          receiverId: otherUser.id,
-          content: '📹 Video Note',
-          type: 'video_circle',
-          mediaUrl,
-        });
+      const tempId = 'temp_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+      const optimisticMsg: Message = {
+        id: tempId,
+        conversation_id: conversationId || undefined,
+        group_id: group?.id,
+        sender_id: user?.id || '',
+        receiver_id: otherUser?.id,
+        content: '📹 Video Note',
+        type: 'video_circle',
+        media_url: mediaUrl,
+        created_at: new Date().toISOString(),
+        is_read: false,
+        sender: user as any,
+        sending: true,
+        failed: false,
+      };
+
+      setMessages((prev) => [...prev, optimisticMsg]);
+
+      if (socket && socket.connected) {
+        if (group) {
+          socket.emit('group:send_message', {
+            groupId: group.id,
+            content: '📹 Video Note',
+            type: 'video_circle',
+            mediaUrl,
+            tempId,
+          });
+        } else if (otherUser) {
+          socket.emit('chat:send_message', {
+            receiverId: otherUser.id,
+            content: '📹 Video Note',
+            type: 'video_circle',
+            mediaUrl,
+            tempId,
+          });
+        }
+      } else {
+        if (group) {
+          axios.post(`/api/groups/${group.id}/messages`, {
+            content: '📹 Video Note',
+            type: 'video_circle',
+            mediaUrl,
+          }).then((res) => {
+            mergeIncomingMessage(res.data.message || res.data, tempId);
+          }).catch(() => {
+            setMessages((prev) => prev.map((m) => (m.id === tempId ? { ...m, sending: false, failed: true } : m)));
+          });
+        } else if (otherUser) {
+          axios.post('/api/chat/send', {
+            receiverId: otherUser.id,
+            content: '📹 Video Note',
+            type: 'video_circle',
+            mediaUrl,
+          }).then((res) => {
+            mergeIncomingMessage(res.data.message, tempId);
+          }).catch(() => {
+            setMessages((prev) => prev.map((m) => (m.id === tempId ? { ...m, sending: false, failed: true } : m)));
+          });
+        }
       }
       showToast('Video Note sent! 📹');
     } catch (err) {
@@ -473,7 +520,71 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, on
     }
   }, [socket, otherUser?.id]);
 
-  // Real-time new direct message
+  // Safe merger for optimistic temporary messages and server-confirmed messages
+  const mergeIncomingMessage = useCallback((incomingMsg: Message, tempId?: string) => {
+    if (!incomingMsg) return;
+    setMessages(prev => {
+      // 1. If explicit tempId provided, replace exact optimistic placeholder
+      if (tempId && prev.some(m => m.id === tempId)) {
+        return prev.map(m => m.id === tempId ? { ...incomingMsg, sending: false, failed: false } : m);
+      }
+      // 2. If already exists by permanent ID, update it
+      if (prev.some(m => m.id === incomingMsg.id)) {
+        return prev.map(m => m.id === incomingMsg.id ? { ...incomingMsg, sending: false, failed: false } : m);
+      }
+      // 3. Match unconfirmed optimistic message by sender, content, and temp_ prefix
+      const matchedTemp = prev.find(m => m.id.startsWith('temp_') && m.sender_id === incomingMsg.sender_id && m.content === incomingMsg.content);
+      if (matchedTemp) {
+        return prev.map(m => m.id === matchedTemp.id ? { ...incomingMsg, sending: false, failed: false } : m);
+      }
+      // 4. Append new incoming message
+      return [...prev, { ...incomingMsg, sending: false, failed: false }];
+    });
+  }, []);
+
+  // Direct socket listeners for instant confirmations and error feedback
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleDirectMessageSent = (data: { message: Message; conversationId: string; tempId?: string }) => {
+      const msg = data.message;
+      if (!msg) return;
+      if (otherUser && (msg.receiver_id === otherUser.id || msg.sender_id === otherUser.id)) {
+        mergeIncomingMessage(msg, data.tempId);
+      }
+    };
+
+    const handleGroupMessageSent = (data: { message: Message; tempId?: string }) => {
+      const msg = data.message;
+      if (!msg) return;
+      if (group && msg.group_id === group.id) {
+        mergeIncomingMessage(msg, data.tempId);
+      }
+    };
+
+    const handleSocketChatError = (data: { message?: string; tempId?: string }) => {
+      if (data?.tempId) {
+        setMessages(prev => prev.map(m => m.id === data.tempId ? { ...m, sending: false, failed: true } : m));
+      }
+      if (data?.message) {
+        showToast(data.message);
+      }
+    };
+
+    socket.on('chat:message_sent', handleDirectMessageSent);
+    socket.on('group:message_sent', handleGroupMessageSent);
+    socket.on('chat:error', handleSocketChatError);
+    socket.on('group:error', handleSocketChatError);
+
+    return () => {
+      socket.off('chat:message_sent', handleDirectMessageSent);
+      socket.off('group:message_sent', handleGroupMessageSent);
+      socket.off('chat:error', handleSocketChatError);
+      socket.off('group:error', handleSocketChatError);
+    };
+  }, [socket, otherUser?.id, group?.id, mergeIncomingMessage]);
+
+  // Real-time new direct message from SocketContext
   useEffect(() => {
     if (!latestMessage || !otherUser) return;
 
@@ -481,16 +592,13 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, on
       (latestMessage.sender_id === otherUser.id && latestMessage.receiver_id === user?.id) ||
       (latestMessage.sender_id === user?.id && latestMessage.receiver_id === otherUser.id)
     ) {
-      setMessages(prev => {
-        if (prev.some(m => m.id === latestMessage.id)) return prev;
-        return [...prev, latestMessage];
-      });
+      mergeIncomingMessage(latestMessage);
 
       if (latestMessage.sender_id === otherUser.id && socket) {
         socket.emit('chat:read', { senderId: otherUser.id });
       }
     }
-  }, [latestMessage, otherUser?.id, user?.id, socket]);
+  }, [latestMessage, otherUser?.id, user?.id, socket, mergeIncomingMessage]);
 
   // Real-time new group message
   useEffect(() => {
@@ -498,17 +606,14 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, on
     const handleGroupMsg = (data: any) => {
       const msg: Message = data.message || data;
       if (msg.group_id === group.id) {
-        setMessages(prev => {
-          if (prev.some(m => m.id === msg.id)) return prev;
-          return [...prev, msg];
-        });
+        mergeIncomingMessage(msg, (data as any)?.tempId);
       }
     };
     socket.on('group:new_message', handleGroupMsg);
     return () => {
       socket.off('group:new_message', handleGroupMsg);
     };
-  }, [socket, group]);
+  }, [socket, group, mergeIncomingMessage]);
 
   // Real-time reaction update
   useEffect(() => {
@@ -623,12 +728,88 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, on
     }
   };
 
+  const saveToOfflineQueue = (item: any) => {
+    try {
+      const rawQueue = localStorage.getItem('nexus_offline_queue');
+      const queue: any[] = rawQueue ? JSON.parse(rawQueue) : [];
+      queue.push(item);
+      localStorage.setItem('nexus_offline_queue', JSON.stringify(queue));
+    } catch (_) {}
+  };
+
+  const handleRetryMessage = (failedMsg: Message) => {
+    setMessages(prev => prev.map(m => m.id === failedMsg.id ? { ...m, sending: true, failed: false } : m));
+    if (group) {
+      if (socket?.connected) {
+        socket.emit('group:send_message', {
+          groupId: group.id,
+          content: failedMsg.content,
+          type: failedMsg.type,
+          mediaUrl: failedMsg.media_url,
+          fileName: failedMsg.file_name,
+          fileSize: failedMsg.file_size,
+          replyToId: failedMsg.reply_to_id,
+          replyToContent: failedMsg.reply_to_content,
+          replyToSender: failedMsg.reply_to_sender,
+          tempId: failedMsg.id,
+        });
+      } else {
+        axios.post(`/api/groups/${group.id}/messages`, {
+          content: failedMsg.content,
+          type: failedMsg.type,
+          mediaUrl: failedMsg.media_url,
+          fileName: failedMsg.file_name,
+          fileSize: failedMsg.file_size,
+          replyToId: failedMsg.reply_to_id,
+          replyToContent: failedMsg.reply_to_content,
+          replyToSender: failedMsg.reply_to_sender,
+        }).then(res => {
+          mergeIncomingMessage(res.data.message || res.data, failedMsg.id);
+        }).catch(() => {
+          setMessages(prev => prev.map(m => m.id === failedMsg.id ? { ...m, sending: false, failed: true } : m));
+        });
+      }
+    } else if (otherUser) {
+      if (socket?.connected) {
+        socket.emit('chat:send_message', {
+          receiverId: otherUser.id,
+          content: failedMsg.content,
+          type: failedMsg.type,
+          mediaUrl: failedMsg.media_url,
+          fileName: failedMsg.file_name,
+          fileSize: failedMsg.file_size,
+          replyToId: failedMsg.reply_to_id,
+          replyToContent: failedMsg.reply_to_content,
+          replyToSender: failedMsg.reply_to_sender,
+          tempId: failedMsg.id,
+        });
+      } else {
+        axios.post('/api/chat/send', {
+          receiverId: otherUser.id,
+          content: failedMsg.content,
+          type: failedMsg.type,
+          mediaUrl: failedMsg.media_url,
+          fileName: failedMsg.file_name,
+          fileSize: failedMsg.file_size,
+          replyToId: failedMsg.reply_to_id,
+          replyToContent: failedMsg.reply_to_content,
+          replyToSender: failedMsg.reply_to_sender,
+        }).then(res => {
+          mergeIncomingMessage(res.data.message, failedMsg.id);
+        }).catch(() => {
+          setMessages(prev => prev.map(m => m.id === failedMsg.id ? { ...m, sending: false, failed: true } : m));
+        });
+      }
+    }
+  };
+
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputText.trim() || !user) return;
+    const textToSend = inputText.trim();
+    if (!textToSend || !user) return;
 
     if (editingMessage) {
-      const newContent = inputText.trim();
+      const newContent = textToSend;
       if (socket) {
         socket.emit('chat:edit_message', {
           messageId: editingMessage.id,
@@ -651,75 +832,135 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, on
       return;
     }
 
-    // Check offline status
-    if (!navigator.onLine || !socket?.connected) {
-      const tempId = 'temp_' + Date.now();
-      const offlineMsg: Message = {
-        id: tempId,
-        sender_id: user.id,
-        receiver_id: otherUser?.id,
-        group_id: group?.id,
-        content: inputText.trim(),
-        type: 'text',
-        created_at: new Date().toISOString(),
-        is_read: false,
-        sender: user as any,
-      };
+    const tempId = 'temp_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+    const optimisticMsg: Message = {
+      id: tempId,
+      conversation_id: conversationId || undefined,
+      group_id: group?.id,
+      sender_id: user.id,
+      receiver_id: otherUser?.id,
+      content: textToSend,
+      type: 'text',
+      created_at: new Date().toISOString(),
+      is_read: false,
+      reactions: {},
+      reply_to_id: replyingTo?.id,
+      reply_to_content: replyingTo ? (replyingTo.type === 'audio' ? '🎤 Voice note' : replyingTo.type === 'image' ? '📷 Photo' : replyingTo.content) : undefined,
+      reply_to_sender: replyingTo ? (replyingTo.sender_id === user.id ? 'You' : (otherUser?.full_name || replyingTo.sender?.full_name || 'Contact')) : undefined,
+      sender: user as any,
+      sending: true,
+      failed: false,
+    };
 
-      try {
-        const rawQueue = localStorage.getItem('nexus_offline_queue');
-        const queue: any[] = rawQueue ? JSON.parse(rawQueue) : [];
-        queue.push({
-          groupId: group?.id,
-          receiverId: otherUser?.id,
-          content: inputText.trim(),
-          type: 'text',
-          replyToId: replyingTo?.id,
-        });
-        localStorage.setItem('nexus_offline_queue', JSON.stringify(queue));
-      } catch (_) {}
-
-      setMessages((prev) => [...prev, offlineMsg]);
-      setInputText('');
-      setReplyingTo(null);
-      showToast('Saved offline. Message will send once connection is restored.');
-      return;
-    }
-
-    if (group) {
-      socket.emit('group:send_message', {
-        groupId: group.id,
-        content: inputText.trim(),
-        type: 'text',
-        replyToId: replyingTo?.id,
-        replyToContent: replyingTo ? replyingTo.content : undefined,
-        replyToSender: replyingTo ? (replyingTo.sender_id === user.id ? 'You' : replyingTo.sender?.full_name) : undefined,
-      });
-    } else if (otherUser) {
-      socket.emit('chat:send_message', {
-        receiverId: otherUser.id,
-        content: inputText.trim(),
-        type: 'text',
-        replyToId: replyingTo?.id,
-        replyToContent: replyingTo ? (replyingTo.type === 'audio' ? '🎤 Voice note' : replyingTo.type === 'image' ? '📷 Photo' : replyingTo.content) : undefined,
-        replyToSender: replyingTo ? (replyingTo.sender_id === user.id ? 'You' : otherUser.full_name) : undefined,
-      });
-
-      trackUserActivity({
-        userId: user.id,
-        username: user.username,
-        action: 'chat_sent',
-        details: {
-          type: 'text',
-          recipientId: otherUser.id,
-          recipientUsername: otherUser.username,
-        },
-      });
-      sendTyping(otherUser.id, false);
-    }
-
+    // 1. Immediately insert optimistic message into state so user sees it right away
+    setMessages((prev) => [...prev, optimisticMsg]);
     setInputText('');
     setReplyingTo(null);
+
+    // 2. Dual-channel delivery: Socket primary, HTTP fallback
+    let deliveredViaSocket = false;
+    if (socket && socket.connected) {
+      try {
+        if (group) {
+          socket.emit('group:send_message', {
+            groupId: group.id,
+            content: textToSend,
+            type: 'text',
+            replyToId: optimisticMsg.reply_to_id,
+            replyToContent: optimisticMsg.reply_to_content,
+            replyToSender: optimisticMsg.reply_to_sender,
+            tempId,
+          });
+          deliveredViaSocket = true;
+        } else if (otherUser) {
+          socket.emit('chat:send_message', {
+            receiverId: otherUser.id,
+            content: textToSend,
+            type: 'text',
+            replyToId: optimisticMsg.reply_to_id,
+            replyToContent: optimisticMsg.reply_to_content,
+            replyToSender: optimisticMsg.reply_to_sender,
+            tempId,
+          });
+          deliveredViaSocket = true;
+          sendTyping(otherUser.id, false);
+
+          trackUserActivity({
+            userId: user.id,
+            username: user.username,
+            action: 'chat_sent',
+            details: {
+              type: 'text',
+              recipientId: otherUser.id,
+              recipientUsername: otherUser.username,
+            },
+          });
+        }
+      } catch (err) {
+        deliveredViaSocket = false;
+      }
+    }
+
+    // 3. If socket is disconnected, failed, or after short timeout without confirmation: HTTP fallback
+    const deliverViaHttp = () => {
+      if (group) {
+        axios.post(`/api/groups/${group.id}/messages`, {
+          content: textToSend,
+          type: 'text',
+          replyToId: optimisticMsg.reply_to_id,
+          replyToContent: optimisticMsg.reply_to_content,
+          replyToSender: optimisticMsg.reply_to_sender,
+        }).then((res) => {
+          const confirmed = res.data.message || res.data;
+          mergeIncomingMessage(confirmed, tempId);
+        }).catch((err) => {
+          console.error('HTTP group message send error:', err);
+          setMessages((prev) => prev.map((m) => (m.id === tempId ? { ...m, sending: false, failed: true } : m)));
+          saveToOfflineQueue({
+            groupId: group.id,
+            content: textToSend,
+            type: 'text',
+            replyToId: optimisticMsg.reply_to_id,
+          });
+        });
+      } else if (otherUser) {
+        axios.post('/api/chat/send', {
+          receiverId: otherUser.id,
+          content: textToSend,
+          type: 'text',
+          replyToId: optimisticMsg.reply_to_id,
+          replyToContent: optimisticMsg.reply_to_content,
+          replyToSender: optimisticMsg.reply_to_sender,
+        }).then((res) => {
+          const confirmed = res.data.message;
+          mergeIncomingMessage(confirmed, tempId);
+        }).catch((err) => {
+          console.error('HTTP direct message send error:', err);
+          setMessages((prev) => prev.map((m) => (m.id === tempId ? { ...m, sending: false, failed: true } : m)));
+          saveToOfflineQueue({
+            receiverId: otherUser.id,
+            content: textToSend,
+            type: 'text',
+            replyToId: optimisticMsg.reply_to_id,
+          });
+        });
+      }
+    };
+
+    if (!deliveredViaSocket) {
+      deliverViaHttp();
+    } else {
+      // Safety timer: If socket doesn't confirm within 4 seconds, verify and fallback to HTTP if message is still pending
+      setTimeout(() => {
+        setMessages((current) => {
+          const msg = current.find((m) => m.id === tempId);
+          if (msg && msg.sending) {
+            deliverViaHttp();
+          }
+          return current;
+        });
+      }, 4000);
+    }
   };
 
   const handleToggleStar = async (msg: Message) => {
@@ -796,7 +1037,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, on
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !socket || !user) return;
+    if (!file || !user) return;
 
     const formData = new FormData();
     formData.append('file', file);
@@ -808,35 +1049,101 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, on
       });
 
       const isImage = file.type.startsWith('image/');
-      if (group) {
-        socket.emit('group:send_message', {
-          groupId: group.id,
-          content: isImage ? 'Sent an image' : `Sent file: ${file.name}`,
-          type: isImage ? 'image' : 'file',
-          mediaUrl: res.data.url,
-          fileName: file.name,
-          fileSize: file.size,
-          replyToId: replyingTo?.id,
-          replyToContent: replyingTo ? replyingTo.content : undefined,
-          replyToSender: replyingTo ? (replyingTo.sender_id === user.id ? 'You' : replyingTo.sender?.full_name) : undefined,
-        });
-      } else if (otherUser) {
-        socket.emit('chat:send_message', {
-          receiverId: otherUser.id,
-          content: isImage ? 'Sent an image' : `Sent file: ${file.name}`,
-          type: isImage ? 'image' : 'file',
-          mediaUrl: res.data.url,
-          fileName: file.name,
-          fileSize: file.size,
-          replyToId: replyingTo?.id,
-          replyToContent: replyingTo ? replyingTo.content : undefined,
-          replyToSender: replyingTo ? (replyingTo.sender_id === user.id ? 'You' : otherUser.full_name) : undefined,
-        });
-      }
+      const tempId = 'temp_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+      const content = isImage ? 'Sent an image' : `Sent file: ${file.name}`;
+      const type = isImage ? 'image' : 'file';
 
+      const optimisticMsg: Message = {
+        id: tempId,
+        conversation_id: conversationId || undefined,
+        group_id: group?.id,
+        sender_id: user.id,
+        receiver_id: otherUser?.id,
+        content,
+        type: type as any,
+        media_url: res.data.url,
+        file_name: file.name,
+        file_size: file.size,
+        created_at: new Date().toISOString(),
+        is_read: false,
+        reply_to_id: replyingTo?.id,
+        reply_to_content: replyingTo ? replyingTo.content : undefined,
+        reply_to_sender: replyingTo ? (replyingTo.sender_id === user.id ? 'You' : replyingTo.sender?.full_name) : undefined,
+        sender: user as any,
+        sending: true,
+        failed: false,
+      };
+
+      setMessages((prev) => [...prev, optimisticMsg]);
       setReplyingTo(null);
+
+      if (socket && socket.connected) {
+        if (group) {
+          socket.emit('group:send_message', {
+            groupId: group.id,
+            content,
+            type,
+            mediaUrl: res.data.url,
+            fileName: file.name,
+            fileSize: file.size,
+            replyToId: optimisticMsg.reply_to_id,
+            replyToContent: optimisticMsg.reply_to_content,
+            replyToSender: optimisticMsg.reply_to_sender,
+            tempId,
+          });
+        } else if (otherUser) {
+          socket.emit('chat:send_message', {
+            receiverId: otherUser.id,
+            content,
+            type,
+            mediaUrl: res.data.url,
+            fileName: file.name,
+            fileSize: file.size,
+            replyToId: optimisticMsg.reply_to_id,
+            replyToContent: optimisticMsg.reply_to_content,
+            replyToSender: optimisticMsg.reply_to_sender,
+            tempId,
+          });
+        }
+      } else {
+        // HTTP fallback
+        if (group) {
+          axios.post(`/api/groups/${group.id}/messages`, {
+            content,
+            type,
+            mediaUrl: res.data.url,
+            fileName: file.name,
+            fileSize: file.size,
+            replyToId: optimisticMsg.reply_to_id,
+            replyToContent: optimisticMsg.reply_to_content,
+            replyToSender: optimisticMsg.reply_to_sender,
+          }).then((httpRes) => {
+            const confirmed = httpRes.data.message || httpRes.data;
+            mergeIncomingMessage(confirmed, tempId);
+          }).catch(() => {
+            setMessages((prev) => prev.map((m) => (m.id === tempId ? { ...m, sending: false, failed: true } : m)));
+          });
+        } else if (otherUser) {
+          axios.post('/api/chat/send', {
+            receiverId: otherUser.id,
+            content,
+            type,
+            mediaUrl: res.data.url,
+            fileName: file.name,
+            fileSize: file.size,
+            replyToId: optimisticMsg.reply_to_id,
+            replyToContent: optimisticMsg.reply_to_content,
+            replyToSender: optimisticMsg.reply_to_sender,
+          }).then((httpRes) => {
+            mergeIncomingMessage(httpRes.data.message, tempId);
+          }).catch(() => {
+            setMessages((prev) => prev.map((m) => (m.id === tempId ? { ...m, sending: false, failed: true } : m)));
+          });
+        }
+      }
     } catch (err) {
       console.error('File upload failed:', err);
+      showToast('Failed to upload file');
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -881,7 +1188,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, on
   };
 
   const stopAndSendRecording = async () => {
-    if (!mediaRecorderRef.current || !socket || !user) return;
+    if (!mediaRecorderRef.current || !user) return;
 
     clearInterval(recordingIntervalRef.current);
     setIsRecording(false);
@@ -904,29 +1211,84 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, on
           headers: { 'Content-Type': 'multipart/form-data' },
         });
 
-        if (otherUser) {
-          socket.emit('chat:send_message', {
-            receiverId: otherUser.id,
-            content: '🎤 Voice message',
-            type: 'audio',
-            mediaUrl: res.data.url,
-            replyToId: replyingTo?.id,
-            replyToContent: replyingTo ? replyingTo.content : undefined,
-            replyToSender: replyingTo ? (replyingTo.sender_id === user.id ? 'You' : otherUser.full_name) : undefined,
-          });
-        } else if (group) {
-          socket.emit('group:send_message', {
-            groupId: group.id,
-            content: '🎤 Voice message',
-            type: 'audio',
-            mediaUrl: res.data.url,
-            replyToId: replyingTo?.id,
-            replyToContent: replyingTo ? replyingTo.content : undefined,
-            replyToSender: replyingTo ? (replyingTo.sender_id === user.id ? 'You' : (replyingTo.sender?.full_name || 'Member')) : undefined,
-          });
-        }
+        const tempId = 'temp_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+        const optimisticVoiceMsg: Message = {
+          id: tempId,
+          conversation_id: conversationId || undefined,
+          group_id: group?.id,
+          sender_id: user.id,
+          receiver_id: otherUser?.id,
+          content: '🎤 Voice message',
+          type: 'audio',
+          media_url: res.data.url,
+          created_at: new Date().toISOString(),
+          is_read: false,
+          reply_to_id: replyingTo?.id,
+          reply_to_content: replyingTo ? replyingTo.content : undefined,
+          reply_to_sender: replyingTo ? (replyingTo.sender_id === user.id ? 'You' : otherUser?.full_name || 'Member') : undefined,
+          sender: user as any,
+          sending: true,
+          failed: false,
+        };
 
+        setMessages((prev) => [...prev, optimisticVoiceMsg]);
         setReplyingTo(null);
+
+        if (socket && socket.connected) {
+          if (otherUser) {
+            socket.emit('chat:send_message', {
+              receiverId: otherUser.id,
+              content: '🎤 Voice message',
+              type: 'audio',
+              mediaUrl: res.data.url,
+              replyToId: optimisticVoiceMsg.reply_to_id,
+              replyToContent: optimisticVoiceMsg.reply_to_content,
+              replyToSender: optimisticVoiceMsg.reply_to_sender,
+              tempId,
+            });
+          } else if (group) {
+            socket.emit('group:send_message', {
+              groupId: group.id,
+              content: '🎤 Voice message',
+              type: 'audio',
+              mediaUrl: res.data.url,
+              replyToId: optimisticVoiceMsg.reply_to_id,
+              replyToContent: optimisticVoiceMsg.reply_to_content,
+              replyToSender: optimisticVoiceMsg.reply_to_sender,
+              tempId,
+            });
+          }
+        } else {
+          // HTTP fallback
+          if (otherUser) {
+            axios.post('/api/chat/send', {
+              receiverId: otherUser.id,
+              content: '🎤 Voice message',
+              type: 'audio',
+              mediaUrl: res.data.url,
+              replyToId: optimisticVoiceMsg.reply_to_id,
+              replyToContent: optimisticVoiceMsg.reply_to_content,
+              replyToSender: optimisticVoiceMsg.reply_to_sender,
+            }).then((httpRes) => {
+              mergeIncomingMessage(httpRes.data.message, tempId);
+            }).catch(() => {
+              setMessages((prev) => prev.map((m) => (m.id === tempId ? { ...m, sending: false, failed: true } : m)));
+            });
+          } else if (group) {
+            axios.post(`/api/groups/${group.id}/messages`, {
+              content: '🎤 Voice message',
+              type: 'audio',
+              mediaUrl: res.data.url,
+              replyToId: optimisticVoiceMsg.reply_to_id,
+              replyToContent: optimisticVoiceMsg.reply_to_content,
+              replyToSender: optimisticVoiceMsg.reply_to_sender,
+            }).then((httpRes) => {
+              mergeIncomingMessage(httpRes.data.message || httpRes.data, tempId);
+            }).catch(() => {
+              setMessages((prev) => prev.map((m) => (m.id === tempId ? { ...m, sending: false, failed: true } : m)));
+            });
+          }
+        }
       } catch (err) {
         console.error('Voice upload failed:', err);
       } finally {
@@ -1962,7 +2324,20 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, on
                       {msg.edited_at && <span className="text-[9px] italic opacity-80">(edited)</span>}
                       <span>{formatTime(msg.created_at)}</span>
                       {isMe && !isDeleted && (
-                        msg.is_read ? (
+                        msg.sending ? (
+                          <span title="Sending...">
+                            <Clock className="w-3.5 h-3.5 text-indigo-200/70 animate-pulse" />
+                          </span>
+                        ) : msg.failed ? (
+                          <button
+                            type="button"
+                            onClick={() => handleRetryMessage(msg)}
+                            title="Failed to deliver. Click to retry"
+                            className="text-rose-400 hover:text-rose-300 flex items-center gap-0.5"
+                          >
+                            <AlertCircle className="w-3.5 h-3.5 stroke-[2.5]" />
+                          </button>
+                        ) : msg.is_read ? (
                           <CheckCheck className="w-3.5 h-3.5 text-amber-300 stroke-[2.5]" />
                         ) : (
                           <Check className="w-3.5 h-3.5 text-indigo-200 stroke-[2]" />

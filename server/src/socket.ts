@@ -248,7 +248,7 @@ export function setupSocket(io: Server) {
         });
 
         // Emit back to sender
-        socket.emit('chat:message_sent', result);
+        socket.emit('chat:message_sent', { ...result, tempId: (data as any)?.tempId });
 
         // Always dispatch high-priority Web Push / FCM to receiver's mobile device
         const sender = getUserWithPlan(userId);
@@ -301,8 +301,12 @@ export function setupSocket(io: Server) {
             senderSockets.forEach((sId) => io.to(sId).emit('chat:new_message', botResult));
           }, 600);
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error('Socket chat:send_message error:', err);
+        socket.emit('chat:error', {
+          message: err?.message || 'Failed to send message',
+          tempId: (data as any)?.tempId,
+        });
       }
     });
 
@@ -493,6 +497,7 @@ export function setupSocket(io: Server) {
 
         // Broadcast to group room
         io.to(`group:${groupId}`).emit('group:new_message', result);
+        socket.emit('group:message_sent', { ...result, tempId: (data as any)?.tempId });
 
         // 🤖 Automatic Nexus Royal Smart AI Assistant Response in Group (@nexus or /ai)
         if (result && (content?.toLowerCase().includes('@nexus') || content?.toLowerCase().startsWith('/ai'))) {
@@ -511,8 +516,12 @@ export function setupSocket(io: Server) {
             io.to(`group:${groupId}`).emit('group:new_message', botResult);
           }, 600);
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error('Socket group:send_message error:', err);
+        socket.emit('group:error', {
+          message: err?.message || 'Failed to send group message',
+          tempId: (data as any)?.tempId,
+        });
       }
     });
 

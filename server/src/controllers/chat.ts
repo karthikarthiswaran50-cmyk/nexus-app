@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { db, pgPool, persistMessageToPg, persistGroupToPg, persistGroupMemberToPg, persistStarToPg, persistDisappearingTimerToPg, persistPollVoteToPg, recordActivity, upsertUserToSqlite } from '../db.js';
+import { db, pgPool, persistMessageToPg, persistConversationToPg, ensureUserInSqlite, persistGroupToPg, persistGroupMemberToPg, persistStarToPg, persistDisappearingTimerToPg, persistPollVoteToPg, recordActivity, upsertUserToSqlite } from '../db.js';
 import { AuthenticatedRequest } from '../middleware/auth.js';
 import { getUserWithPlan } from './auth.js';
 import { Conversation, Message, Group, GroupMember, PollData } from '../types.js';
@@ -197,6 +197,10 @@ export function saveMessage(params: {
 }): { message: Message; conversationId: string } {
   const { senderId, receiverId, content, type = 'text', mediaUrl, fileName, fileSize, pollData, replyToId, replyToContent, replyToSender } = params;
 
+  // Ensure both sender and receiver exist in SQLite cache to eliminate foreign key errors
+  ensureUserInSqlite(senderId);
+  ensureUserInSqlite(receiverId);
+
   // Find or create conversation
   let conv = db.prepare(`
     SELECT id FROM conversations
@@ -212,12 +216,29 @@ export function saveMessage(params: {
       VALUES (?, ?, ?, ?, ?)
     `).run(newConvId, senderId, receiverId, now, now);
     conv = { id: newConvId };
+
+    // Persist new conversation to PostgreSQL
+    persistConversationToPg({
+      id: newConvId,
+      user1_id: senderId,
+      user2_id: receiverId,
+      last_message_at: now,
+      created_at: now,
+    });
   } else {
     db.prepare(`
       UPDATE conversations
       SET last_message_at = ?
       WHERE id = ?
     `).run(now, conv.id);
+
+    // Update conversation in PostgreSQL
+    persistConversationToPg({
+      id: conv.id,
+      user1_id: senderId,
+      user2_id: receiverId,
+      last_message_at: now,
+    });
   }
 
   const msgId = 'msg_' + Math.random().toString(36).substring(2, 10) + Date.now().toString(36);
@@ -1008,6 +1029,9 @@ export function saveGroupMessage(params: {
 }): { message: Message } | null {
   const { senderId, groupId, content, type = 'text', mediaUrl, fileName, fileSize, pollData, replyToId, replyToContent, replyToSender } = params;
 
+  // Ensure sender exists in SQLite cache
+  ensureUserInSqlite(senderId);
+
   // Check sender is member
   const mem = db.prepare('SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?').get(groupId, senderId);
   if (!mem) return null;
@@ -1019,7 +1043,7 @@ export function saveGroupMessage(params: {
 
   db.prepare(`
     INSERT INTO messages (id, group_id, sender_id, receiver_id, content, type, media_url, file_name, file_size, poll_data, is_read, reactions, reply_to_id, reply_to_content, reply_to_sender, is_deleted_for_all, deleted_for_users, created_at)
-    VALUES (?, ?, ?, '', ?, ?, ?, ?, ?, ?, 1, '{}', ?, ?, ?, 0, '[]', ?)
+    VALUES (?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, 1, '{}', ?, ?, ?, 0, '[]', ?)
   `).run(
     msgId,
     groupId,
@@ -1069,6 +1093,43 @@ export function saveGroupMessage(params: {
       sender: getUserWithPlan(senderId) || undefined,
     },
   };
+}
+
+export async function sendGroupMessageHttp(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const senderId = req.user?.userId;
+    const { id: groupId } = req.params;
+    const { content, type = 'text', mediaUrl, fileName, fileSize, pollData, replyToId, replyToContent, replyToSender } = req.body;
+
+    if (!senderId || !groupId || (!content && !mediaUrl && !pollData)) {
+      res.status(400).json({ error: 'Missing required parameters.' });
+      return;
+    }
+
+    const result = saveGroupMessage({
+      senderId,
+      groupId,
+      content: content || '',
+      type,
+      mediaUrl,
+      fileName,
+      fileSize,
+      pollData,
+      replyToId,
+      replyToContent,
+      replyToSender,
+    });
+
+    if (!result) {
+      res.status(403).json({ error: 'Cannot send message: Not a member of this group.' });
+      return;
+    }
+
+    res.status(201).json(result);
+  } catch (err: any) {
+    console.error('sendGroupMessageHttp error:', err);
+    res.status(500).json({ error: 'Failed to send group message.' });
+  }
 }
 
 export async function toggleStarMessage(req: AuthenticatedRequest, res: Response): Promise<void> {
