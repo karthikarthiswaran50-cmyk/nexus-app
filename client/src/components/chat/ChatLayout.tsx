@@ -124,11 +124,42 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
     });
   }, [latestMessage, user?.id]);
 
+  const [globalSearchResults, setGlobalSearchResults] = useState<User[]>([]);
+  const [isSearchingGlobal, setIsSearchingGlobal] = useState(false);
+
+  // Live universal directory lookup when searching by ID, @username, or name
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (!q || chatTab !== 'direct') {
+      setGlobalSearchResults([]);
+      setIsSearchingGlobal(false);
+      return;
+    }
+
+    setIsSearchingGlobal(true);
+    const timer = setTimeout(async () => {
+      try {
+        const res = await axios.get(`/api/users?q=${encodeURIComponent(q)}`);
+        const found: User[] = res.data.users || [];
+        const existingPartnerIds = new Set(conversations.map(c => c.other_user?.id));
+        setGlobalSearchResults(found.filter(u => !existingPartnerIds.has(u.id) && u.id !== user?.id));
+      } catch (err) {
+        setGlobalSearchResults([]);
+      } finally {
+        setIsSearchingGlobal(false);
+      }
+    }, 280);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery, chatTab, conversations, user?.id]);
+
   const filteredConversations = conversations.filter((c) => {
     if (!searchQuery) return true;
     const name = c.other_user?.full_name?.toLowerCase() || '';
     const username = c.other_user?.username?.toLowerCase() || '';
-    return name.includes(searchQuery.toLowerCase()) || username.includes(searchQuery.toLowerCase());
+    const id = c.other_user?.id?.toLowerCase() || '';
+    const q = searchQuery.toLowerCase().replace(/^@+/, '').trim();
+    return name.includes(q) || username.includes(q) || id.includes(q);
   });
 
   const formatLastMessageTime = (iso?: string) => {
@@ -297,10 +328,19 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
           {chatTab === 'direct' ? (
             loading ? (
               <div className="p-8 text-center text-xs text-dark-500">Loading chats...</div>
-            ) : filteredConversations.length === 0 ? (
+            ) : filteredConversations.length === 0 && globalSearchResults.length === 0 ? (
               <div className="p-6 text-center space-y-3">
                 <Users className="w-7 h-7 text-dark-600 mx-auto" />
-                <p className="text-xs text-dark-400">No active conversations found</p>
+                <p className="text-xs text-dark-300 font-bold">
+                  {searchQuery.trim()
+                    ? (isSearchingGlobal ? 'Searching Nexus directory...' : `No members found matching "${searchQuery}"`)
+                    : 'No active conversations found'}
+                </p>
+                {searchQuery.trim() && (
+                  <p className="text-[11px] text-dark-500">
+                    Check the ID or @username spelling, or search by their display name.
+                  </p>
+                )}
                 <div className="flex flex-col gap-2 pt-1">
                   <button
                     type="button"
@@ -308,13 +348,14 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
                     className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 text-dark-950 text-xs font-black shadow-lg shadow-gold-500/25 hover:scale-105 transition-all flex items-center justify-center gap-2"
                   >
                     <Users className="w-3.5 h-3.5 text-dark-950" />
-                    <span>Browse Members</span>
+                    <span>Browse All Members</span>
                   </button>
                 </div>
               </div>
             ) : (
-              filteredConversations.map((conv) => {
-                const other = conv.other_user;
+              <>
+                {filteredConversations.map((conv) => {
+                  const other = conv.other_user;
                 if (!other) return null;
 
                 const isOnline = onlineUserIds.has(other.id);
@@ -381,7 +422,50 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
                     </div>
                   </button>
                 );
-              })
+              })}
+
+              {/* 🌐 Global Directory Members matching search query */}
+              {globalSearchResults.length > 0 && (
+                <div className="pt-3 pb-1 px-1 space-y-1">
+                  <div className="flex items-center justify-between px-2 py-1">
+                    <span className="text-[11px] font-black uppercase tracking-wider text-amber-300 flex items-center gap-1.5">
+                      <Users className="w-3 h-3 text-amber-400" />
+                      <span>Nexus Members ({globalSearchResults.length})</span>
+                    </span>
+                    {isSearchingGlobal && <span className="text-[10px] text-dark-400 animate-pulse">Searching...</span>}
+                  </div>
+                  {globalSearchResults.map((u) => {
+                    const isOnline = onlineUserIds.has(u.id);
+                    const isReachable = reachableUserIds.has(u.id);
+                    return (
+                      <button
+                        key={u.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedUser(u);
+                          setSelectedGroup(null);
+                        }}
+                        className="w-full p-2.5 rounded-2xl bg-dark-950/70 hover:bg-dark-850/90 border border-gold-500/15 hover:border-gold-500/35 flex items-center gap-3 transition-all text-left group"
+                      >
+                        <Avatar src={u.avatar_url} name={u.full_name} size="md" planId={u.plan_id} isOnline={isOnline} isReachable={isReachable} showOnlineStatus />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5">
+                            <p className="text-xs font-bold text-white group-hover:text-amber-200 transition-colors truncate">
+                              {u.full_name}
+                            </p>
+                            <PlanBadge planId={u.plan_id} size="sm" />
+                          </div>
+                          <p className="text-[10px] text-dark-400 font-mono">@{u.username} • ID: {u.id.slice(0, 8)}</p>
+                        </div>
+                        <div className="px-2.5 py-1 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 text-dark-950 text-[10px] font-black shadow-sm shrink-0">
+                          Start Chat
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </>
             )
           ) : (
             /* Groups tab */

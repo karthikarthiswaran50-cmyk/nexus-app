@@ -330,6 +330,16 @@ export function initDatabase() {
     console.error('Seed nexus_bot error:', e);
   }
 
+  // Clean up legacy HTML entities in messages table
+  try {
+    db.prepare("UPDATE messages SET content = REPLACE(content, '&#x2F;', '/') WHERE content LIKE '%&#x2F;%'").run();
+    db.prepare("UPDATE messages SET content = REPLACE(content, '&#x27;', '''') WHERE content LIKE '%&#x27;%'").run();
+    db.prepare("UPDATE messages SET content = REPLACE(content, '&quot;', '\"') WHERE content LIKE '%&quot;%'").run();
+    db.prepare("UPDATE group_messages SET content = REPLACE(content, '&#x2F;', '/') WHERE content LIKE '%&#x2F;%'").run();
+    db.prepare("UPDATE group_messages SET content = REPLACE(content, '&#x27;', '''') WHERE content LIKE '%&#x27;%'").run();
+    db.prepare("UPDATE group_messages SET content = REPLACE(content, '&quot;', '\"') WHERE content LIKE '%&quot;%'").run();
+  } catch (_) {}
+
   purgeDemoData();
 }
 

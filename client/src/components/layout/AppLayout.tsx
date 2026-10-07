@@ -224,7 +224,9 @@ export const AppLayout: React.FC = () => {
       )}
 
       {/* 👑 Royal Top Navbar */}
-      <header className="h-14 sm:h-16 border-b border-gold-500/15 bg-dark-900/90 backdrop-blur-2xl sticky top-0 z-40 px-3.5 sm:px-6 flex items-center justify-between shrink-0 shadow-lg shadow-black/40">
+      <header className={`h-14 sm:h-16 border-b border-gold-500/15 bg-dark-900/90 backdrop-blur-2xl sticky top-0 z-40 px-3.5 sm:px-6 items-center justify-between shrink-0 shadow-lg shadow-black/40 ${
+        currentTab === 'chats' && isChatRoomOpen ? 'hidden md:flex' : 'flex'
+      }`}>
         
         {/* Royal Brand Logo & Connection Status */}
         <div className="flex items-center gap-2.5 sm:gap-3.5">
@@ -364,7 +366,7 @@ export const AppLayout: React.FC = () => {
       </header>
 
       {/* 🤖 Royal Auto-Push Notification Robot Activation Ribbon */}
-      {notifPermission === 'default' && !dismissNotifBanner && (
+      {notifPermission === 'default' && !dismissNotifBanner && !(currentTab === 'chats' && isChatRoomOpen) && (
         <div className="bg-gradient-to-r from-amber-600/25 via-yellow-500/20 to-amber-600/25 border-b border-gold-500/35 px-3.5 sm:px-6 py-2.5 flex items-center justify-between gap-3 text-xs text-amber-200 z-30 shrink-0 shadow-lg">
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-gold-500/20 border border-gold-400/40 flex items-center justify-center shrink-0 text-amber-300 shadow-sm">
@@ -402,7 +404,7 @@ export const AppLayout: React.FC = () => {
       )}
 
       {/* ⚠️ Warning if user previously blocked notifications in browser */}
-      {notifPermission === 'denied' && !dismissNotifBanner && (
+      {notifPermission === 'denied' && !dismissNotifBanner && !(currentTab === 'chats' && isChatRoomOpen) && (
         <div className="bg-rose-950/40 border-b border-rose-500/30 px-3.5 sm:px-6 py-2 flex items-center justify-between gap-2.5 text-xs text-rose-200 z-30 shrink-0">
           <div className="flex items-center gap-2 min-w-0">
             <span className="text-sm">🔒</span>
@@ -421,7 +423,7 @@ export const AppLayout: React.FC = () => {
       )}
 
       {/* 📲 PWA Standalone Mobile Install Ribbon (hides when running as standalone app) */}
-      {!pwaState.isStandalone && !dismissInstallBanner && (
+      {!pwaState.isStandalone && !dismissInstallBanner && !(currentTab === 'chats' && isChatRoomOpen) && (
         <div className="bg-gradient-to-r from-amber-600/25 via-yellow-500/20 to-amber-600/25 border-b border-gold-500/35 px-3.5 sm:px-6 py-2.5 flex items-center justify-between gap-3 text-xs text-amber-200 z-30 shrink-0 shadow-lg">
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-amber-500/20 border border-amber-400/40 flex items-center justify-center shrink-0 text-amber-300 shadow-sm">

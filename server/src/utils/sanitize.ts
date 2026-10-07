@@ -6,12 +6,8 @@
 export function sanitizeText(input: unknown): string {
   if (typeof input !== 'string') return '';
   return input
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#x27;')
-    .replace(/\//g, '&#x2F;')
+    .replace(/\0/g, '') // remove null bytes
+    .replace(/[\x01-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '') // remove invisible control chars
     .trim();
 }
 

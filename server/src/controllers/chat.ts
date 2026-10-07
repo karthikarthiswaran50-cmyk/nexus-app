@@ -552,9 +552,21 @@ export async function searchChatHttp(req: AuthenticatedRequest, res: Response): 
       SELECT id, username, full_name, avatar_url, bio, status, country, last_seen
       FROM users
       WHERE id != ? AND COALESCE(is_banned, 0) = 0 
-        AND (LOWER(REPLACE(username, '@', '')) LIKE ? OR LOWER(full_name) LIKE ?)
-      LIMIT 10
-    `).all(userId, `%${query}%`, `%${query}%`) as any[]).map(u => ({
+        AND (
+          LOWER(REPLACE(username, '@', '')) LIKE ? 
+          OR LOWER(full_name) LIKE ? 
+          OR LOWER(id) LIKE ? 
+          OR LOWER(id) = ?
+        )
+      ORDER BY
+        CASE
+          WHEN LOWER(id) = ? THEN 0
+          WHEN LOWER(REPLACE(username, '@', '')) = ? THEN 1
+          WHEN LOWER(REPLACE(username, '@', '')) LIKE ? THEN 2
+          ELSE 3
+        END
+      LIMIT 15
+    `).all(userId, `%${query}%`, `%${query}%`, `%${query}%`, query, query, query, `${query}%`) as any[]).map(u => ({
       ...u,
       plan_id: 'free',
       subscription_status: 'active',
@@ -567,9 +579,21 @@ export async function searchChatHttp(req: AuthenticatedRequest, res: Response): 
           SELECT id, username, full_name, avatar_url, bio, status, country, last_seen, created_at, updated_at, role, is_banned, email, password_hash
           FROM users
           WHERE id != $1 AND COALESCE(is_banned, 0) = 0
-            AND (LOWER(REPLACE(username, '@', '')) LIKE $2 OR LOWER(full_name) LIKE $2)
-          LIMIT 10
-        `, [userId, `%${query}%`]);
+            AND (
+              LOWER(REPLACE(username, '@', '')) LIKE $2 
+              OR LOWER(full_name) LIKE $2 
+              OR LOWER(id) LIKE $2 
+              OR LOWER(id) = $3
+            )
+          ORDER BY
+            CASE
+              WHEN LOWER(id) = $3 THEN 0
+              WHEN LOWER(REPLACE(username, '@', '')) = $3 THEN 1
+              WHEN LOWER(REPLACE(username, '@', '')) LIKE $4 THEN 2
+              ELSE 3
+            END
+          LIMIT 15
+        `, [userId, `%${query}%`, query, `${query}%`]);
 
         for (const row of pgRes.rows) {
           upsertUserToSqlite(row);

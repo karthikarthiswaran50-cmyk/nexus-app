@@ -155,6 +155,44 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, on
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const showToast = (msg: string) => { setToastMessage(msg); setTimeout(() => setToastMessage(null), 3500); };
 
+  // Decode legacy HTML entities and auto-format URLs as clickable links
+  const renderMessageContent = (content: string, isMe: boolean) => {
+    if (!content) return '';
+    const decoded = content
+      .replace(/&#x2F;/g, '/')
+      .replace(/&#x27;/g, "'")
+      .replace(/&quot;/g, '"')
+      .replace(/&gt;/g, '>')
+      .replace(/&lt;/g, '<')
+      .replace(/&amp;/g, '&');
+
+    const urlRegex = /((?:https?:\/\/|www\.)[^\s<]+|[a-zA-Z0-9-]+\.[a-zA-Z]{2,}(?:\/[^\s<]*)?)/gi;
+    const parts = decoded.split(urlRegex);
+
+    return parts.map((part, i) => {
+      if (part && part.match(urlRegex)) {
+        const href = part.startsWith('http://') || part.startsWith('https://')
+          ? part
+          : `https://${part}`;
+        return (
+          <a
+            key={i}
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className={`underline underline-offset-2 break-all font-semibold transition-colors ${
+              isMe ? 'text-amber-200 hover:text-white' : 'text-amber-400 hover:text-amber-300'
+            }`}
+          >
+            {part}
+          </a>
+        );
+      }
+      return part;
+    });
+  };
+
   // In-Chat Search state
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -1034,7 +1072,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, on
           )}
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h2 className="text-sm sm:text-base font-bold text-white truncate max-w-[140px] sm:max-w-[220px]">
+              <h2 className="text-sm sm:text-base font-bold text-white truncate max-w-[180px] sm:max-w-[280px]">
                 {group ? group.name : (otherUser?.full_name || 'User')}
               </h2>
               {otherUser && <PlanBadge planId={otherUser.plan_id} size="sm" />}
@@ -1907,7 +1945,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, on
                         </a>
                       </div>
                     ) : (
-                      <p className="leading-relaxed whitespace-pre-wrap break-words">{msg.content}</p>
+                      <p className="leading-relaxed whitespace-pre-wrap break-words">{renderMessageContent(msg.content, isMe)}</p>
                     )}
 
                     {/* Timestamp & status */}
@@ -2097,7 +2135,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, on
           </div>
         </div>
       ) : (
-        <form onSubmit={handleSendMessage} className="p-3 sm:p-3.5 pb-[max(0.875rem,env(safe-area-inset-bottom))] bg-dark-900/95 border-t border-gold-500/15 backdrop-blur-2xl flex items-center gap-2 sm:gap-2.5 shrink-0 shadow-2xl">
+        <form onSubmit={handleSendMessage} className="p-2 sm:p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] bg-dark-900/95 border-t border-gold-500/15 backdrop-blur-2xl flex items-center gap-1.5 sm:gap-2 shrink-0 shadow-2xl w-full max-w-full overflow-hidden">
           <input
             type="file"
             ref={fileInputRef}
@@ -2120,7 +2158,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, on
             type="button"
             onClick={() => setIsPollModalOpen(true)}
             disabled={uploading}
-            className="p-2 sm:p-2.5 rounded-xl bg-dark-850 hover:bg-dark-800 text-dark-400 hover:text-amber-200 border border-gold-500/15 transition-all shadow-xs touch-target flex items-center justify-center shrink-0"
+            className="hidden sm:flex p-2 sm:p-2.5 rounded-xl bg-dark-850 hover:bg-dark-800 text-dark-400 hover:text-amber-200 border border-gold-500/15 transition-all shadow-xs touch-target items-center justify-center shrink-0"
             title="Create Poll"
           >
             <BarChart2 className="w-4 h-4 text-gold-400" />
@@ -2145,24 +2183,24 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, on
             value={inputText}
             onChange={handleInputChange}
             placeholder={group ? `Message ${group.name}...` : `Message ${otherUser?.full_name || 'contact'}...`}
-            className="flex-1 bg-dark-850 border border-gold-500/15 rounded-xl px-3.5 sm:px-4 py-2.5 text-sm sm:text-base text-white placeholder:text-dark-500 focus:outline-none focus:border-gold-400/80 focus:ring-1 focus:ring-gold-400/50 transition-all shadow-inner"
+            className="flex-1 min-w-0 bg-dark-850 border border-gold-500/15 rounded-xl px-3 sm:px-4 py-2 sm:py-2.5 text-sm sm:text-base text-white placeholder:text-dark-500 focus:outline-none focus:border-gold-400/80 focus:ring-1 focus:ring-gold-400/50 transition-all shadow-inner"
           />
 
           {inputText.trim() ? (
             <button
               type="submit"
               disabled={uploading}
-              className="p-2.5 sm:px-4 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-600 hover:from-amber-400 hover:to-yellow-300 text-dark-950 font-black shadow-lg shadow-gold-500/25 flex items-center justify-center transition-all active:scale-95 shrink-0"
+              className="p-2 sm:px-4 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-600 hover:from-amber-400 hover:to-yellow-300 text-dark-950 font-black shadow-lg shadow-gold-500/25 flex items-center justify-center transition-all active:scale-95 shrink-0 min-w-[36px] sm:min-w-0"
             >
               <Send className="w-4 h-4 text-dark-950 stroke-[2.5]" />
             </button>
           ) : (
-            <div className="flex items-center gap-1.5 shrink-0">
+            <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
               <button
                 type="button"
                 onClick={() => setIsVideoCircleRecorderOpen(true)}
                 disabled={uploading}
-                className="p-2.5 sm:px-3 rounded-xl bg-dark-850 hover:bg-dark-800 text-amber-400 hover:text-amber-300 border border-gold-500/20 shadow-md flex items-center justify-center transition-all active:scale-95 group shrink-0"
+                className="p-2 sm:px-3 rounded-xl bg-dark-850 hover:bg-dark-800 text-amber-400 hover:text-amber-300 border border-gold-500/20 shadow-md flex items-center justify-center transition-all active:scale-95 group shrink-0"
                 title="Record Video Circle Bubble (60s)"
               >
                 <Camera className="w-4 h-4 group-hover:scale-110 transition-all" />
@@ -2171,7 +2209,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, on
                 type="button"
                 onClick={startRecording}
                 disabled={uploading}
-                className="p-2.5 sm:px-3.5 rounded-xl bg-dark-850 hover:bg-gradient-to-tr hover:from-amber-500 hover:to-yellow-400 text-gold-400 hover:text-dark-950 border border-gold-500/20 hover:border-gold-400 shadow-md flex items-center justify-center transition-all active:scale-95 group shrink-0"
+                className="p-2 sm:px-3.5 rounded-xl bg-dark-850 hover:bg-gradient-to-tr hover:from-amber-500 hover:to-yellow-400 text-gold-400 hover:text-dark-950 border border-gold-500/20 hover:border-gold-400 shadow-md flex items-center justify-center transition-all active:scale-95 group shrink-0"
                 title="Record Voice Message"
               >
                 <Mic className="w-4 h-4 group-hover:scale-110 transition-all" />

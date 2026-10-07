@@ -71,9 +71,15 @@ export async function getUsers(req: AuthenticatedRequest, res: Response): Promis
       FROM users u
       LEFT JOIN subscriptions s ON u.id = s.user_id
       WHERE COALESCE(u.is_banned, 0) = 0 
-        AND (LOWER(REPLACE(u.username, '@', '')) LIKE ? OR LOWER(u.full_name) LIKE ?)
+        AND (
+          LOWER(REPLACE(u.username, '@', '')) LIKE ? 
+          OR LOWER(u.full_name) LIKE ?
+          OR LOWER(u.id) LIKE ?
+          OR LOWER(u.id) = ?
+        )
       ORDER BY 
         CASE 
+          WHEN LOWER(u.id) = ? THEN 0
           WHEN LOWER(REPLACE(u.username, '@', '')) = ? THEN 1
           WHEN LOWER(REPLACE(u.username, '@', '')) LIKE ? THEN 2
           WHEN LOWER(u.full_name) LIKE ? THEN 3
@@ -86,6 +92,9 @@ export async function getUsers(req: AuthenticatedRequest, res: Response): Promis
     const users = (db.prepare(sql).all(
       `%${query}%`,
       `%${query}%`,
+      `%${query}%`,
+      query,
+      query,
       query,
       `${query}%`,
       `%${query}%`
@@ -103,9 +112,15 @@ export async function getUsers(req: AuthenticatedRequest, res: Response): Promis
           FROM users u
           LEFT JOIN subscriptions s ON u.id = s.user_id
           WHERE COALESCE(u.is_banned, 0) = 0
-            AND (LOWER(REPLACE(u.username, '@', '')) LIKE $1 OR LOWER(u.full_name) LIKE $1)
+            AND (
+              LOWER(REPLACE(u.username, '@', '')) LIKE $1 
+              OR LOWER(u.full_name) LIKE $1 
+              OR LOWER(u.id) LIKE $1
+              OR LOWER(u.id) = $2
+            )
           ORDER BY
             CASE
+              WHEN LOWER(u.id) = $2 THEN 0
               WHEN LOWER(REPLACE(u.username, '@', '')) = $2 THEN 1
               WHEN LOWER(REPLACE(u.username, '@', '')) LIKE $3 THEN 2
               WHEN LOWER(u.full_name) LIKE $1 THEN 3
