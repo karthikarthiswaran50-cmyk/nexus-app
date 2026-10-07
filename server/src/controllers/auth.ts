@@ -12,16 +12,12 @@ export async function register(req: Request, res: Response): Promise<void> {
     const { email, username, password, full_name, avatar_url, bio, country } = req.body;
 
     if (
-      typeof email !== 'string' ||
       typeof username !== 'string' ||
       typeof password !== 'string' ||
-      typeof full_name !== 'string' ||
-      !email.trim() ||
       !username.trim() ||
-      !password ||
-      !full_name.trim()
+      !password
     ) {
-      res.status(400).json({ error: 'Valid email, username, full name, and password are required.' });
+      res.status(400).json({ error: 'Valid username/User ID and password are required.' });
       return;
     }
 
@@ -30,18 +26,20 @@ export async function register(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    const cleanEmail = sanitizeEmail(email);
     const cleanUsername = sanitizeUsername(username);
-
-    // Strict email format validation
-    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-    if (!emailRegex.test(cleanEmail)) {
-      res.status(400).json({ error: 'Please provide a valid email address.' });
+    if (cleanUsername.length < 3 || cleanUsername.length > 30) {
+      res.status(400).json({ error: 'User ID / Username must be between 3 and 30 characters.' });
       return;
     }
 
-    if (cleanUsername.length < 3 || cleanUsername.length > 30) {
-      res.status(400).json({ error: 'Username must be between 3 and 30 characters.' });
+    const cleanEmail = (typeof email === 'string' && email.trim())
+      ? sanitizeEmail(email)
+      : `${cleanUsername.toLowerCase()}@nexusroyal.online`;
+
+    // Email format validation
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    if (!emailRegex.test(cleanEmail)) {
+      res.status(400).json({ error: 'Please provide a valid email address.' });
       return;
     }
 
@@ -51,10 +49,10 @@ export async function register(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    // Check unique
-    const existing = db.prepare('SELECT id FROM users WHERE email = ? OR username = ?').get(cleanEmail, cleanUsername) as unknown as { id: string } | undefined;
+    // Check unique username or email
+    const existing = db.prepare('SELECT id FROM users WHERE lower(email) = ? OR lower(username) = ?').get(cleanEmail.toLowerCase(), cleanUsername.toLowerCase()) as unknown as { id: string } | undefined;
     if (existing) {
-      res.status(409).json({ error: 'A user with this email or username already exists.' });
+      res.status(409).json({ error: 'A user with this User ID or email already exists. Try another!' });
       return;
     }
 
@@ -64,7 +62,7 @@ export async function register(req: Request, res: Response): Promise<void> {
     const now = new Date().toISOString();
     const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
 
-    const cleanFullName = sanitizeText(full_name);
+    const cleanFullName = (typeof full_name === 'string' && full_name.trim()) ? sanitizeText(full_name) : cleanUsername;
     const avatar = avatar_url ? String(avatar_url).substring(0, 500) : `https://api.dicebear.com/7.x/bottts/svg?seed=${cleanUsername}`;
     const userBio = sanitizeText(bio || 'Hello! I am new here on Nexus.');
     const userCountry = sanitizeText(country || 'Global');
@@ -158,21 +156,21 @@ export async function login(req: Request, res: Response): Promise<void> {
 
     const cleanLogin = login.trim().toLowerCase();
     let user = db.prepare(`
-      SELECT * FROM users WHERE lower(email) = ? OR lower(username) = ?
-    `).get(cleanLogin, cleanLogin) as unknown as (User & { password_hash: string }) | undefined;
+      SELECT * FROM users WHERE lower(email) = ? OR lower(username) = ? OR lower(id) = ?
+    `).get(cleanLogin, cleanLogin, cleanLogin) as unknown as (User & { password_hash: string }) | undefined;
 
     // PostgreSQL fallback if not in local SQLite cache
     if (!user && pgPool) {
       try {
         const pgRes = await pgPool.query(
-          'SELECT * FROM users WHERE lower(email) = $1 OR lower(username) = $1 LIMIT 1',
+          'SELECT * FROM users WHERE lower(email) = $1 OR lower(username) = $1 OR lower(id) = $1 LIMIT 1',
           [cleanLogin]
         );
         if (pgRes.rows.length > 0) {
           upsertUserToSqlite(pgRes.rows[0]);
           user = db.prepare(`
-            SELECT * FROM users WHERE lower(email) = ? OR lower(username) = ?
-          `).get(cleanLogin, cleanLogin) as unknown as (User & { password_hash: string }) | undefined;
+            SELECT * FROM users WHERE lower(email) = ? OR lower(username) = ? OR lower(id) = ?
+          `).get(cleanLogin, cleanLogin, cleanLogin) as unknown as (User & { password_hash: string }) | undefined;
         }
       } catch (pgErr: any) {
         console.warn('Login PostgreSQL fallback note:', pgErr?.message);

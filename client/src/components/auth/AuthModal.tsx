@@ -4,56 +4,92 @@ import { useAuth } from '../../context/AuthContext';
 export const AuthModal: React.FC = () => {
   const { login, register, loginWithGoogle } = useAuth();
   const [isSignUp, setIsSignUp] = useState(false);
-  const [identifier, setIdentifier] = useState('');
-  const [fullName, setFullName] = useState('');
-  const [password, setPassword] = useState('');
+  
+  // Fields for Login
+  const [loginIdentifier, setLoginIdentifier] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+
+  // Fields for Sign Up (Set User ID & Password)
+  const [desiredUserId, setDesiredUserId] = useState('');
+  const [signUpPassword, setSignUpPassword] = useState('');
+  const [optionalEmail, setOptionalEmail] = useState('');
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
-    const cleanIdentifier = identifier.trim();
+    const cleanIdentifier = loginIdentifier.trim();
     if (!cleanIdentifier) {
-      setError('Please enter your phone number, username, or email.');
+      setError('Please enter your User ID, username, or email.');
       return;
     }
-    if (!password) {
+    if (!loginPassword) {
       setError('Please enter your password.');
       return;
     }
-    if (password.length < 6) {
+
+    setLoading(true);
+    try {
+      await login(cleanIdentifier, loginPassword);
+    } catch (err: any) {
+      console.error('Authentication error:', err);
+      const serverErr =
+        err.response?.data?.error ||
+        err.message ||
+        'Authentication failed. Invalid User ID or password.';
+      setError(serverErr);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSignUpSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+
+    const cleanUserId = desiredUserId.trim().toLowerCase().replace(/^@/, '');
+    if (!cleanUserId) {
+      setError('Please choose your User ID.');
+      return;
+    }
+    if (cleanUserId.length < 3) {
+      setError('User ID must be at least 3 characters.');
+      return;
+    }
+    if (cleanUserId.length > 30) {
+      setError('User ID must not exceed 30 characters.');
+      return;
+    }
+    if (!signUpPassword) {
+      setError('Please set a password.');
+      return;
+    }
+    if (signUpPassword.length < 6) {
       setError('Password must be at least 6 characters.');
       return;
     }
 
     setLoading(true);
     try {
-      if (isSignUp) {
-        // Registration flow
-        const cleanFullName = fullName.trim() || cleanIdentifier.split('@')[0];
-        const isEmail = cleanIdentifier.includes('@');
-        const cleanEmail = isEmail
-          ? cleanIdentifier
-          : `${cleanIdentifier.toLowerCase().replace(/[^a-z0-9_]/g, '')}@nexusroyal.online`;
-        const cleanUsername = isEmail
-          ? cleanIdentifier.split('@')[0].toLowerCase().replace(/[^a-z0-9_]/g, '')
-          : cleanIdentifier.toLowerCase().replace(/[^a-z0-9_]/g, '');
+      const cleanEmail = optionalEmail.trim()
+        ? optionalEmail.trim().toLowerCase()
+        : `${cleanUserId}@nexusroyal.online`;
 
-        await register({
-          email: cleanEmail,
-          username: cleanUsername || 'user_' + Date.now().toString(36),
-          full_name: cleanFullName,
-          password,
-        });
-      } else {
-        // Direct Login flow
-        await login(cleanIdentifier, password);
-      }
+      await register({
+        username: cleanUserId,
+        password: signUpPassword,
+        email: cleanEmail,
+        full_name: cleanUserId,
+      });
     } catch (err: any) {
-      console.error('Authentication error:', err);
-      const serverErr = err.response?.data?.error || err.message || 'Authentication failed. Please check your credentials.';
+      console.error('Sign-up error:', err);
+      const serverErr =
+        err.response?.data?.error ||
+        err.message ||
+        'Failed to set User ID and password. Please try a different User ID.';
       setError(serverErr);
     } finally {
       setLoading(false);
@@ -68,11 +104,11 @@ export const AuthModal: React.FC = () => {
     } catch (err: any) {
       console.error('Google Sign-In error:', err);
       if (err?.code === 'auth/popup-blocked') {
-        setError('Google pop-up was blocked by browser. Please log in with username/email and password above.');
+        setError('Google pop-up was blocked by browser. Please log in with User ID and password above.');
       } else if (err?.code === 'auth/popup-closed-by-user') {
         setError('Google Sign-In was cancelled.');
       } else {
-        setError(err.message || 'Google Sign-In could not complete. You can log in with username and password.');
+        setError(err.message || 'Google Sign-In could not complete. You can log in with User ID and password.');
       }
     } finally {
       setLoading(false);
@@ -96,10 +132,10 @@ export const AuthModal: React.FC = () => {
         }
         .nexus-auth-wrapper .box {
           background: #fff;
-          width: 340px;
+          width: 350px;
           max-width: 100%;
-          padding: 30px 24px;
-          border-radius: 12px;
+          padding: 28px 24px;
+          border-radius: 14px;
           text-align: center;
           box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
           box-sizing: border-box;
@@ -116,11 +152,37 @@ export const AuthModal: React.FC = () => {
           -webkit-background-clip: text;
           -webkit-text-fill-color: transparent;
           letter-spacing: -0.5px;
+          line-height: 1.1;
+        }
+        .nexus-auth-wrapper .tab-row {
+          display: flex;
+          background: #f1f2f6;
+          border-radius: 9px;
+          padding: 3px;
+          margin: 16px 0 12px 0;
+          gap: 3px;
+        }
+        .nexus-auth-wrapper .tab-btn {
+          flex: 1;
+          padding: 8px 4px;
+          font-size: 12px;
+          font-weight: bold;
+          border: none;
+          background: transparent;
+          border-radius: 7px;
+          color: #777;
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+        .nexus-auth-wrapper .tab-btn.active {
+          background: #fff;
+          color: #d62976;
+          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
         }
         .nexus-auth-wrapper input {
           width: 100%;
-          padding: 11px;
-          margin: 6px 0;
+          padding: 11px 12px;
+          margin: 5px 0;
           border: 1px solid #ddd;
           border-radius: 8px;
           box-sizing: border-box;
@@ -138,7 +200,7 @@ export const AuthModal: React.FC = () => {
         .nexus-auth-wrapper .btn {
           width: 100%;
           padding: 11px;
-          margin-top: 12px;
+          margin-top: 10px;
           background: linear-gradient(90deg, #ff4e50, #f9d423);
           border: none;
           border-radius: 8px;
@@ -159,7 +221,7 @@ export const AuthModal: React.FC = () => {
           cursor: not-allowed;
         }
         .nexus-auth-wrapper .divider {
-          margin: 18px 0;
+          margin: 16px 0;
           color: #999;
           font-size: 12px;
           display: flex;
@@ -208,6 +270,24 @@ export const AuthModal: React.FC = () => {
         <div className="logo">NexusRoyal</div>
         <p style={{ color: '#888', fontSize: '11px', letterSpacing: '2px', marginTop: '2px', fontWeight: 600 }}>OFFICIAL</p>
 
+        {/* Tab row for switching between Login and Set User ID */}
+        <div className="tab-row">
+          <button
+            type="button"
+            className={`tab-btn ${!isSignUp ? 'active' : ''}`}
+            onClick={() => { setIsSignUp(false); setError(null); }}
+          >
+            Log In
+          </button>
+          <button
+            type="button"
+            className={`tab-btn ${isSignUp ? 'active' : ''}`}
+            onClick={() => { setIsSignUp(true); setError(null); }}
+          >
+            Set User ID & Password
+          </button>
+        </div>
+
         {error && (
           <div style={{
             background: '#fff1f2',
@@ -216,7 +296,7 @@ export const AuthModal: React.FC = () => {
             fontSize: '12px',
             padding: '8px 10px',
             borderRadius: '8px',
-            margin: '10px 0 6px 0',
+            margin: '8px 0',
             textAlign: 'left',
             lineHeight: '1.4'
           }}>
@@ -224,42 +304,72 @@ export const AuthModal: React.FC = () => {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} style={{ marginTop: '8px' }}>
-          {isSignUp && (
+        {!isSignUp ? (
+          /* ================= LOGIN FORM ================= */
+          <form onSubmit={handleLoginSubmit} style={{ marginTop: '4px' }}>
             <input
               type="text"
-              placeholder="Full Name"
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
+              placeholder="User ID, username, or email"
+              value={loginIdentifier}
+              onChange={(e) => setLoginIdentifier(e.target.value)}
               disabled={loading}
-              autoComplete="name"
+              autoComplete="username"
+              autoFocus
+              required
             />
-          )}
 
-          <input
-            type="text"
-            placeholder={isSignUp ? "Username or Email" : "Phone number, username, or email"}
-            value={identifier}
-            onChange={(e) => setIdentifier(e.target.value)}
-            disabled={loading}
-            autoComplete="username"
-            required
-          />
+            <input
+              type="password"
+              placeholder="Password"
+              value={loginPassword}
+              onChange={(e) => setLoginPassword(e.target.value)}
+              disabled={loading}
+              autoComplete="current-password"
+              required
+            />
 
-          <input
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            disabled={loading}
-            autoComplete={isSignUp ? "new-password" : "current-password"}
-            required
-          />
+            <button type="submit" className="btn" disabled={loading}>
+              {loading ? 'Logging in...' : 'Log in to NexusRoyal'}
+            </button>
+          </form>
+        ) : (
+          /* ================= SIGN UP / SET USER ID & PASSWORD ================= */
+          <form onSubmit={handleSignUpSubmit} style={{ marginTop: '4px' }}>
+            <input
+              type="text"
+              placeholder="Choose your User ID (e.g. karthik_01)"
+              value={desiredUserId}
+              onChange={(e) => setDesiredUserId(e.target.value.toLowerCase().replace(/\s+/g, '_'))}
+              disabled={loading}
+              autoComplete="username"
+              autoFocus
+              required
+            />
 
-          <button type="submit" className="btn" disabled={loading}>
-            {loading ? 'Please wait...' : (isSignUp ? 'Sign up for NexusRoyal' : 'Log in to NexusRoyal')}
-          </button>
-        </form>
+            <input
+              type="password"
+              placeholder="Set Password (min 6 characters)"
+              value={signUpPassword}
+              onChange={(e) => setSignUpPassword(e.target.value)}
+              disabled={loading}
+              autoComplete="new-password"
+              required
+            />
+
+            <input
+              type="email"
+              placeholder="Email (optional for account recovery)"
+              value={optionalEmail}
+              onChange={(e) => setOptionalEmail(e.target.value)}
+              disabled={loading}
+              autoComplete="email"
+            />
+
+            <button type="submit" className="btn" disabled={loading}>
+              {loading ? 'Creating account...' : 'Set User ID & Open App'}
+            </button>
+          </form>
+        )}
 
         <div className="divider">OR</div>
 
@@ -268,11 +378,11 @@ export const AuthModal: React.FC = () => {
           {loading ? 'Connecting...' : 'Continue with Google'}
         </button>
 
-        {/* Toggle between Login and Sign Up */}
-        <div style={{ marginTop: '16px', fontSize: '12px', color: '#666' }}>
+        {/* Quick helper toggle */}
+        <div style={{ marginTop: '14px', fontSize: '12px', color: '#666' }}>
           {isSignUp ? (
             <>
-              Have an account?{' '}
+              Already have an account?{' '}
               <button
                 type="button"
                 onClick={() => { setIsSignUp(false); setError(null); }}
@@ -283,20 +393,20 @@ export const AuthModal: React.FC = () => {
             </>
           ) : (
             <>
-              Don't have an account?{' '}
+              New to Nexus?{' '}
               <button
                 type="button"
                 onClick={() => { setIsSignUp(true); setError(null); }}
                 style={{ color: '#d62976', fontWeight: 'bold', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
               >
-                Sign up
+                Set User ID & Password
               </button>
             </>
           )}
         </div>
 
         {/* Terms and Privacy policy footer */}
-        <div style={{ marginTop: '14px', fontSize: '10px', color: '#aaa', lineHeight: '1.4' }}>
+        <div style={{ marginTop: '12px', fontSize: '10px', color: '#aaa', lineHeight: '1.4' }}>
           By continuing, you agree to our{' '}
           <button
             type="button"

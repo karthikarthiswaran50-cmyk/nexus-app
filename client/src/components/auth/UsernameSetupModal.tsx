@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { Crown, CheckCircle2, AlertCircle, ArrowRight } from 'lucide-react';
+import { Crown, CheckCircle2, AlertCircle, ArrowRight, X } from 'lucide-react';
 import axios from 'axios';
 
 interface UsernameSetupModalProps {
@@ -16,6 +16,14 @@ export const UsernameSetupModal: React.FC<UsernameSetupModalProps> = ({ isOpen, 
   const [validationError, setValidationError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+
+  const handleSkipOrClose = () => {
+    if (user?.id) {
+      localStorage.setItem(`nexus_custom_username_set_${user.id}`, 'true');
+    }
+    localStorage.setItem('nexus_username_prompt_dismissed', 'true');
+    if (onClose) onClose();
+  };
 
   useEffect(() => {
     if (user?.username) {
@@ -107,6 +115,16 @@ export const UsernameSetupModal: React.FC<UsernameSetupModalProps> = ({ isOpen, 
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-dark-950/90 backdrop-blur-2xl animate-in fade-in duration-200 font-['Plus_Jakarta_Sans',sans-serif]">
       <div className="relative w-full max-w-md bg-dark-900 border border-gold-500/35 rounded-3xl overflow-hidden shadow-2xl p-6 sm:p-8 royal-card space-y-6">
         
+        {/* Close Button */}
+        <button
+          type="button"
+          onClick={handleSkipOrClose}
+          className="absolute top-4 right-4 p-2 rounded-xl text-dark-400 hover:text-white hover:bg-white/10 transition-colors z-20"
+          title="Dismiss"
+        >
+          <X className="w-5 h-5" />
+        </button>
+
         {/* Glow */}
         <div className="pointer-events-none absolute -top-20 left-1/2 -translate-x-1/2 w-56 h-56 bg-gold-500/10 rounded-full blur-3xl" />
 
@@ -178,10 +196,18 @@ export const UsernameSetupModal: React.FC<UsernameSetupModalProps> = ({ isOpen, 
           <button
             type="submit"
             disabled={submitting || !isAvailable || !!validationError}
-            className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-600 hover:from-amber-400 hover:to-yellow-300 text-dark-950 font-black text-sm shadow-xl shadow-gold-500/25 transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2 group"
+            className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-600 hover:from-amber-400 hover:to-yellow-300 text-dark-950 font-black text-sm shadow-xl shadow-gold-500/25 transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2 group cursor-pointer"
           >
             <span>{submitting ? 'Claiming Identity...' : 'Confirm & Claim Royal ID'}</span>
             <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform stroke-[2.5]" />
+          </button>
+
+          <button
+            type="button"
+            onClick={handleSkipOrClose}
+            className="w-full py-2.5 rounded-xl text-dark-400 hover:text-white text-xs font-semibold hover:bg-white/5 transition-all text-center cursor-pointer"
+          >
+            Skip for now
           </button>
         </form>
 

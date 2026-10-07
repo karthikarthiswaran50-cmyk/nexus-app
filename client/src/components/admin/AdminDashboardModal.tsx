@@ -38,6 +38,7 @@ import {
   Calendar,
   MessageCircle,
   Flag,
+  Copy,
 } from 'lucide-react';
 import axios from 'axios';
 import { useAuth } from '../../context/AuthContext';
@@ -152,6 +153,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({ isOpen
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+  const [copiedUserId, setCopiedUserId] = useState<string | null>(null);
 
   // Broadcast State
   const [broadcastTitle, setBroadcastTitle] = useState('');
@@ -535,10 +537,22 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({ isOpen
     }
   };
 
+  const handleCopyId = (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    try {
+      navigator.clipboard.writeText(id);
+      setCopiedUserId(id);
+      setTimeout(() => setCopiedUserId(null), 2000);
+    } catch (err) {
+      console.warn('Clipboard write failed:', err);
+    }
+  };
+
   const filteredUsers = usersList.filter((u) => {
     const q = searchQuery.toLowerCase().trim();
     if (!q) return true;
     return (
+      u.id?.toLowerCase().includes(q) ||
       u.full_name?.toLowerCase().includes(q) ||
       u.username?.toLowerCase().includes(q) ||
       u.email?.toLowerCase().includes(q)
@@ -1222,6 +1236,24 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({ isOpen
                               <span className="text-sm font-bold text-white truncate">{u.full_name}</span>
                               <span className="text-xs text-amber-400 font-semibold">@{u.username}</span>
 
+                              {/* User ID Badge */}
+                              <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-dark-850 border border-gold-500/25 text-[11px] font-mono text-amber-300">
+                                <span className="text-dark-400 font-sans text-[10px] font-bold">ID:</span>
+                                <span className="select-all font-semibold max-w-[130px] sm:max-w-none truncate">{u.id}</span>
+                                <button
+                                  type="button"
+                                  onClick={(e) => handleCopyId(u.id, e)}
+                                  className="text-dark-400 hover:text-white ml-0.5 cursor-pointer p-0.5 rounded hover:bg-white/10"
+                                  title="Copy User ID"
+                                >
+                                  {copiedUserId === u.id ? (
+                                    <span className="text-[10px] text-emerald-400 font-sans font-bold">Copied!</span>
+                                  ) : (
+                                    <Copy className="w-3 h-3 text-gold-400" />
+                                  )}
+                                </button>
+                              </div>
+
                               {isAdmin && (
                                 <span className="flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-400/30">
                                   <Crown className="w-3 h-3" />
@@ -1838,11 +1870,29 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({ isOpen
                     planId={inspectionData.user?.plan_id}
                   />
                   <div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <h4 className="text-base font-black text-white">{inspectionData.user?.full_name}</h4>
-                      <span className="text-xs text-amber-400 font-mono">@{inspectionData.user?.username}</span>
+                      <span className="text-xs text-amber-400 font-mono font-bold">@{inspectionData.user?.username}</span>
+                      
+                      {/* Inspection User ID */}
+                      <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-dark-850 border border-gold-500/25 text-[11px] font-mono text-amber-300">
+                        <span className="text-dark-400 font-sans text-[10px] font-bold">ID:</span>
+                        <span className="select-all font-semibold">{inspectionData.user?.id}</span>
+                        <button
+                          type="button"
+                          onClick={(e) => handleCopyId(inspectionData.user?.id, e)}
+                          className="text-dark-400 hover:text-white ml-0.5 cursor-pointer p-0.5 rounded hover:bg-white/10"
+                          title="Copy User ID"
+                        >
+                          {copiedUserId === inspectionData.user?.id ? (
+                            <span className="text-[10px] text-emerald-400 font-sans font-bold">Copied!</span>
+                          ) : (
+                            <Copy className="w-3 h-3 text-gold-400" />
+                          )}
+                        </button>
+                      </div>
                     </div>
-                    <p className="text-xs text-dark-400">
+                    <p className="text-xs text-dark-400 mt-1">
                       📧 {inspectionData.user?.email || 'N/A'} • Joined: {new Date(inspectionData.user?.created_at).toLocaleDateString()}
                     </p>
                   </div>

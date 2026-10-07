@@ -112,6 +112,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     persistUser(res.data.user);
     axios.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
     
+    if (res.data.user?.id) {
+      localStorage.setItem(`nexus_custom_username_set_${res.data.user.id}`, 'true');
+    }
+    localStorage.setItem('nexus_username_prompt_dismissed', 'true');
+    if (res.data.user?.username) {
+      localStorage.setItem('nexus_saved_username', res.data.user.username);
+    }
+
     // Log user activity to Firebase
     trackUserActivity({
       userId: res.data.user?.id,
@@ -140,6 +148,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     persistUser(res.data.user);
     axios.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
 
+    if (res.data.user?.id) {
+      localStorage.setItem(`nexus_custom_username_set_${res.data.user.id}`, 'true');
+    }
+    localStorage.setItem('nexus_username_prompt_dismissed', 'true');
     if (res.data.user?.username) {
       localStorage.setItem('nexus_saved_username', res.data.user.username);
     }
@@ -167,18 +179,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     if (res.data?.user) {
       persistUser(res.data.user);
+      localStorage.setItem(`nexus_custom_username_set_${res.data.user.id}`, 'true');
+      localStorage.setItem('nexus_username_prompt_dismissed', 'true');
       localStorage.setItem('nexus_saved_username', res.data.user.username);
     }
   };
 
   const register = async (data: { email: string; username: string; password: string; full_name: string; avatar_url?: string; bio?: string; country?: string }) => {
-
     const res = await axios.post('/api/auth/register', data);
     const newToken = res.data.token;
     localStorage.setItem('nexus_auth_token', newToken);
     setToken(newToken);
     persistUser(res.data.user);
     axios.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
+
+    if (res.data.user?.id) {
+      localStorage.setItem(`nexus_custom_username_set_${res.data.user.id}`, 'true');
+    }
+    localStorage.setItem('nexus_username_prompt_dismissed', 'true');
+    if (res.data.user?.username) {
+      localStorage.setItem('nexus_saved_username', res.data.user.username);
+    }
 
     // Log registration activity to Firebase
     trackUserActivity({
