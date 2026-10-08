@@ -317,6 +317,103 @@ export async function updatePassword(req: AuthenticatedRequest, res: Response): 
   }
 }
 
+export async function forgotPasswordReset(req: Request, res: Response): Promise<void> {
+  try {
+    const { identifier, emailOrKey, newPassword } = req.body;
+
+    if (!identifier || typeof identifier !== 'string' || !identifier.trim()) {
+      res.status(400).json({ error: 'Please enter your User ID, username, or email.' });
+      return;
+    }
+    if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 6) {
+      res.status(400).json({ error: 'New password must be at least 6 characters.' });
+      return;
+    }
+
+    const cleanIdentifier = identifier.trim().toLowerCase();
+    const cleanEmailOrKey = (typeof emailOrKey === 'string' ? emailOrKey.trim().toLowerCase() : '');
+
+    let user = db.prepare(`
+      SELECT * FROM users WHERE lower(email) = ? OR lower(username) = ? OR lower(id) = ?
+    `).get(cleanIdentifier, cleanIdentifier, cleanIdentifier) as unknown as (User & { password_hash: string }) | undefined;
+
+    if (!user && pgPool) {
+      try {
+        const pgRes = await pgPool.query(
+          'SELECT * FROM users WHERE lower(email) = $1 OR lower(username) = $1 OR lower(id) = $1 LIMIT 1',
+          [cleanIdentifier]
+        );
+        if (pgRes.rows.length > 0) {
+          upsertUserToSqlite(pgRes.rows[0]);
+          user = db.prepare(`
+            SELECT * FROM users WHERE lower(email) = ? OR lower(username) = ? OR lower(id) = ?
+          `).get(cleanIdentifier, cleanIdentifier, cleanIdentifier) as unknown as (User & { password_hash: string }) | undefined;
+        }
+      } catch (pgErr: any) {
+        console.warn('forgotPasswordReset PostgreSQL lookup note:', pgErr?.message);
+      }
+    }
+
+    if (!user) {
+      res.status(404).json({ error: 'User account not found. Please check your User ID, username, or email.' });
+      return;
+    }
+
+    // Verify recovery credential:
+    // Path 1: Master Passcode for Owner/Emergency (nexusroyal2026 or process.env.OWNER_MASTER_KEY)
+    const OWNER_MASTER_KEY = (process.env.OWNER_MASTER_KEY || 'nexusroyal2026').toLowerCase().trim();
+    const isMasterKeyMatch = cleanEmailOrKey === OWNER_MASTER_KEY;
+
+    // Path 2: User's registered email match
+    const userEmail = (user.email || '').toLowerCase().trim();
+    const isEmailMatch = cleanEmailOrKey && (cleanEmailOrKey === userEmail || cleanEmailOrKey.split('@')[0] === userEmail.split('@')[0]);
+
+    // Path 3: If user has default @nexusroyal.online email and entered their username/User ID
+    const isAutoEmailMatch = userEmail.endsWith('@nexusroyal.online') && (cleanEmailOrKey === user.username.toLowerCase() || cleanEmailOrKey === user.id.toLowerCase());
+
+    if (!cleanEmailOrKey) {
+      res.status(400).json({ error: 'Please enter your registered email or the Master Recovery Key (nexusroyal2026).' });
+      return;
+    }
+
+    if (!isMasterKeyMatch && !isEmailMatch && !isAutoEmailMatch) {
+      res.status(403).json({ error: 'The email or recovery key does not match this account. (Tip: Enter your registered email or Master Key nexusroyal2026).' });
+      return;
+    }
+
+    // Hash new password
+    const salt = bcrypt.genSaltSync(12);
+    const newHash = bcrypt.hashSync(newPassword, salt);
+
+    db.prepare('UPDATE users SET password_hash = ?, updated_at = datetime(\'now\') WHERE id = ?').run(newHash, user.id);
+
+    persistUserToPg({
+      id: user.id,
+      email: user.email,
+      username: user.username,
+      password_hash: newHash,
+      full_name: user.full_name,
+      avatar_url: user.avatar_url,
+      bio: user.bio,
+      status: user.status,
+      country: user.country,
+    });
+
+    recordActivity(user.id, 'password_reset', {
+      method: 'forgot_password_reset',
+      username: user.username,
+    });
+
+    res.json({
+      success: true,
+      message: 'Password reset successful! You can now log in with your new password.',
+    });
+  } catch (error) {
+    console.error('forgotPasswordReset error:', error);
+    res.status(500).json({ error: 'Failed to reset password. Please try again.' });
+  }
+}
+
 export function getUserWithPlan(userId: string): UserWithPlan | null {
   const row = db.prepare(`
     SELECT u.id, u.email, u.username, u.full_name, u.avatar_url, u.bio, u.status, u.country,

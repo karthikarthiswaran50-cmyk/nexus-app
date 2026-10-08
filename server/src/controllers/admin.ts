@@ -1,4 +1,5 @@
 import { Response } from 'express';
+import bcrypt from 'bcryptjs';
 import { db, pgPool, persistUserToPg, purgeUserPermanently, upsertUserToSqlite } from '../db.js';
 import { AuthenticatedRequest } from '../middleware/auth.js';
 import { getOnlineUsersCount, disconnectUserSockets, broadcastAnnouncementSocket } from '../socket.js';
@@ -999,6 +1000,58 @@ export async function resolveAdminReport(req: AuthenticatedRequest, res: Respons
     res.json({ success: true, message: `Report marked as ${newStatus}.` });
   } catch (error: any) {
     res.status(500).json({ error: error.message || 'Failed to resolve report' });
+  }
+}
+
+export async function adminResetUserPassword(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const { id } = req.params;
+    const { newPassword } = req.body;
+
+    if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 6) {
+      res.status(400).json({ error: 'New password must be at least 6 characters.' });
+      return;
+    }
+
+    let user = db.prepare('SELECT * FROM users WHERE id = ?').get(id) as any;
+    if (!user && pgPool) {
+      try {
+        const pgRes = await pgPool.query('SELECT * FROM users WHERE id = $1 LIMIT 1', [id]);
+        if (pgRes.rows.length > 0) {
+          upsertUserToSqlite(pgRes.rows[0]);
+          user = db.prepare('SELECT * FROM users WHERE id = ?').get(id) as any;
+        }
+      } catch (pgErr: any) {
+        console.warn('adminResetUserPassword PostgreSQL lookup note:', pgErr?.message);
+      }
+    }
+
+    if (!user) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    const salt = bcrypt.genSaltSync(12);
+    const newHash = bcrypt.hashSync(newPassword, salt);
+
+    db.prepare('UPDATE users SET password_hash = ?, updated_at = datetime(\'now\') WHERE id = ?').run(newHash, id);
+
+    persistUserToPg({
+      id: user.id,
+      email: user.email,
+      username: user.username,
+      password_hash: newHash,
+      full_name: user.full_name,
+      avatar_url: user.avatar_url,
+      bio: user.bio,
+      status: user.status,
+      country: user.country,
+    });
+
+    res.json({ success: true, message: `Password for @${user.username} has been reset successfully.` });
+  } catch (error: any) {
+    console.error('adminResetUserPassword error:', error);
+    res.status(500).json({ error: 'Failed to reset user password' });
   }
 }
 

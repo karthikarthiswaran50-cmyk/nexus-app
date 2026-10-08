@@ -451,6 +451,28 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({ isOpen
     }
   };
 
+  // Reset User Password as Admin
+  const handleResetUserPassword = async (user: User) => {
+    const newPassword = window.prompt(`Enter new password for @${user.username} (min 6 characters):`);
+    if (!newPassword) return;
+    if (newPassword.trim().length < 6) {
+      alert('Password must be at least 6 characters.');
+      return;
+    }
+
+    try {
+      setActionLoadingId(user.id);
+      const res = await axios.post(`/api/admin/users/${user.id}/reset-password`, {
+        newPassword: newPassword.trim(),
+      });
+      alert(res.data?.message || `Password for @${user.username} has been reset successfully.`);
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Failed to reset user password.');
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
   // Broadcast Announcement
   const handleSendBroadcast = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1364,6 +1386,18 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({ isOpen
                                     <span>Ban</span>
                                   </>
                                 )}
+                              </button>
+
+                              {/* Reset Password */}
+                              <button
+                                type="button"
+                                onClick={() => handleResetUserPassword(u)}
+                                disabled={actionLoadingId === u.id}
+                                className="px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-violet-500/10 hover:bg-violet-500/20 text-violet-300 border border-violet-500/30 flex items-center gap-1 transition-all cursor-pointer"
+                                title={`Reset password for @${u.username}`}
+                              >
+                                <KeyRound className="w-3 h-3" />
+                                <span>Reset PW</span>
                               </button>
 
                               {/* Delete User */}

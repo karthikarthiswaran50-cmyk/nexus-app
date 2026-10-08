@@ -267,6 +267,7 @@ app.post('/api/auth/firebase-login', authLimiter, authCtrl.firebaseLogin);
 app.get('/api/auth/me', requireAuth, authCtrl.getMe);
 app.post('/api/auth/set-username', requireAuth, authCtrl.setUsername);
 app.post('/api/auth/update-password', requireAuth, authCtrl.updatePassword);
+app.post('/api/auth/forgot-password-reset', authLimiter, authCtrl.forgotPasswordReset);
 app.post('/api/auth/request-data-deletion', authLimiter, authCtrl.requestDataDeletion);
 
 // 2. Users & Profile Routes
@@ -417,6 +418,7 @@ app.get('/api/admin/stats', requireAdmin, adminCtrl.getAdminStats);
 app.get('/api/admin/users', requireAdmin, adminCtrl.getAdminUsers);
 app.post('/api/admin/users/:id/ban', requireAdmin, adminCtrl.toggleUserBan);
 app.post('/api/admin/users/:id/role', requireAdmin, adminCtrl.updateUserRole);
+app.post('/api/admin/users/:id/reset-password', requireAdmin, adminCtrl.adminResetUserPassword);
 app.delete('/api/admin/users/:id', requireAdmin, adminCtrl.deleteUserAdmin);
 app.post('/api/admin/broadcast', requireAdmin, adminCtrl.broadcastAnnouncement);
 app.get('/api/admin/announcements', requireAuth, adminCtrl.getAnnouncements);

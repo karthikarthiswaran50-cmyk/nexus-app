@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
+import axios from 'axios';
 import { useAuth } from '../../context/AuthContext';
 
 export const AuthModal: React.FC = () => {
   const { login, register, loginWithGoogle } = useAuth();
   const [isSignUp, setIsSignUp] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
   
   // Fields for Login
   const [loginIdentifier, setLoginIdentifier] = useState('');
@@ -13,6 +15,12 @@ export const AuthModal: React.FC = () => {
   const [desiredUserId, setDesiredUserId] = useState('');
   const [signUpPassword, setSignUpPassword] = useState('');
   const [optionalEmail, setOptionalEmail] = useState('');
+
+  // Fields for Password Reset
+  const [resetIdentifier, setResetIdentifier] = useState('');
+  const [resetEmailOrKey, setResetEmailOrKey] = useState('');
+  const [resetNewPassword, setResetNewPassword] = useState('');
+  const [resetSuccess, setResetSuccess] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -110,6 +118,53 @@ export const AuthModal: React.FC = () => {
       } else {
         setError(err.message || 'Google Sign-In could not complete. You can log in with User ID and password.');
       }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForgotPasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setResetSuccess(null);
+
+    const cleanId = resetIdentifier.trim();
+    if (!cleanId) {
+      setError('Please enter your User ID, username, or email.');
+      return;
+    }
+    const cleanKey = resetEmailOrKey.trim();
+    if (!cleanKey) {
+      setError('Please enter your registered email or the Master Recovery Key (nexusroyal2026).');
+      return;
+    }
+    if (!resetNewPassword || resetNewPassword.length < 6) {
+      setError('New password must be at least 6 characters.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await axios.post('/api/auth/forgot-password-reset', {
+        identifier: cleanId,
+        emailOrKey: cleanKey,
+        newPassword: resetNewPassword,
+      });
+
+      setResetSuccess(res.data?.message || 'Password reset successful! You can now log in.');
+      setLoginIdentifier(cleanId);
+      setLoginPassword(resetNewPassword);
+      setTimeout(() => {
+        setShowForgotPassword(false);
+        setResetSuccess(null);
+      }, 2500);
+    } catch (err: any) {
+      console.error('Password reset error:', err);
+      const serverErr =
+        err.response?.data?.error ||
+        err.message ||
+        'Failed to reset password. Please check your credentials or contact Admin.';
+      setError(serverErr);
     } finally {
       setLoading(false);
     }
@@ -268,142 +323,277 @@ export const AuthModal: React.FC = () => {
 
       <div className="box">
         <div className="logo">NexusRoyal</div>
-        <p style={{ color: '#888', fontSize: '11px', letterSpacing: '2px', marginTop: '2px', fontWeight: 600 }}>OFFICIAL</p>
+        <p style={{ color: '#888', fontSize: '11px', letterSpacing: '2px', marginTop: '2px', fontWeight: 600 }}>
+          {showForgotPassword ? 'ACCOUNT RECOVERY' : 'OFFICIAL'}
+        </p>
 
-        {/* Tab row for switching between Login and Set User ID */}
-        <div className="tab-row">
-          <button
-            type="button"
-            className={`tab-btn ${!isSignUp ? 'active' : ''}`}
-            onClick={() => { setIsSignUp(false); setError(null); }}
-          >
-            Log In
-          </button>
-          <button
-            type="button"
-            className={`tab-btn ${isSignUp ? 'active' : ''}`}
-            onClick={() => { setIsSignUp(true); setError(null); }}
-          >
-            Set User ID & Password
-          </button>
-        </div>
+        {showForgotPassword ? (
+          /* ================= FORGOT PASSWORD FORM ================= */
+          <div style={{ marginTop: '12px' }}>
+            <div style={{
+              background: '#fdf2f8',
+              border: '1px solid #fbcfe8',
+              color: '#9d174d',
+              fontSize: '12px',
+              padding: '10px 12px',
+              borderRadius: '8px',
+              marginBottom: '10px',
+              textAlign: 'left',
+              lineHeight: '1.4'
+            }}>
+              🔑 <strong>Forgot Password?</strong> Enter your User ID or email, and either your registered email or the Master Recovery Key (<code>nexusroyal2026</code>) to set a new password.
+            </div>
 
-        {error && (
-          <div style={{
-            background: '#fff1f2',
-            border: '1px solid #fecdd3',
-            color: '#e11d48',
-            fontSize: '12px',
-            padding: '8px 10px',
-            borderRadius: '8px',
-            margin: '8px 0',
-            textAlign: 'left',
-            lineHeight: '1.4'
-          }}>
-            {error}
-          </div>
-        )}
+            {error && (
+              <div style={{
+                background: '#fff1f2',
+                border: '1px solid #fecdd3',
+                color: '#e11d48',
+                fontSize: '12px',
+                padding: '8px 10px',
+                borderRadius: '8px',
+                margin: '8px 0',
+                textAlign: 'left',
+                lineHeight: '1.4'
+              }}>
+                {error}
+              </div>
+            )}
 
-        {!isSignUp ? (
-          /* ================= LOGIN FORM ================= */
-          <form onSubmit={handleLoginSubmit} style={{ marginTop: '4px' }}>
-            <input
-              type="text"
-              placeholder="User ID, username, or email"
-              value={loginIdentifier}
-              onChange={(e) => setLoginIdentifier(e.target.value)}
-              disabled={loading}
-              autoComplete="username"
-              autoFocus
-              required
-            />
+            {resetSuccess && (
+              <div style={{
+                background: '#ecfdf5',
+                border: '1px solid #a7f3d0',
+                color: '#065f46',
+                fontSize: '12px',
+                padding: '8px 10px',
+                borderRadius: '8px',
+                margin: '8px 0',
+                textAlign: 'left',
+                fontWeight: 600,
+              }}>
+                ✓ {resetSuccess}
+              </div>
+            )}
 
-            <input
-              type="password"
-              placeholder="Password"
-              value={loginPassword}
-              onChange={(e) => setLoginPassword(e.target.value)}
-              disabled={loading}
-              autoComplete="current-password"
-              required
-            />
+            <form onSubmit={handleForgotPasswordSubmit} style={{ marginTop: '6px' }}>
+              <input
+                type="text"
+                placeholder="User ID, username, or email"
+                value={resetIdentifier}
+                onChange={(e) => setResetIdentifier(e.target.value)}
+                disabled={loading}
+                autoFocus
+                required
+              />
 
-            <button type="submit" className="btn" disabled={loading}>
-              {loading ? 'Logging in...' : 'Log in to NexusRoyal'}
-            </button>
-          </form>
-        ) : (
-          /* ================= SIGN UP / SET USER ID & PASSWORD ================= */
-          <form onSubmit={handleSignUpSubmit} style={{ marginTop: '4px' }}>
-            <input
-              type="text"
-              placeholder="Choose your User ID (e.g. karthik_01)"
-              value={desiredUserId}
-              onChange={(e) => setDesiredUserId(e.target.value.toLowerCase().replace(/\s+/g, '_'))}
-              disabled={loading}
-              autoComplete="username"
-              autoFocus
-              required
-            />
+              <input
+                type="text"
+                placeholder="Registered Email or Master Key (nexusroyal2026)"
+                value={resetEmailOrKey}
+                onChange={(e) => setResetEmailOrKey(e.target.value)}
+                disabled={loading}
+                required
+              />
 
-            <input
-              type="password"
-              placeholder="Set Password (min 6 characters)"
-              value={signUpPassword}
-              onChange={(e) => setSignUpPassword(e.target.value)}
-              disabled={loading}
-              autoComplete="new-password"
-              required
-            />
+              <input
+                type="password"
+                placeholder="New Password (min 6 characters)"
+                value={resetNewPassword}
+                onChange={(e) => setResetNewPassword(e.target.value)}
+                disabled={loading}
+                required
+              />
 
-            <input
-              type="email"
-              placeholder="Email (optional for account recovery)"
-              value={optionalEmail}
-              onChange={(e) => setOptionalEmail(e.target.value)}
-              disabled={loading}
-              autoComplete="email"
-            />
-
-            <button type="submit" className="btn" disabled={loading}>
-              {loading ? 'Creating account...' : 'Set User ID & Open App'}
-            </button>
-          </form>
-        )}
-
-        <div className="divider">OR</div>
-
-        <button type="button" className="gbtn" onClick={handleGoogleSignIn} disabled={loading}>
-          <img src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg" alt="G" />
-          {loading ? 'Connecting...' : 'Continue with Google'}
-        </button>
-
-        {/* Quick helper toggle */}
-        <div style={{ marginTop: '14px', fontSize: '12px', color: '#666' }}>
-          {isSignUp ? (
-            <>
-              Already have an account?{' '}
-              <button
-                type="button"
-                onClick={() => { setIsSignUp(false); setError(null); }}
-                style={{ color: '#d62976', fontWeight: 'bold', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-              >
-                Log in
+              <button type="submit" className="btn" disabled={loading}>
+                {loading ? 'Resetting password...' : 'Reset Password & Proceed'}
               </button>
-            </>
-          ) : (
-            <>
-              New to Nexus?{' '}
+            </form>
+
+            <div style={{ marginTop: '16px', textAlign: 'center' }}>
               <button
                 type="button"
+                onClick={() => {
+                  setShowForgotPassword(false);
+                  setError(null);
+                  setResetSuccess(null);
+                }}
+                style={{
+                  color: '#d62976',
+                  fontSize: '13px',
+                  fontWeight: 'bold',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: '4px',
+                }}
+              >
+                ← Back to Log In
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Tab row for switching between Login and Set User ID */}
+            <div className="tab-row">
+              <button
+                type="button"
+                className={`tab-btn ${!isSignUp ? 'active' : ''}`}
+                onClick={() => { setIsSignUp(false); setError(null); }}
+              >
+                Log In
+              </button>
+              <button
+                type="button"
+                className={`tab-btn ${isSignUp ? 'active' : ''}`}
                 onClick={() => { setIsSignUp(true); setError(null); }}
-                style={{ color: '#d62976', fontWeight: 'bold', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
               >
                 Set User ID & Password
               </button>
-            </>
-          )}
-        </div>
+            </div>
+
+            {error && (
+              <div style={{
+                background: '#fff1f2',
+                border: '1px solid #fecdd3',
+                color: '#e11d48',
+                fontSize: '12px',
+                padding: '8px 10px',
+                borderRadius: '8px',
+                margin: '8px 0',
+                textAlign: 'left',
+                lineHeight: '1.4'
+              }}>
+                {error}
+              </div>
+            )}
+
+            {!isSignUp ? (
+              /* ================= LOGIN FORM ================= */
+              <form onSubmit={handleLoginSubmit} style={{ marginTop: '4px' }}>
+                <input
+                  type="text"
+                  placeholder="User ID, username, or email"
+                  value={loginIdentifier}
+                  onChange={(e) => setLoginIdentifier(e.target.value)}
+                  disabled={loading}
+                  autoComplete="username"
+                  autoFocus
+                  required
+                />
+
+                <input
+                  type="password"
+                  placeholder="Password"
+                  value={loginPassword}
+                  onChange={(e) => setLoginPassword(e.target.value)}
+                  disabled={loading}
+                  autoComplete="current-password"
+                  required
+                />
+
+                {/* Forgot Password Link */}
+                <div style={{ textAlign: 'right', marginTop: '2px', marginBottom: '2px' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowForgotPassword(true);
+                      setError(null);
+                      setResetSuccess(null);
+                      if (loginIdentifier) setResetIdentifier(loginIdentifier);
+                    }}
+                    style={{
+                      color: '#d62976',
+                      fontSize: '11px',
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      padding: '2px 0',
+                      fontWeight: 600,
+                    }}
+                  >
+                    Forgot password?
+                  </button>
+                </div>
+
+                <button type="submit" className="btn" disabled={loading}>
+                  {loading ? 'Logging in...' : 'Log in to NexusRoyal'}
+                </button>
+              </form>
+            ) : (
+              /* ================= SIGN UP / SET USER ID & PASSWORD ================= */
+              <form onSubmit={handleSignUpSubmit} style={{ marginTop: '4px' }}>
+                <input
+                  type="text"
+                  placeholder="Choose your User ID (e.g. karthik_01)"
+                  value={desiredUserId}
+                  onChange={(e) => setDesiredUserId(e.target.value.toLowerCase().replace(/\s+/g, '_'))}
+                  disabled={loading}
+                  autoComplete="username"
+                  autoFocus
+                  required
+                />
+
+                <input
+                  type="password"
+                  placeholder="Set Password (min 6 characters)"
+                  value={signUpPassword}
+                  onChange={(e) => setSignUpPassword(e.target.value)}
+                  disabled={loading}
+                  autoComplete="new-password"
+                  required
+                />
+
+                <input
+                  type="email"
+                  placeholder="Email (optional for account recovery)"
+                  value={optionalEmail}
+                  onChange={(e) => setOptionalEmail(e.target.value)}
+                  disabled={loading}
+                  autoComplete="email"
+                />
+
+                <button type="submit" className="btn" disabled={loading}>
+                  {loading ? 'Creating account...' : 'Set User ID & Open App'}
+                </button>
+              </form>
+            )}
+
+            <div className="divider">OR</div>
+
+            <button type="button" className="gbtn" onClick={handleGoogleSignIn} disabled={loading}>
+              <img src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg" alt="G" />
+              {loading ? 'Connecting...' : 'Continue with Google'}
+            </button>
+
+            {/* Quick helper toggle */}
+            <div style={{ marginTop: '14px', fontSize: '12px', color: '#666' }}>
+              {isSignUp ? (
+                <>
+                  Already have an account?{' '}
+                  <button
+                    type="button"
+                    onClick={() => { setIsSignUp(false); setError(null); }}
+                    style={{ color: '#d62976', fontWeight: 'bold', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                  >
+                    Log in
+                  </button>
+                </>
+              ) : (
+                <>
+                  New to Nexus?{' '}
+                  <button
+                    type="button"
+                    onClick={() => { setIsSignUp(true); setError(null); }}
+                    style={{ color: '#d62976', fontWeight: 'bold', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                  >
+                    Set User ID & Password
+                  </button>
+                </>
+              )}
+            </div>
+          </>
+        )}
 
         {/* Terms and Privacy policy footer */}
         <div style={{ marginTop: '12px', fontSize: '10px', color: '#aaa', lineHeight: '1.4' }}>
