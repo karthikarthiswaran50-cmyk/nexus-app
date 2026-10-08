@@ -27,6 +27,7 @@ import {
   BellRing,
   Smartphone,
   Search,
+  Coins,
 } from 'lucide-react';
 import axios from 'axios';
 import { getNotificationPermissionStatus, requestNotificationPermission, startPushNotificationRobot } from '../../utils/notifications';
@@ -36,6 +37,7 @@ import { AppLockOverlay } from '../auth/AppLockOverlay';
 import { GlobalAnnouncementBanner } from '../common/GlobalAnnouncementBanner';
 import { AdminDashboardModal } from '../admin/AdminDashboardModal';
 import { GlobalSearchModal } from '../common/GlobalSearchModal';
+import { RewardsModal } from '../rewards/RewardsModal';
 import { usePWAInstall } from '../../hooks/usePWAInstall';
 import { InstallModal } from '../pwa/InstallModal';
 import { Group } from '../../types';
@@ -67,6 +69,9 @@ export const AppLayout: React.FC = () => {
 
   // Universal Global Search Modal
   const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState(false);
+
+  // 🪙 Royal Rewards (Watch & Earn Money) Modal
+  const [isRewardsModalOpen, setIsRewardsModalOpen] = useState(false);
 
   // 📲 PWA Standalone Install State
   const pwaState = usePWAInstall();
@@ -314,6 +319,18 @@ export const AppLayout: React.FC = () => {
             </kbd>
           </button>
 
+          {/* 🪙 Watch Ads & Earn Real Money Trigger */}
+          <button
+            type="button"
+            onClick={() => setIsRewardsModalOpen(true)}
+            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500/25 via-yellow-500/20 to-amber-500/25 hover:from-amber-500/40 hover:to-yellow-500/35 border border-amber-400/50 text-amber-300 hover:text-white text-xs font-black transition-all shadow-md shadow-gold-500/15 cursor-pointer"
+            title="Watch Ads & Earn Real Money (UPI Cash)"
+          >
+            <Coins className="w-3.5 h-3.5 text-amber-400 animate-bounce" />
+            <span className="hidden xs:inline">🪙 Earn Cash</span>
+            <span className="xs:hidden">🪙 Earn</span>
+          </button>
+
           {!pwaState.isStandalone && (
             <button
               type="button"
@@ -459,6 +476,22 @@ export const AppLayout: React.FC = () => {
       {/* Mobile Drawer Menu (Royal) */}
       {mobileMenuOpen && (
         <div className="md:hidden bg-dark-900 border-b border-gold-500/20 p-4 space-y-2 animate-in slide-in-from-top duration-200 z-30 shrink-0 shadow-2xl">
+          <button
+            type="button"
+            onClick={() => {
+              setMobileMenuOpen(false);
+              setIsRewardsModalOpen(true);
+            }}
+            className="w-full px-4 py-2.5 rounded-xl text-xs font-bold flex items-center justify-between text-amber-300 bg-gradient-to-r from-amber-500/20 via-yellow-500/15 to-amber-600/20 border border-amber-500/35 hover:bg-amber-500/25 transition-all mb-2 cursor-pointer shadow-md"
+          >
+            <div className="flex items-center gap-3">
+              <Coins className="w-4 h-4 text-amber-400" />
+              <span>🪙 Watch Ads & Earn Real Money</span>
+            </div>
+            <span className="text-[10px] px-2 py-0.5 rounded-full font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+              UPI Cash
+            </span>
+          </button>
           {!pwaState.isStandalone && (
             <button
               type="button"
@@ -653,6 +686,12 @@ export const AppLayout: React.FC = () => {
           setSelectedUserForChat(null);
           setCurrentTab('chats');
         }}
+      />
+
+      {/* 🪙 Royal Rewards Modal (Watch Ads & Earn UPI Cash) */}
+      <RewardsModal
+        isOpen={isRewardsModalOpen}
+        onClose={() => setIsRewardsModalOpen(false)}
       />
 
     </div>

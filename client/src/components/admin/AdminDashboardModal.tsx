@@ -39,6 +39,7 @@ import {
   MessageCircle,
   Flag,
   Copy,
+  Coins,
 } from 'lucide-react';
 import axios from 'axios';
 import { useAuth } from '../../context/AuthContext';
@@ -132,11 +133,52 @@ interface AdminDashboardModalProps {
   onClose: () => void;
 }
 
-type TabType = 'chats' | 'activities' | 'users' | 'reports' | 'analytics' | 'system';
+type TabType = 'chats' | 'activities' | 'users' | 'reports' | 'rewards' | 'analytics' | 'system';
 
 export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({ isOpen, onClose }) => {
   const { user: currentUser, refreshUser } = useAuth();
   const [activeTab, setActiveTab] = useState<TabType>('chats');
+
+  // Payouts & Rewards State
+  const [payoutsList, setPayoutsList] = useState<any[]>([]);
+  const [payoutsStats, setPayoutsStats] = useState<any>(null);
+  const [loadingPayouts, setLoadingPayouts] = useState(false);
+  const [payoutFilter, setPayoutFilter] = useState<'all' | 'pending' | 'completed' | 'rejected'>('all');
+
+  const fetchAdminPayouts = async () => {
+    try {
+      setLoadingPayouts(true);
+      const res = await axios.get('/api/admin/payouts');
+      setPayoutsList(res.data.payouts || []);
+      setPayoutsStats(res.data.stats || null);
+    } catch (err) {
+      console.error('Failed to load admin payouts:', err);
+    } finally {
+      setLoadingPayouts(false);
+    }
+  };
+
+  const handleUpdatePayoutStatus = async (payoutId: string, status: 'approved' | 'completed' | 'rejected') => {
+    let transactionRef = '';
+    let adminNotes = '';
+
+    if (status === 'completed') {
+      transactionRef = window.prompt('Enter Bank/UPI Transaction UTR or Reference ID (optional):') || '';
+    } else if (status === 'rejected') {
+      adminNotes = window.prompt('Enter reason for rejection (coins will be refunded):') || 'Invalid UPI details';
+    }
+
+    try {
+      await axios.post(`/api/admin/payouts/${payoutId}/status`, {
+        status,
+        transactionRef,
+        adminNotes,
+      });
+      fetchAdminPayouts();
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Failed to update payout status');
+    }
+  };
 
   // Stats State
   const [stats, setStats] = useState<AdminStats | null>(null);
@@ -365,6 +407,8 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({ isOpen
         fetchReports();
       } else if (activeTab === 'users') {
         fetchUsers();
+      } else if (activeTab === 'rewards') {
+        fetchAdminPayouts();
       } else if (activeTab === 'analytics') {
         fetchStats();
       }
@@ -701,7 +745,29 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({ isOpen
             )}
           </button>
 
-          {/* 5. ANALYTICS */}
+          {/* 5. AD REWARDS & PAYOUTS */}
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('rewards');
+              fetchAdminPayouts();
+            }}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl transition-all whitespace-nowrap ${
+              activeTab === 'rewards'
+                ? 'bg-gradient-to-r from-amber-500/20 via-yellow-500/15 to-amber-600/20 text-amber-300 border border-gold-500/30 shadow-sm'
+                : 'text-dark-400 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            <Coins className="w-4 h-4 text-amber-400" />
+            <span>Ad Rewards & Payouts</span>
+            {payoutsStats?.pendingCount > 0 && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-extrabold border border-emerald-500/30">
+                {payoutsStats.pendingCount}
+              </span>
+            )}
+          </button>
+
+          {/* 6. ANALYTICS */}
           <button
             type="button"
             onClick={() => setActiveTab('analytics')}
@@ -1566,6 +1632,192 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({ isOpen
                         </div>
                       </div>
                     ))
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 5: AD REWARDS & PAYOUTS */}
+          {activeTab === 'rewards' && (
+            <div className="space-y-6">
+              
+              {/* Analytics Overview Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 space-y-1">
+                  <span className="text-[11px] font-bold text-amber-300 uppercase tracking-wider block">
+                    Pending UPI Requests
+                  </span>
+                  <div className="text-2xl font-black text-white">
+                    {payoutsStats?.pendingCount || 0}
+                    <span className="text-xs text-amber-300 ml-1.5 font-bold">
+                      (₹{(payoutsStats?.pendingAmountInr || 0).toFixed(2)})
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-dark-400">Waiting for Royal Admin approval & transfer</p>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 space-y-1">
+                  <span className="text-[11px] font-bold text-emerald-300 uppercase tracking-wider block">
+                    Total Settled & Paid
+                  </span>
+                  <div className="text-2xl font-black text-white">
+                    ₹{(payoutsStats?.paidAmountInr || 0).toFixed(2)}
+                    <span className="text-xs text-emerald-400 ml-1.5 font-bold">
+                      ({payoutsStats?.paidCount || 0} Paid)
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-dark-400">Successfully transferred via UPI</p>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-violet-500/10 border border-violet-500/30 space-y-1">
+                  <span className="text-[11px] font-bold text-violet-300 uppercase tracking-wider block">
+                    Platform Ads Watched
+                  </span>
+                  <div className="text-2xl font-black text-white">
+                    🎬 {(payoutsStats?.totalAdsWatched || 0).toLocaleString()}
+                  </div>
+                  <p className="text-[10px] text-dark-400">Total rewarded video ad impressions</p>
+                </div>
+              </div>
+
+              {/* Filters & Refresh */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-1.5 bg-dark-950 p-1 rounded-xl border border-white/10">
+                  {(['all', 'pending', 'completed', 'rejected'] as const).map((f) => (
+                    <button
+                      key={f}
+                      type="button"
+                      onClick={() => setPayoutFilter(f)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold capitalize transition-all cursor-pointer ${
+                        payoutFilter === f
+                          ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                          : 'text-dark-400 hover:text-white'
+                      }`}
+                    >
+                      {f}
+                    </button>
+                  ))}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={fetchAdminPayouts}
+                  disabled={loadingPayouts}
+                  className="px-3.5 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-bold text-amber-300 border border-amber-400/30 flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${loadingPayouts ? 'animate-spin' : ''}`} />
+                  <span>Refresh Payouts</span>
+                </button>
+              </div>
+
+              {/* Payouts List */}
+              <div className="space-y-3">
+                {payoutsList.filter(p => payoutFilter === 'all' || p.status === payoutFilter).length === 0 ? (
+                  <div className="text-center py-12 text-dark-400 text-xs bg-dark-950/50 rounded-2xl border border-white/5">
+                    No {payoutFilter !== 'all' ? payoutFilter : ''} payout requests found.
+                  </div>
+                ) : (
+                  payoutsList
+                    .filter(p => payoutFilter === 'all' || p.status === payoutFilter)
+                    .map((payout) => {
+                      const isPending = payout.status === 'pending';
+                      const isCompleted = payout.status === 'completed';
+                      const isRejected = payout.status === 'rejected';
+
+                      return (
+                        <div
+                          key={payout.id}
+                          className="p-4 rounded-2xl bg-dark-950/70 border border-white/10 hover:border-gold-500/30 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                        >
+                          <div className="space-y-1.5 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-base font-black text-white">
+                                ₹{Number(payout.amount_inr).toFixed(2)}
+                              </span>
+                              <span className="text-xs text-dark-400 font-mono">
+                                ({payout.coins_redeemed} Coins)
+                              </span>
+                              <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border ${
+                                isPending
+                                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                                  : isCompleted
+                                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                                  : 'bg-rose-500/20 text-rose-300 border-rose-500/30'
+                              }`}>
+                                {payout.status}
+                              </span>
+                            </div>
+
+                            <div className="text-xs text-white">
+                              <span className="font-bold">{payout.full_name || 'Member'}</span>{' '}
+                              <span className="text-amber-400 font-semibold">@{payout.username}</span>
+                              <span className="text-dark-500 mx-1.5">•</span>
+                              <span className="text-dark-400">{payout.email}</span>
+                            </div>
+
+                            <div className="p-2.5 rounded-xl bg-dark-900 border border-white/5 text-xs font-mono flex items-center justify-between gap-2 max-w-md">
+                              <div>
+                                <span className="text-dark-400 text-[10px] block uppercase font-bold">UPI ID:</span>
+                                <span className="text-amber-300 font-bold select-all">{payout.upi_id}</span>
+                                {payout.account_holder_name && (
+                                  <span className="text-dark-300 text-[11px] ml-2 font-sans font-semibold">({payout.account_holder_name})</span>
+                                )}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(payout.upi_id);
+                                  alert(`Copied UPI ID: ${payout.upi_id}`);
+                                }}
+                                className="px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-[10px] text-dark-200 border border-white/10 cursor-pointer"
+                              >
+                                Copy UPI
+                              </button>
+                            </div>
+
+                            {payout.transaction_ref && (
+                              <p className="text-[11px] text-emerald-400 font-mono">
+                                UTR / Transaction Ref: <strong>{payout.transaction_ref}</strong>
+                              </p>
+                            )}
+
+                            {payout.admin_notes && (
+                              <p className="text-[11px] text-rose-400">
+                                Note: {payout.admin_notes}
+                              </p>
+                            )}
+
+                            <span className="text-[10px] text-dark-500 block">
+                              Requested: {new Date(payout.created_at).toLocaleString()}
+                            </span>
+                          </div>
+
+                          {/* Admin Action Buttons */}
+                          <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                            {isPending && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdatePayoutStatus(payout.id, 'completed')}
+                                  className="px-3.5 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 font-bold text-xs border border-emerald-500/30 flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
+                                >
+                                  <CheckCircle2 className="w-3.5 h-3.5" />
+                                  <span>Mark Paid ✅</span>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdatePayoutStatus(payout.id, 'rejected')}
+                                  className="px-3 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 font-bold text-xs border border-rose-500/30 transition-all cursor-pointer"
+                                >
+                                  Reject & Refund ❌
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })
                 )}
               </div>
             </div>

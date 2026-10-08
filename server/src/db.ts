@@ -266,6 +266,43 @@ export function initDatabase() {
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       UNIQUE(user_id, message_id)
     );
+
+    CREATE TABLE IF NOT EXISTS user_wallets (
+      user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      coins_balance INTEGER NOT NULL DEFAULT 100,
+      cash_earned_inr REAL NOT NULL DEFAULT 1.0,
+      ads_watched_total INTEGER NOT NULL DEFAULT 0,
+      ads_watched_today INTEGER NOT NULL DEFAULT 0,
+      last_ad_date TEXT DEFAULT '',
+      last_ad_watched_at TEXT,
+      streak_days INTEGER NOT NULL DEFAULT 1,
+      last_streak_date TEXT DEFAULT '',
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS ad_views (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      ad_type TEXT NOT NULL DEFAULT 'rewarded_video',
+      coins_awarded INTEGER NOT NULL DEFAULT 50,
+      cash_value_inr REAL NOT NULL DEFAULT 0.50,
+      ip_address TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS payout_requests (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      amount_inr REAL NOT NULL,
+      coins_redeemed INTEGER NOT NULL,
+      upi_id TEXT NOT NULL,
+      account_holder_name TEXT DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'pending',
+      admin_notes TEXT DEFAULT '',
+      transaction_ref TEXT DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      processed_at TEXT
+    );
   `);
 
   // 2. Safe idempotent column migrations for existing databases created before newer fields were added
@@ -311,6 +348,9 @@ export function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_stories_user ON stories(user_id, expires_at);
     CREATE INDEX IF NOT EXISTS idx_user_activities_user ON user_activities(user_id, created_at);
     CREATE INDEX IF NOT EXISTS idx_user_activities_action ON user_activities(action, created_at);
+    CREATE INDEX IF NOT EXISTS idx_ad_views_user ON ad_views(user_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_payouts_user ON payout_requests(user_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_payouts_status ON payout_requests(status, created_at);
   `);
 
   // If PostgreSQL is configured, initialize remote tables and restore all saved users!
@@ -532,6 +572,43 @@ async function initPostgresAndRestore() {
         viewer_id VARCHAR(100) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         viewed_at TIMESTAMPTZ DEFAULT NOW(),
         UNIQUE(story_id, viewer_id)
+      );
+
+      CREATE TABLE IF NOT EXISTS user_wallets (
+        user_id VARCHAR(100) PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+        coins_balance INT NOT NULL DEFAULT 100,
+        cash_earned_inr NUMERIC(10,2) NOT NULL DEFAULT 1.0,
+        ads_watched_total INT NOT NULL DEFAULT 0,
+        ads_watched_today INT NOT NULL DEFAULT 0,
+        last_ad_date VARCHAR(20) DEFAULT '',
+        last_ad_watched_at TIMESTAMPTZ,
+        streak_days INT NOT NULL DEFAULT 1,
+        last_streak_date VARCHAR(20) DEFAULT '',
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS ad_views (
+        id VARCHAR(100) PRIMARY KEY,
+        user_id VARCHAR(100) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        ad_type VARCHAR(50) DEFAULT 'rewarded_video',
+        coins_awarded INT DEFAULT 50,
+        cash_value_inr NUMERIC(10,2) DEFAULT 0.50,
+        ip_address VARCHAR(100),
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS payout_requests (
+        id VARCHAR(100) PRIMARY KEY,
+        user_id VARCHAR(100) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        amount_inr NUMERIC(10,2) NOT NULL,
+        coins_redeemed INT NOT NULL,
+        upi_id VARCHAR(255) NOT NULL,
+        account_holder_name VARCHAR(255) DEFAULT '',
+        status VARCHAR(50) DEFAULT 'pending',
+        admin_notes TEXT DEFAULT '',
+        transaction_ref VARCHAR(255) DEFAULT '',
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        processed_at TIMESTAMPTZ
       );
     `);
 
@@ -1323,6 +1400,9 @@ export async function purgeUserPermanently(userId: string): Promise<boolean> {
     db.prepare('DELETE FROM push_subscriptions WHERE user_id = ?').run(userId);
     db.prepare('DELETE FROM starred_messages WHERE user_id = ?').run(userId);
     db.prepare('DELETE FROM user_activities WHERE user_id = ?').run(userId);
+    db.prepare('DELETE FROM user_wallets WHERE user_id = ?').run(userId);
+    db.prepare('DELETE FROM ad_views WHERE user_id = ?').run(userId);
+    db.prepare('DELETE FROM payout_requests WHERE user_id = ?').run(userId);
     db.prepare('DELETE FROM story_views WHERE viewer_id = ?').run(userId);
     db.prepare('DELETE FROM stories WHERE user_id = ?').run(userId);
     db.prepare('DELETE FROM user_reports WHERE reporter_id = ? OR reported_user_id = ?').run(userId, userId);
@@ -1342,6 +1422,9 @@ export async function purgeUserPermanently(userId: string): Promise<boolean> {
         await pgPool.query('DELETE FROM push_subscriptions WHERE user_id = $1', [userId]);
         await pgPool.query('DELETE FROM starred_messages WHERE user_id = $1', [userId]);
         await pgPool.query('DELETE FROM user_activities WHERE user_id = $1', [userId]);
+        await pgPool.query('DELETE FROM user_wallets WHERE user_id = $1', [userId]);
+        await pgPool.query('DELETE FROM ad_views WHERE user_id = $1', [userId]);
+        await pgPool.query('DELETE FROM payout_requests WHERE user_id = $1', [userId]);
         await pgPool.query('DELETE FROM user_reports WHERE reporter_id = $1 OR reported_user_id = $1', [userId, userId]);
         await pgPool.query('DELETE FROM blocked_users WHERE user_id = $1 OR blocked_user_id = $1', [userId, userId]);
         await pgPool.query('DELETE FROM call_logs WHERE caller_id = $1 OR receiver_id = $1', [userId, userId]);
@@ -1363,6 +1446,112 @@ export async function purgeUserPermanently(userId: string): Promise<boolean> {
     console.error('purgeUserPermanently error:', err);
     return false;
   }
+}
+
+// ----------------------------------------------------
+// Rewards & Wallet PostgreSQL Sync Helpers
+// ----------------------------------------------------
+export function persistWalletToPg(wallet: {
+  user_id: string;
+  coins_balance: number;
+  cash_earned_inr: number;
+  ads_watched_total: number;
+  ads_watched_today: number;
+  last_ad_date?: string;
+  last_ad_watched_at?: string;
+  streak_days: number;
+  last_streak_date?: string;
+}) {
+  if (!pgPool) return;
+  pgPool.query(
+    `INSERT INTO user_wallets (user_id, coins_balance, cash_earned_inr, ads_watched_total, ads_watched_today, last_ad_date, last_ad_watched_at, streak_days, last_streak_date, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
+     ON CONFLICT (user_id) DO UPDATE SET
+       coins_balance = EXCLUDED.coins_balance,
+       cash_earned_inr = EXCLUDED.cash_earned_inr,
+       ads_watched_total = EXCLUDED.ads_watched_total,
+       ads_watched_today = EXCLUDED.ads_watched_today,
+       last_ad_date = EXCLUDED.last_ad_date,
+       last_ad_watched_at = EXCLUDED.last_ad_watched_at,
+       streak_days = EXCLUDED.streak_days,
+       last_streak_date = EXCLUDED.last_streak_date,
+       updated_at = NOW()`,
+    [
+      wallet.user_id,
+      wallet.coins_balance,
+      wallet.cash_earned_inr,
+      wallet.ads_watched_total,
+      wallet.ads_watched_today,
+      wallet.last_ad_date || '',
+      wallet.last_ad_watched_at ? new Date(wallet.last_ad_watched_at) : null,
+      wallet.streak_days,
+      wallet.last_streak_date || '',
+    ]
+  ).catch(err => console.error('Error persisting wallet to PostgreSQL:', err.message));
+}
+
+export function persistAdViewToPg(adView: {
+  id: string;
+  user_id: string;
+  ad_type: string;
+  coins_awarded: number;
+  cash_value_inr: number;
+  ip_address?: string;
+  created_at?: string;
+}) {
+  if (!pgPool) return;
+  pgPool.query(
+    `INSERT INTO ad_views (id, user_id, ad_type, coins_awarded, cash_value_inr, ip_address, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     ON CONFLICT (id) DO NOTHING`,
+    [
+      adView.id,
+      adView.user_id,
+      adView.ad_type,
+      adView.coins_awarded,
+      adView.cash_value_inr,
+      adView.ip_address || '',
+      adView.created_at ? new Date(adView.created_at) : new Date(),
+    ]
+  ).catch(err => console.error('Error persisting ad view to PostgreSQL:', err.message));
+}
+
+export function persistPayoutToPg(payout: {
+  id: string;
+  user_id: string;
+  amount_inr: number;
+  coins_redeemed: number;
+  upi_id: string;
+  account_holder_name?: string;
+  status: string;
+  admin_notes?: string;
+  transaction_ref?: string;
+  created_at?: string;
+  processed_at?: string;
+}) {
+  if (!pgPool) return;
+  pgPool.query(
+    `INSERT INTO payout_requests (id, user_id, amount_inr, coins_redeemed, upi_id, account_holder_name, status, admin_notes, transaction_ref, created_at, processed_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+     ON CONFLICT (id) DO UPDATE SET
+       status = EXCLUDED.status,
+       admin_notes = EXCLUDED.admin_notes,
+       transaction_ref = EXCLUDED.transaction_ref,
+       processed_at = EXCLUDED.processed_at`,
+    [
+      payout.id,
+      payout.user_id,
+      payout.amount_inr,
+      payout.coins_redeemed,
+      payout.upi_id,
+      payout.account_holder_name || '',
+      payout.status,
+      payout.admin_notes || '',
+      payout.transaction_ref || '',
+      payout.created_at ? new Date(payout.created_at) : new Date(),
+      payout.processed_at ? new Date(payout.processed_at) : null,
+    ]
+  ).catch(err => console.error('Error persisting payout to PostgreSQL:', err.message));
 }
 
 

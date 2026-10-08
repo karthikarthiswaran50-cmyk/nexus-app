@@ -23,6 +23,7 @@ import * as subsCtrl from './controllers/subscriptions.js';
 import * as webrtcCtrl from './controllers/webrtc.js';
 import * as storiesCtrl from './controllers/stories.js';
 import * as adminCtrl from './controllers/admin.js';
+import * as rewardsCtrl from './controllers/rewards.js';
 import { getVapidPublicKey, savePushSubscription, sendPushToUser } from './services/webpush.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -432,6 +433,14 @@ app.get('/api/admin/activities', requireAdmin, adminCtrl.getAdminUserActivities)
 app.get('/api/admin/users/:id/inspection', requireAdmin, adminCtrl.getAdminUserInspection);
 app.get('/api/admin/reports', requireAdmin, adminCtrl.getAdminReports);
 app.post('/api/admin/reports/:id/resolve', requireAdmin, adminCtrl.resolveAdminReport);
+
+// 6.6 Royal Watch Ads & Earn Money Routes
+app.get('/api/rewards/wallet', requireAuth, rewardsCtrl.getWallet);
+app.post('/api/rewards/complete-ad', requireAuth, rewardsCtrl.completeAdWatch);
+app.post('/api/rewards/claim-streak', requireAuth, rewardsCtrl.claimDailyStreak);
+app.post('/api/rewards/request-payout', requireAuth, rewardsCtrl.requestPayout);
+app.get('/api/admin/payouts', requireAdmin, rewardsCtrl.getAdminPayouts);
+app.post('/api/admin/payouts/:id/status', requireAdmin, rewardsCtrl.updateAdminPayoutStatus);
 
 
 // 7. Serve static client in production (with multi-path fallback for local, Render, and Docker)
