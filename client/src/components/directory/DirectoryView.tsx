@@ -29,29 +29,25 @@ export const DirectoryView: React.FC<DirectoryViewProps> = ({ onStartChat, onVie
   const [users, setUsers] = useState<User[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [onlineOnly, setOnlineOnly] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  // Privacy-First: Search only by explicit @username or name
+  // Load all community members on mount and search with debounced filter
   useEffect(() => {
     const q = searchQuery.trim();
-    if (!q) {
-      setUsers([]);
-      setLoading(false);
-      return;
-    }
-
     setLoading(true);
+
     const timer = setTimeout(async () => {
       try {
-        const res = await axios.get(`/api/users?q=${encodeURIComponent(q)}`);
+        const endpoint = q ? `/api/users?q=${encodeURIComponent(q)}` : `/api/users?all=true`;
+        const res = await axios.get(endpoint);
         setUsers(res.data.users || []);
       } catch (err) {
-        console.error('Search users error:', err);
+        console.error('Fetch users error:', err);
         setUsers([]);
       } finally {
         setLoading(false);
       }
-    }, 280);
+    }, q ? 250 : 0);
 
     return () => clearTimeout(timer);
   }, [searchQuery]);
@@ -71,13 +67,13 @@ export const DirectoryView: React.FC<DirectoryViewProps> = ({ onStartChat, onVie
             <span className="p-1.5 rounded-lg bg-gold-500/20 text-gold-400 border border-gold-500/30">
               <Crown className="w-4 h-4 fill-gold-400" />
             </span>
-            <span className="text-xs font-black gold-gradient-text uppercase tracking-widest">Nexus Royal Search</span>
+            <span className="text-xs font-black gold-gradient-text uppercase tracking-widest">Nexus Royal Directory</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-            Find Members by @Username
+            Community Members & Search
           </h1>
           <p className="text-xs sm:text-sm text-dark-300 mt-1 max-w-xl leading-relaxed">
-            Search for your friends by their unique handle or name to start an encrypted chat, voice call, or 4K video session.
+            Browse members or search by @username, name, email, or user ID to start an encrypted chat, voice call, or 4K video session.
           </p>
         </div>
 
@@ -90,7 +86,7 @@ export const DirectoryView: React.FC<DirectoryViewProps> = ({ onStartChat, onVie
               !onlineOnly ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-dark-950 shadow-md' : 'text-dark-400 hover:text-white'
             }`}
           >
-            All Results
+            All Members
           </button>
           <button
             type="button"
@@ -113,39 +109,22 @@ export const DirectoryView: React.FC<DirectoryViewProps> = ({ onStartChat, onVie
           autoFocus
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Search by username or name (@karthi, alex, etc.)..."
+          placeholder="Search by @username, full name, email, or user ID..."
           className="w-full pl-12 pr-10 py-3.5 bg-dark-900 border border-gold-500/30 rounded-2xl text-sm font-semibold text-white placeholder:text-dark-500 focus:outline-none focus:border-gold-400 focus:ring-2 focus:ring-gold-400/20 shadow-lg transition-all"
         />
         {searchQuery && (
           <button
             type="button"
             onClick={() => setSearchQuery('')}
-            className="absolute right-3.5 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-dark-800 hover:bg-dark-700 text-dark-300 hover:text-white text-xs flex items-center justify-center transition-all"
+            className="absolute right-3.5 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-dark-800 hover:bg-dark-700 text-dark-300 hover:text-white text-xs flex items-center justify-center transition-all cursor-pointer"
           >
             ✕
           </button>
         )}
       </div>
 
-      {/* User Grid / Privacy States */}
-      {!searchQuery.trim() ? (
-        /* Privacy Protection: Initial Empty State before explicit search */
-        <div className="p-10 sm:p-14 text-center bg-dark-900/70 border border-gold-500/20 rounded-3xl royal-card space-y-4 max-w-lg mx-auto shadow-2xl backdrop-blur-xl animate-in fade-in duration-200">
-          <div className="w-16 h-16 rounded-3xl bg-gradient-to-tr from-amber-500/20 to-yellow-400/10 border border-gold-500/30 text-gold-400 flex items-center justify-center mx-auto shadow-lg shadow-gold-500/10">
-            <Search className="w-8 h-8 text-gold-400" />
-          </div>
-          <div>
-            <h3 className="text-lg font-black text-white">Find Anyone with Privacy Shield</h3>
-            <p className="text-xs text-dark-300 leading-relaxed mt-1.5 max-w-md mx-auto">
-              Members are never listed publicly by default. Type an @username or name in the box above to find and connect.
-            </p>
-          </div>
-          <div className="flex items-center justify-center gap-2 pt-1 text-[11px] text-gold-400/90 font-semibold">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_#10b981]" />
-            <span>End-to-End Encrypted Real-Time Calls & Messaging</span>
-          </div>
-        </div>
-      ) : loading ? (
+      {/* User Grid / Loading / Empty States */}
+      {loading ? (
         /* Skeleton Cards Grid (Eliminates layout shifting during debounced search) */
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 animate-in fade-in duration-200">
           {[1, 2, 3, 4, 5, 6].map((idx) => (
@@ -179,17 +158,23 @@ export const DirectoryView: React.FC<DirectoryViewProps> = ({ onStartChat, onVie
             <Users className="w-7 h-7" />
           </div>
           <p className="text-base font-bold text-white">
-            No members found for "{searchQuery}"
+            {searchQuery.trim()
+              ? `No members found matching "${searchQuery}"`
+              : 'No community members found'}
           </p>
           <p className="text-xs text-dark-400">
-            Check the username spelling or try searching by part of their name.
+            {searchQuery.trim()
+              ? 'Check the username spelling (@user), display name, email, or ID.'
+              : 'New members will appear here as they register on Nexus Royal.'}
           </p>
         </div>
       ) : (
         <div className="space-y-4">
           <div className="flex items-center justify-between px-1">
             <span className="text-xs font-black gold-gradient-text uppercase tracking-widest">
-              Search Results ({filteredUsers.length})
+              {searchQuery.trim()
+                ? `Search Results (${filteredUsers.length})`
+                : `Community Members (${filteredUsers.length})`}
             </span>
           </div>
 

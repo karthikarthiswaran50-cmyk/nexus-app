@@ -576,18 +576,22 @@ export async function searchChatHttp(req: AuthenticatedRequest, res: Response): 
         AND (
           LOWER(REPLACE(username, '@', '')) LIKE ? 
           OR LOWER(full_name) LIKE ? 
+          OR LOWER(email) LIKE ?
           OR LOWER(id) LIKE ? 
           OR LOWER(id) = ?
+          OR LOWER(REPLACE(username, '@', '')) = ?
+          OR LOWER(email) = ?
         )
       ORDER BY
         CASE
           WHEN LOWER(id) = ? THEN 0
           WHEN LOWER(REPLACE(username, '@', '')) = ? THEN 1
-          WHEN LOWER(REPLACE(username, '@', '')) LIKE ? THEN 2
-          ELSE 3
+          WHEN LOWER(email) = ? THEN 2
+          WHEN LOWER(REPLACE(username, '@', '')) LIKE ? THEN 3
+          ELSE 4
         END
-      LIMIT 15
-    `).all(userId, `%${query}%`, `%${query}%`, `%${query}%`, query, query, query, `${query}%`) as any[]).map(u => ({
+      LIMIT 25
+    `).all(userId, `%${query}%`, `%${query}%`, `%${raw.toLowerCase()}%`, `%${query}%`, query, query, raw.toLowerCase(), query, query, raw.toLowerCase(), `${query}%`) as any[]).map(u => ({
       ...u,
       plan_id: 'free',
       subscription_status: 'active',
@@ -603,17 +607,21 @@ export async function searchChatHttp(req: AuthenticatedRequest, res: Response): 
             AND (
               LOWER(REPLACE(username, '@', '')) LIKE $2 
               OR LOWER(full_name) LIKE $2 
+              OR LOWER(email) LIKE $2
               OR LOWER(id) LIKE $2 
               OR LOWER(id) = $3
+              OR LOWER(REPLACE(username, '@', '')) = $3
+              OR LOWER(email) = $3
             )
           ORDER BY
             CASE
               WHEN LOWER(id) = $3 THEN 0
               WHEN LOWER(REPLACE(username, '@', '')) = $3 THEN 1
-              WHEN LOWER(REPLACE(username, '@', '')) LIKE $4 THEN 2
-              ELSE 3
+              WHEN LOWER(email) = $3 THEN 2
+              WHEN LOWER(REPLACE(username, '@', '')) LIKE $4 THEN 3
+              ELSE 4
             END
-          LIMIT 15
+          LIMIT 25
         `, [userId, `%${query}%`, query, `${query}%`]);
 
         for (const row of pgRes.rows) {

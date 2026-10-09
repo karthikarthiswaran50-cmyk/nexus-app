@@ -21,6 +21,7 @@ export async function getUsers(req: AuthenticatedRequest, res: Response): Promis
     }
 
     const rawQuery = (req.query.q as string || '').trim();
+    const fetchAll = req.query.all === 'true' || !rawQuery;
 
     // Redaction helper respecting user privacy settings
     const redactUsers = (list: any[]) => list.map(u => {
@@ -39,32 +40,75 @@ export async function getUsers(req: AuthenticatedRequest, res: Response): Promis
       return { ...u, email: '', avatar_url: avatar, last_seen: lastSeen };
     });
 
-    // Privacy Protection: If no explicit query, return current user's existing contacts / conversation partners
-    // (Used by ForwardMessageModal, CreateGroupModal, etc. without exposing public user directory)
-    if (!rawQuery) {
-      try {
-        const convUsers = db.prepare(`
-          SELECT u.id, '' as email, u.username, u.full_name, u.avatar_url, u.bio, u.status, u.country, u.created_at, u.updated_at,
-                 'free' as plan_id, 'active' as subscription_status
-          FROM users u
-          JOIN conversations c ON (c.user1_id = u.id OR c.user2_id = u.id)
-          WHERE (c.user1_id = ? OR c.user2_id = ?) AND u.id != ? AND COALESCE(u.is_banned, 0) = 0
-          ORDER BY c.last_message_at DESC
-          LIMIT 30
-        `).all(currentUserId, currentUserId, currentUserId) as any[];
+    if (fetchAll) {
+      // 1. Return all active community members so Directory & New Chat are never empty!
+      let allUsers = db.prepare(`
+        SELECT u.id, '' as email, u.username, u.full_name, u.avatar_url, u.bio, u.status, u.country, u.last_seen, u.created_at, u.updated_at,
+               COALESCE(s.plan_id, 'free') as plan_id,
+               COALESCE(s.status, 'active') as subscription_status,
+               s.current_period_end as subscription_expires_at
+        FROM users u
+        LEFT JOIN subscriptions s ON u.id = s.user_id
+        WHERE COALESCE(u.is_banned, 0) = 0
+        ORDER BY 
+          CASE WHEN u.last_seen IS NOT NULL THEN 0 ELSE 1 END,
+          u.last_seen DESC, 
+          u.created_at DESC
+        LIMIT 60
+      `).all() as any[];
 
-        res.json({ users: redactUsers(convUsers) });
-        return;
-      } catch (convErr) {
-        res.json({ users: [] });
-        return;
+      // If PostgreSQL has more users, sync and merge them
+      if (pgPool) {
+        try {
+          const pgRes = await pgPool.query(`
+            SELECT u.id, '' as email, u.username, u.full_name, u.avatar_url, u.bio, u.status, u.country, u.last_seen, u.created_at, u.updated_at,
+                   u.password_hash, u.role, u.is_banned,
+                   COALESCE(s.plan_id, 'free') as plan_id,
+                   COALESCE(s.status, 'active') as subscription_status,
+                   s.current_period_end as subscription_expires_at
+            FROM users u
+            LEFT JOIN subscriptions s ON u.id = s.user_id
+            WHERE COALESCE(u.is_banned, 0) = 0
+            ORDER BY u.created_at DESC
+            LIMIT 60
+          `);
+          for (const row of pgRes.rows) {
+            upsertUserToSqlite(row);
+            if (!allUsers.some(u => u.id === row.id)) {
+              allUsers.push({
+                id: row.id,
+                email: '',
+                username: row.username,
+                full_name: row.full_name,
+                avatar_url: row.avatar_url || '',
+                bio: row.bio || '',
+                status: row.status || '',
+                country: row.country || 'Global',
+                last_seen: row.last_seen,
+                created_at: row.created_at,
+                updated_at: row.updated_at,
+                plan_id: row.plan_id || 'free',
+                subscription_status: row.subscription_status || 'active',
+                subscription_expires_at: row.subscription_expires_at,
+              });
+            }
+          }
+        } catch (pgErr: any) {
+          console.warn('PostgreSQL all-users sync note:', pgErr?.message);
+        }
       }
+
+      res.json({ users: redactUsers(allUsers) });
+      return;
     }
 
-    const query = rawQuery.replace(/^@+/, '').trim().toLowerCase();
+    // 2. Search query matching across username, full_name, email, and id
+    const cleanRaw = rawQuery.toLowerCase();
+    const query = cleanRaw.replace(/^@+/, '').trim();
+    const emailPrefix = cleanRaw.split('@')[0].trim();
 
     const sql = `
-      SELECT u.id, '' as email, u.username, u.full_name, u.avatar_url, u.bio, u.status, u.country, u.created_at, u.updated_at,
+      SELECT u.id, '' as email, u.username, u.full_name, u.avatar_url, u.bio, u.status, u.country, u.last_seen, u.created_at, u.updated_at,
              COALESCE(s.plan_id, 'free') as plan_id,
              COALESCE(s.status, 'active') as subscription_status,
              s.current_period_end as subscription_expires_at
@@ -74,28 +118,39 @@ export async function getUsers(req: AuthenticatedRequest, res: Response): Promis
         AND (
           LOWER(REPLACE(u.username, '@', '')) LIKE ? 
           OR LOWER(u.full_name) LIKE ?
+          OR LOWER(u.email) LIKE ?
           OR LOWER(u.id) LIKE ?
           OR LOWER(u.id) = ?
+          OR LOWER(REPLACE(u.username, '@', '')) = ?
+          OR LOWER(u.email) = ?
+          OR LOWER(REPLACE(u.email, '@', '')) LIKE ?
         )
       ORDER BY 
         CASE 
           WHEN LOWER(u.id) = ? THEN 0
           WHEN LOWER(REPLACE(u.username, '@', '')) = ? THEN 1
-          WHEN LOWER(REPLACE(u.username, '@', '')) LIKE ? THEN 2
-          WHEN LOWER(u.full_name) LIKE ? THEN 3
-          ELSE 4
+          WHEN LOWER(u.email) = ? THEN 2
+          WHEN LOWER(REPLACE(u.username, '@', '')) LIKE ? THEN 3
+          WHEN LOWER(u.full_name) LIKE ? THEN 4
+          ELSE 5
         END,
+        u.last_seen DESC,
         u.created_at DESC
-      LIMIT 30
+      LIMIT 40
     `;
 
     const users = (db.prepare(sql).all(
       `%${query}%`,
       `%${query}%`,
+      `%${cleanRaw}%`,
       `%${query}%`,
       query,
       query,
+      cleanRaw,
+      `%${emailPrefix}%`,
       query,
+      query,
+      cleanRaw,
       `${query}%`,
       `%${query}%`
     ) as unknown) as UserWithPlan[];
@@ -104,7 +159,7 @@ export async function getUsers(req: AuthenticatedRequest, res: Response): Promis
     if (pgPool) {
       try {
         const pgRes = await pgPool.query(`
-          SELECT u.id, '' as email, u.username, u.full_name, u.avatar_url, u.bio, u.status, u.country, u.created_at, u.updated_at,
+          SELECT u.id, '' as email, u.username, u.full_name, u.avatar_url, u.bio, u.status, u.country, u.last_seen, u.created_at, u.updated_at,
                  u.password_hash, u.role, u.is_banned,
                  COALESCE(s.plan_id, 'free') as plan_id,
                  COALESCE(s.status, 'active') as subscription_status,
@@ -115,20 +170,24 @@ export async function getUsers(req: AuthenticatedRequest, res: Response): Promis
             AND (
               LOWER(REPLACE(u.username, '@', '')) LIKE $1 
               OR LOWER(u.full_name) LIKE $1 
+              OR LOWER(u.email) LIKE $2
               OR LOWER(u.id) LIKE $1
-              OR LOWER(u.id) = $2
+              OR LOWER(u.id) = $3
+              OR LOWER(REPLACE(u.username, '@', '')) = $3
+              OR LOWER(u.email) = $4
             )
           ORDER BY
             CASE
-              WHEN LOWER(u.id) = $2 THEN 0
-              WHEN LOWER(REPLACE(u.username, '@', '')) = $2 THEN 1
-              WHEN LOWER(REPLACE(u.username, '@', '')) LIKE $3 THEN 2
-              WHEN LOWER(u.full_name) LIKE $1 THEN 3
-              ELSE 4
+              WHEN LOWER(u.id) = $3 THEN 0
+              WHEN LOWER(REPLACE(u.username, '@', '')) = $3 THEN 1
+              WHEN LOWER(u.email) = $4 THEN 2
+              WHEN LOWER(REPLACE(u.username, '@', '')) LIKE $5 THEN 3
+              WHEN LOWER(u.full_name) LIKE $1 THEN 4
+              ELSE 5
             END,
             u.created_at DESC
-          LIMIT 30
-        `, [`%${query}%`, query, `${query}%`]);
+          LIMIT 40
+        `, [`%${query}%`, `%${cleanRaw}%`, query, cleanRaw, `${query}%`]);
 
         for (const row of pgRes.rows) {
           upsertUserToSqlite(row);
@@ -142,6 +201,7 @@ export async function getUsers(req: AuthenticatedRequest, res: Response): Promis
               bio: row.bio || '',
               status: row.status || '',
               country: row.country || 'Global',
+              last_seen: row.last_seen,
               created_at: row.created_at,
               updated_at: row.updated_at,
               plan_id: row.plan_id || 'free',

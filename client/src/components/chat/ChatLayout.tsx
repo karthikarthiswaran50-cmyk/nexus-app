@@ -158,8 +158,9 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
     const name = c.other_user?.full_name?.toLowerCase() || '';
     const username = c.other_user?.username?.toLowerCase() || '';
     const id = c.other_user?.id?.toLowerCase() || '';
+    const email = ((c.other_user as any)?.email || '').toLowerCase();
     const q = searchQuery.toLowerCase().replace(/^@+/, '').trim();
-    return name.includes(q) || username.includes(q) || id.includes(q);
+    return name.includes(q) || username.includes(q) || id.includes(q) || email.includes(q);
   });
 
   const formatLastMessageTime = (iso?: string) => {
@@ -250,7 +251,7 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={chatTab === 'direct' ? "Search chats or @handle..." : "Search groups..."}
+              placeholder={chatTab === 'direct' ? "Search chats, @username, name, email..." : "Search groups..."}
               className="w-full pl-9 pr-4 py-2 bg-dark-850 border border-gold-500/15 rounded-xl text-xs text-white placeholder:text-dark-500 focus:outline-none focus:border-gold-400 focus:ring-1 focus:ring-gold-400/50 transition-all shadow-inner"
             />
           </div>
