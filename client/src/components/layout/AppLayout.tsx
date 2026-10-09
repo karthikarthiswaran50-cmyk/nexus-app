@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
 import { User } from '../../types';
@@ -10,6 +10,9 @@ import { ProfileView } from '../profile/ProfileView';
 import { SettingsView } from '../settings/SettingsView';
 import { IncomingCallModal } from '../call/IncomingCallModal';
 import { ActiveCallOverlay } from '../call/ActiveCallOverlay';
+import { BannerAd } from '../ads/BannerAd';
+import { InterstitialAd } from '../ads/InterstitialAd';
+import { getAdConfig } from '../../utils/adManager';
 import {
   MessageSquare,
   Phone,
@@ -47,7 +50,22 @@ export type NavTab = 'chats' | 'calls' | 'directory' | 'profile' | 'settings';
 
 export const AppLayout: React.FC = () => {
   const { user } = useAuth();
-  const { isConnected, callBannerMessage, latestMessage } = useSocket();
+  const { isConnected, callBannerMessage, latestMessage, activeCall } = useSocket();
+
+  // 💰 Ad Monetization & Call-End Interstitial State
+  const [showInterstitial, setShowInterstitial] = useState(false);
+  const prevActiveCallRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    getAdConfig();
+  }, []);
+
+  useEffect(() => {
+    if (prevActiveCallRef.current && !activeCall) {
+      setShowInterstitial(true);
+    }
+    prevActiveCallRef.current = !!activeCall;
+  }, [activeCall]);
 
   const [currentTab, setCurrentTab] = useState<NavTab>('chats');
   const [selectedUserForChat, setSelectedUserForChat] = useState<User | null>(null);
@@ -171,6 +189,11 @@ export const AppLayout: React.FC = () => {
       {/* Global Call Modals (always listening) */}
       <IncomingCallModal />
       <ActiveCallOverlay />
+      <InterstitialAd
+        isOpen={showInterstitial}
+        onClose={() => setShowInterstitial(false)}
+        title="Call Completed"
+      />
 
       {/* Global Toast / Banner Notification */}
       {callBannerMessage && (
@@ -560,6 +583,7 @@ export const AppLayout: React.FC = () => {
 
         {currentTab === 'calls' && (
           <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 pb-20 md:pb-6">
+            <BannerAd className="mb-3.5" />
             <CallsView
               onStartChat={handleStartChatWithUser}
               onViewProfile={handleViewProfile}
@@ -569,6 +593,7 @@ export const AppLayout: React.FC = () => {
 
         {currentTab === 'directory' && (
           <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 pb-20 md:pb-6">
+            <BannerAd className="mb-3.5" />
             <DirectoryView
               onStartChat={handleStartChatWithUser}
               onViewProfile={handleViewProfile}
@@ -578,6 +603,7 @@ export const AppLayout: React.FC = () => {
 
         {currentTab === 'profile' && (
           <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 pb-20 md:pb-6">
+            <BannerAd className="mb-3.5" />
             <ProfileView
               viewUser={viewProfileUser}
             />
@@ -586,6 +612,7 @@ export const AppLayout: React.FC = () => {
 
         {currentTab === 'settings' && (
           <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 pb-20 md:pb-6">
+            <BannerAd className="mb-3.5" />
             <SettingsView />
           </div>
         )}

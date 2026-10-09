@@ -40,6 +40,12 @@ import {
   Flag,
   Copy,
   Coins,
+  DollarSign,
+  TrendingUp,
+  Wallet,
+  Banknote,
+  Save,
+  HelpCircle,
 } from 'lucide-react';
 import axios from 'axios';
 import { useAuth } from '../../context/AuthContext';
@@ -155,6 +161,52 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({ isOpen
       console.error('Failed to load admin payouts:', err);
     } finally {
       setLoadingPayouts(false);
+    }
+  };
+
+  // Owner Ad Monetization State (Daily ₹500+ Directly to Bank Account)
+  const [adSettings, setAdSettings] = useState<any>({
+    ad_monetization_enabled: true,
+    ad_network_provider: 'monetag',
+    ad_publisher_id: '',
+    ad_banner_zone_id: '',
+    ad_interstitial_zone_id: '',
+    ad_rewarded_zone_id: '',
+    ad_custom_script: '',
+    ad_banner_enabled: true,
+    ad_interstitial_enabled: true,
+    ad_target_daily_revenue_inr: 500,
+    owner_bank_payout_notes: '',
+  });
+  const [adAnalytics, setAdAnalytics] = useState<any>(null);
+  const [loadingAdSettings, setLoadingAdSettings] = useState(false);
+  const [savingAdSettings, setSavingAdSettings] = useState(false);
+  const [adSaveMessage, setAdSaveMessage] = useState('');
+
+  const fetchAdSettings = async () => {
+    try {
+      setLoadingAdSettings(true);
+      const res = await axios.get('/api/admin/ad-settings');
+      if (res.data.settings) setAdSettings(res.data.settings);
+      if (res.data.analytics) setAdAnalytics(res.data.analytics);
+    } catch (err) {
+      console.error('Failed to load ad settings:', err);
+    } finally {
+      setLoadingAdSettings(false);
+    }
+  };
+
+  const handleSaveAdSettings = async () => {
+    try {
+      setSavingAdSettings(true);
+      await axios.post('/api/admin/ad-settings', { settings: adSettings });
+      setAdSaveMessage('✅ Settings saved! Live ads updated across all users.');
+      setTimeout(() => setAdSaveMessage(''), 4000);
+      fetchAdSettings();
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Failed to save ad settings');
+    } finally {
+      setSavingAdSettings(false);
     }
   };
 
@@ -409,6 +461,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({ isOpen
         fetchUsers();
       } else if (activeTab === 'rewards') {
         fetchAdminPayouts();
+        fetchAdSettings();
       } else if (activeTab === 'analytics') {
         fetchStats();
       }
@@ -751,6 +804,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({ isOpen
             onClick={() => {
               setActiveTab('rewards');
               fetchAdminPayouts();
+              fetchAdSettings();
             }}
             className={`flex items-center gap-2 px-3.5 py-2 rounded-xl transition-all whitespace-nowrap ${
               activeTab === 'rewards'
@@ -759,7 +813,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({ isOpen
             }`}
           >
             <Coins className="w-4 h-4 text-amber-400" />
-            <span>Ad Rewards & Payouts</span>
+            <span>💰 Monetization & Payouts</span>
             {payoutsStats?.pendingCount > 0 && (
               <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-extrabold border border-emerald-500/30">
                 {payoutsStats.pendingCount}
@@ -1640,7 +1694,317 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({ isOpen
           {/* TAB 5: AD REWARDS & PAYOUTS */}
           {activeTab === 'rewards' && (
             <div className="space-y-6">
-              
+
+              {/* 👑 ROYAL OWNER AD MONETIZATION & DAILY ₹500+ BANK EARNINGS HERO */}
+              <div className="p-5 sm:p-6 rounded-3xl bg-gradient-to-br from-amber-950/40 via-dark-900 to-yellow-950/30 border-2 border-gold-500/40 shadow-2xl space-y-6 relative overflow-hidden">
+                <div className="pointer-events-none absolute -top-16 -right-16 w-64 h-64 bg-amber-500/10 rounded-full blur-3xl" />
+
+                {/* Header */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-500 to-yellow-400 text-dark-950 flex items-center justify-center font-black shadow-lg shadow-gold-500/20 text-xl">
+                      ₹
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-lg sm:text-xl font-black text-white">
+                          Royal Owner Bank Monetization
+                        </h3>
+                        <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                          Daily ₹500+ Target
+                        </span>
+                      </div>
+                      <p className="text-xs text-amber-200/80">
+                        Ad networks (Monetag / Adsterra / AdSense) deposit money directly into YOUR bank account via NEFT / Wire / UPI
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Live Daily Goal Tracker Badge */}
+                  <div className="px-4 py-2.5 rounded-2xl bg-black/40 border border-gold-500/30 flex items-center gap-3 self-start sm:self-auto">
+                    <div>
+                      <div className="text-[10px] text-dark-400 font-bold uppercase tracking-wider">
+                        Today's Est. Owner Earnings
+                      </div>
+                      <div className="text-xl font-black text-amber-300">
+                        ₹{(adAnalytics?.estimatedRevenueTodayInr || 0).toFixed(2)}
+                        <span className="text-xs text-dark-400 font-semibold ml-1">/ ₹{adSettings.ad_target_daily_revenue_inr || 500}</span>
+                      </div>
+                    </div>
+                    <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
+                      <TrendingUp className="w-5 h-5 text-amber-400" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Progress Bar to ₹500 / Day */}
+                <div className="space-y-2 bg-dark-950/60 p-4 rounded-2xl border border-white/5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-bold text-dark-300 flex items-center gap-1.5">
+                      <span>Daily ₹500 Roadmap Progress:</span>
+                      <span className="text-amber-300 font-black">
+                        {adAnalytics?.todayImpressions || 0} / {adAnalytics?.targetImpressionsNeeded || 2000} impressions today
+                      </span>
+                    </span>
+                    <span className="font-black text-emerald-400">
+                      {adAnalytics?.progressPercent || 0}% Completed
+                    </span>
+                  </div>
+
+                  {/* Progress Bar Track */}
+                  <div className="w-full h-3 rounded-full bg-dark-900 overflow-hidden p-0.5 border border-white/10">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-amber-500 via-yellow-400 to-emerald-400 transition-all duration-500 shadow-sm shadow-gold-500/50"
+                      style={{ width: `${Math.max(5, adAnalytics?.progressPercent || 0)}%` }}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between text-[11px] text-dark-400 pt-1">
+                    <span>💡 At ~₹250 CPM, 2,000 ad views/day = ₹500+ daily deposited straight to your bank account!</span>
+                    <span className="font-mono text-dark-300">Target: ₹{adSettings.ad_target_daily_revenue_inr || 500}/day</span>
+                  </div>
+                </div>
+
+                {/* Ad Network Provider Selection & Keys */}
+                <div className="space-y-4 pt-2">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-sm font-black text-white flex items-center gap-2">
+                      <Coins className="w-4 h-4 text-amber-400" />
+                      <span>Ad Network Provider & Placement Configuration</span>
+                    </h4>
+
+                    {/* Global Enable Toggle */}
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <span className="text-xs font-bold text-dark-300">Monetization Active:</span>
+                      <input
+                        type="checkbox"
+                        checked={adSettings.ad_monetization_enabled}
+                        onChange={(e) => setAdSettings({ ...adSettings, ad_monetization_enabled: e.target.checked })}
+                        className="w-4 h-4 accent-amber-500 rounded cursor-pointer"
+                      />
+                      <span className={`text-xs font-black ${adSettings.ad_monetization_enabled ? 'text-emerald-400' : 'text-rose-400'}`}>
+                        {adSettings.ad_monetization_enabled ? 'ON' : 'OFF'}
+                      </span>
+                    </label>
+                  </div>
+
+                  {/* Provider Selector Tabs */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {[
+                      { id: 'monetag', name: 'Monetag (Recommended)', badge: 'Instant Approval', cpm: 'High India CPM' },
+                      { id: 'adsterra', name: 'Adsterra', badge: 'Instant Approval', cpm: 'Top Social Bar' },
+                      { id: 'google_adsense', name: 'Google AdSense', badge: 'Direct Wire Transfer', cpm: 'Highest RPM' },
+                      { id: 'custom', name: 'Custom HTML Script', badge: 'Universal Tag', cpm: 'Any Ad Network' },
+                    ].map((p) => {
+                      const isSelected = adSettings.ad_network_provider === p.id;
+                      return (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => setAdSettings({ ...adSettings, ad_network_provider: p.id })}
+                          className={`p-3 rounded-2xl text-left border transition-all cursor-pointer ${
+                            isSelected
+                              ? 'bg-amber-500/20 border-amber-500 text-white shadow-md shadow-gold-500/10'
+                              : 'bg-dark-950/70 border-white/5 text-dark-400 hover:text-white hover:border-white/20'
+                          }`}
+                        >
+                          <div className="text-xs font-black truncate">{p.name}</div>
+                          <div className="text-[10px] text-amber-300/90 font-medium">{p.badge}</div>
+                          <div className="text-[9px] text-dark-400 mt-1">{p.cpm}</div>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Provider Specific Inputs */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 bg-dark-950/60 p-4 rounded-2xl border border-white/5">
+                    {/* Publisher ID */}
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-dark-300 block">
+                        Publisher ID / Client Account ID
+                      </label>
+                      <input
+                        type="text"
+                        value={adSettings.ad_publisher_id || ''}
+                        onChange={(e) => setAdSettings({ ...adSettings, ad_publisher_id: e.target.value })}
+                        placeholder={adSettings.ad_network_provider === 'google_adsense' ? 'ca-pub-1234567890123456' : 'e.g. 7845129'}
+                        className="w-full px-3 py-2 rounded-xl bg-dark-900 border border-white/10 text-white text-xs font-mono outline-none focus:border-gold-500"
+                      />
+                      <span className="text-[10px] text-dark-400">Found in your {adSettings.ad_network_provider} account dashboard</span>
+                    </div>
+
+                    {/* Target Revenue */}
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-dark-300 block">
+                        Daily Earnings Target (₹ INR)
+                      </label>
+                      <input
+                        type="number"
+                        value={adSettings.ad_target_daily_revenue_inr || 500}
+                        onChange={(e) => setAdSettings({ ...adSettings, ad_target_daily_revenue_inr: Number(e.target.value) })}
+                        placeholder="500"
+                        className="w-full px-3 py-2 rounded-xl bg-dark-900 border border-white/10 text-white text-xs font-mono outline-none focus:border-gold-500"
+                      />
+                      <span className="text-[10px] text-dark-400">Default target is ₹500/day</span>
+                    </div>
+
+                    {/* Banner Zone ID */}
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-dark-300 block">
+                        Sticky Banner Ad Zone / Slot ID
+                      </label>
+                      <input
+                        type="text"
+                        value={adSettings.ad_banner_zone_id || ''}
+                        onChange={(e) => setAdSettings({ ...adSettings, ad_banner_zone_id: e.target.value })}
+                        placeholder="e.g. 9812456"
+                        className="w-full px-3 py-2 rounded-xl bg-dark-900 border border-white/10 text-white text-xs font-mono outline-none focus:border-gold-500"
+                      />
+                      <span className="text-[10px] text-dark-400">Displays sticky responsive banner across chats & directories</span>
+                    </div>
+
+                    {/* Interstitial Zone ID */}
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-dark-300 block">
+                        Call-End Interstitial Ad Zone ID
+                      </label>
+                      <input
+                        type="text"
+                        value={adSettings.ad_interstitial_zone_id || ''}
+                        onChange={(e) => setAdSettings({ ...adSettings, ad_interstitial_zone_id: e.target.value })}
+                        placeholder="e.g. 9812457"
+                        className="w-full px-3 py-2 rounded-xl bg-dark-900 border border-white/10 text-white text-xs font-mono outline-none focus:border-gold-500"
+                      />
+                      <span className="text-[10px] text-dark-400">Pops up for 5 seconds when audio/video calls end</span>
+                    </div>
+
+                    {/* Rewarded Video Zone ID */}
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-dark-300 block">
+                        Rewarded Video Ad Zone ID
+                      </label>
+                      <input
+                        type="text"
+                        value={adSettings.ad_rewarded_zone_id || ''}
+                        onChange={(e) => setAdSettings({ ...adSettings, ad_rewarded_zone_id: e.target.value })}
+                        placeholder="e.g. 9812458"
+                        className="w-full px-3 py-2 rounded-xl bg-dark-900 border border-white/10 text-white text-xs font-mono outline-none focus:border-gold-500"
+                      />
+                      <span className="text-[10px] text-dark-400">Triggers when users click 'Watch Ad & Earn Coins'</span>
+                    </div>
+
+                    {/* Owner Private Bank Reference Note */}
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-dark-300 block">
+                        Owner Bank / UPI Payout Record (Private)
+                      </label>
+                      <input
+                        type="text"
+                        value={adSettings.owner_bank_payout_notes || ''}
+                        onChange={(e) => setAdSettings({ ...adSettings, owner_bank_payout_notes: e.target.value })}
+                        placeholder="e.g. SBI A/c 1234567890 | IFSC: SBIN0001234 | UPI: name@oksbi"
+                        className="w-full px-3 py-2 rounded-xl bg-dark-900 border border-white/10 text-white text-xs font-mono outline-none focus:border-gold-500"
+                      />
+                      <span className="text-[10px] text-dark-400">For your personal reference (stored securely)</span>
+                    </div>
+
+                    {/* Custom Script Tag (Full width) */}
+                    <div className="sm:col-span-2 space-y-1">
+                      <label className="text-[11px] font-bold text-dark-300 block">
+                        Custom Ad Code / MultiTag Script (HTML / JavaScript)
+                      </label>
+                      <textarea
+                        rows={3}
+                        value={adSettings.ad_custom_script || ''}
+                        onChange={(e) => setAdSettings({ ...adSettings, ad_custom_script: e.target.value })}
+                        placeholder={'<script src="//alwingulla.com/zone-script.js" async></script>'}
+                        className="w-full px-3 py-2 rounded-xl bg-dark-900 border border-white/10 text-white text-xs font-mono outline-none focus:border-gold-500"
+                      />
+                      <span className="text-[10px] text-dark-400">
+                        Paste any script tag provided by Monetag MultiTag, Adsterra Social Bar, or Google AdSense. Injected automatically.
+                      </span>
+                    </div>
+
+                    {/* Placement Toggles */}
+                    <div className="sm:col-span-2 flex flex-wrap items-center gap-6 pt-2 border-t border-white/10">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={adSettings.ad_banner_enabled}
+                          onChange={(e) => setAdSettings({ ...adSettings, ad_banner_enabled: e.target.checked })}
+                          className="w-4 h-4 accent-amber-500 rounded cursor-pointer"
+                        />
+                        <span className="text-xs font-bold text-white">Enable Sticky Banners</span>
+                      </label>
+
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={adSettings.ad_interstitial_enabled}
+                          onChange={(e) => setAdSettings({ ...adSettings, ad_interstitial_enabled: e.target.checked })}
+                          className="w-4 h-4 accent-amber-500 rounded cursor-pointer"
+                        />
+                        <span className="text-xs font-bold text-white">Enable Call-End Interstitials</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Save Button & Status Toast */}
+                  <div className="flex items-center justify-between pt-1">
+                    {adSaveMessage ? (
+                      <span className="text-xs font-black text-emerald-400 animate-in fade-in">
+                        {adSaveMessage}
+                      </span>
+                    ) : (
+                      <span className="text-[11px] text-dark-400">
+                        Changes take effect instantly for all active users on nexusroyal.online
+                      </span>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={handleSaveAdSettings}
+                      disabled={savingAdSettings}
+                      className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 text-dark-950 font-black text-xs hover:brightness-105 active:scale-95 transition-all flex items-center gap-2 shadow-lg cursor-pointer"
+                    >
+                      <Save className="w-4 h-4" />
+                      <span>{savingAdSettings ? 'Saving...' : 'Save & Activate Ads Live'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* HOW TO RECEIVE MONEY IN YOUR BANK ACCOUNT (Direct Step-by-Step Guide) */}
+                <div className="p-4 rounded-2xl bg-black/40 border border-white/10 space-y-3">
+                  <div className="flex items-center gap-2 text-xs font-black text-amber-300">
+                    <Banknote className="w-4 h-4 text-emerald-400" />
+                    <span>Money Direct to Bank Account — How It Works (SBI / HDFC / Canara / Indian Bank / UPI)</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs text-dark-300">
+                    <div className="p-3 rounded-xl bg-dark-900/60 border border-white/5 space-y-1">
+                      <div className="font-bold text-white text-[11px]">1. Sign Up on Monetag / Adsterra</div>
+                      <p className="text-[10px] text-dark-400">
+                        Visit monetag.com or adsterra.com. Sign up as a Publisher. Approval is instant in 5 minutes!
+                      </p>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-dark-900/60 border border-white/5 space-y-1">
+                      <div className="font-bold text-white text-[11px]">2. Add Your Indian Bank Details</div>
+                      <p className="text-[10px] text-dark-400">
+                        In Payment Settings, enter your Bank Account Number, IFSC code, and Name (or Wire Transfer / UPI / PayPal).
+                      </p>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-dark-900/60 border border-white/5 space-y-1">
+                      <div className="font-bold text-white text-[11px]">3. Paste Zone ID Here & Earn ₹500/Day</div>
+                      <p className="text-[10px] text-dark-400">
+                        Paste the Ad Zone ID above. As users chat and call, impressions register in your account, and the ad network pays you directly!
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               {/* Analytics Overview Cards */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
                 <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 space-y-1">

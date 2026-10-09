@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Volume2, VolumeX, Sparkles, Award, ShieldCheck, CheckCircle2, Play } from 'lucide-react';
+import { recordAdImpression } from '../../utils/adManager';
 
 interface RewardedAdPlayerProps {
   isOpen: boolean;
@@ -61,6 +62,7 @@ export const RewardedAdPlayer: React.FC<RewardedAdPlayerProps> = ({
 
   useEffect(() => {
     if (isOpen) {
+      recordAdImpression('rewarded_video');
       // Pick a random sponsor creative
       const randomAd = SPONSOR_ADS[Math.floor(Math.random() * SPONSOR_ADS.length)];
       setSelectedAd(randomAd);

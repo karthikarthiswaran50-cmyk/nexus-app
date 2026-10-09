@@ -845,7 +845,73 @@ async function initPostgresAndRestore() {
         console.warn('Messages restore note:', msgErr.message);
       }
 
-      console.log('✅ PostgreSQL database restored successfully! User sessions, accounts, conversations, and messages are intact.');
+      // Restore system_settings
+      try {
+        const sysRes = await pgPool.query('SELECT * FROM system_settings');
+        const insertSetting = db.prepare('INSERT OR REPLACE INTO system_settings (key, value) VALUES (?, ?)');
+        for (const s of sysRes.rows) {
+          try { insertSetting.run(s.key, s.value); } catch (_) {}
+        }
+      } catch (sysErr: any) {
+        console.warn('System settings restore note:', sysErr.message);
+      }
+
+      // Restore user_wallets
+      try {
+        const walRes = await pgPool.query('SELECT * FROM user_wallets');
+        const insertWal = db.prepare(`
+          INSERT OR REPLACE INTO user_wallets (user_id, coins_balance, cash_earned_inr, ads_watched_total, ads_watched_today, last_ad_date, last_ad_watched_at, streak_days, last_streak_date, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+        for (const w of walRes.rows) {
+          try {
+            insertWal.run(
+              w.user_id,
+              w.coins_balance || 0,
+              Number(w.cash_earned_inr || 0),
+              w.ads_watched_total || 0,
+              w.ads_watched_today || 0,
+              w.last_ad_date || '',
+              w.last_ad_watched_at ? toIsoSafe(w.last_ad_watched_at) : null,
+              w.streak_days || 1,
+              w.last_streak_date || '',
+              toIsoSafe(w.updated_at)
+            );
+          } catch (_) {}
+        }
+      } catch (wErr: any) {
+        console.warn('Wallets restore note:', wErr.message);
+      }
+
+      // Restore payout_requests
+      try {
+        const payRes = await pgPool.query('SELECT * FROM payout_requests');
+        const insertPay = db.prepare(`
+          INSERT OR REPLACE INTO payout_requests (id, user_id, amount_inr, coins_redeemed, upi_id, account_holder_name, status, admin_notes, transaction_ref, created_at, processed_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+        for (const p of payRes.rows) {
+          try {
+            insertPay.run(
+              p.id,
+              p.user_id,
+              Number(p.amount_inr || 0),
+              p.coins_redeemed || 0,
+              p.upi_id,
+              p.account_holder_name || '',
+              p.status || 'pending',
+              p.admin_notes || '',
+              p.transaction_ref || '',
+              toIsoSafe(p.created_at),
+              p.processed_at ? toIsoSafe(p.processed_at) : null
+            );
+          } catch (_) {}
+        }
+      } catch (pErr: any) {
+        console.warn('Payouts restore note:', pErr.message);
+      }
+
+      console.log('✅ PostgreSQL database restored successfully! User sessions, accounts, conversations, messages, and settings are intact.');
     } else {
       console.log('🌱 PostgreSQL is empty. Ready for authentic user registrations.');
       purgeDemoData();
@@ -1552,6 +1618,35 @@ export function persistPayoutToPg(payout: {
       payout.processed_at ? new Date(payout.processed_at) : null,
     ]
   ).catch(err => console.error('Error persisting payout to PostgreSQL:', err.message));
+}
+
+// ----------------------------------------------------
+// System Settings (Persistent Key-Value Store)
+// ----------------------------------------------------
+export function getSystemSetting(key: string, defaultValue: string = ''): string {
+  try {
+    const row = db.prepare('SELECT value FROM system_settings WHERE key = ?').get(key) as { value: string } | undefined;
+    if (row && row.value !== undefined && row.value !== null) {
+      return row.value;
+    }
+  } catch (err: any) {
+    console.error(`Error reading system setting ${key}:`, err?.message);
+  }
+  return defaultValue;
+}
+
+export function setSystemSetting(key: string, value: string): void {
+  try {
+    db.prepare('INSERT INTO system_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(key, value);
+    if (pgPool) {
+      pgPool.query(
+        'INSERT INTO system_settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value',
+        [key, value]
+      ).catch(e => console.error(`Failed to sync system setting ${key} to PostgreSQL:`, e?.message));
+    }
+  } catch (err: any) {
+    console.error(`Error saving system setting ${key}:`, err?.message);
+  }
 }
 
 

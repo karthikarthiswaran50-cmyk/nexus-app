@@ -1,6 +1,6 @@
 import { Response } from 'express';
 import bcrypt from 'bcryptjs';
-import { db, pgPool, persistUserToPg, purgeUserPermanently, upsertUserToSqlite } from '../db.js';
+import { db, pgPool, persistUserToPg, purgeUserPermanently, upsertUserToSqlite, getSystemSetting, setSystemSetting } from '../db.js';
 import { AuthenticatedRequest } from '../middleware/auth.js';
 import { getOnlineUsersCount, disconnectUserSockets, broadcastAnnouncementSocket } from '../socket.js';
 import { getUserWithPlan } from './auth.js';
@@ -1054,4 +1054,116 @@ export async function adminResetUserPassword(req: AuthenticatedRequest, res: Res
     res.status(500).json({ error: 'Failed to reset user password' });
   }
 }
+
+// ----------------------------------------------------
+// 12. Royal Owner Ad Monetization & Direct Bank Earnings Settings
+// ----------------------------------------------------
+export async function getAdSettings(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    
+    // Calculate Today's Impressions
+    let todayImpressions = 0;
+    let totalImpressions = 0;
+    let rewardedToday = 0;
+    let bannerToday = 0;
+    let interstitialToday = 0;
+
+    try {
+      const todayRow = db.prepare(`SELECT COUNT(*) as count FROM ad_views WHERE created_at LIKE ? || '%'`).get(today) as { count: number } | undefined;
+      todayImpressions = todayRow?.count || 0;
+
+      const totalRow = db.prepare('SELECT COUNT(*) as count FROM ad_views').get() as { count: number } | undefined;
+      totalImpressions = totalRow?.count || 0;
+
+      const rewardedRow = db.prepare(`SELECT COUNT(*) as count FROM ad_views WHERE ad_type = 'rewarded_video' AND created_at LIKE ? || '%'`).get(today) as { count: number } | undefined;
+      rewardedToday = rewardedRow?.count || 0;
+
+      const bannerRow = db.prepare(`SELECT COUNT(*) as count FROM ad_views WHERE ad_type = 'banner' AND created_at LIKE ? || '%'`).get(today) as { count: number } | undefined;
+      bannerToday = bannerRow?.count || 0;
+
+      const interstitialRow = db.prepare(`SELECT COUNT(*) as count FROM ad_views WHERE ad_type = 'interstitial' AND created_at LIKE ? || '%'`).get(today) as { count: number } | undefined;
+      interstitialToday = interstitialRow?.count || 0;
+    } catch (e: any) {
+      console.warn('Ad views analytics read error:', e?.message);
+    }
+
+    const targetDailyRevenueInr = Number(getSystemSetting('ad_target_daily_revenue_inr', '500')) || 500;
+    // Average estimated India eCPM for mixed high-converting formats (Monetag / Adsterra / AdSense) is approx ₹250 CPM (= ₹0.25 per ad view)
+    const estimatedRevenueTodayInr = Number((todayImpressions * 0.25).toFixed(2));
+    const targetImpressionsNeeded = Math.ceil(targetDailyRevenueInr / 0.25); // 2000 views
+    const progressPercent = Math.min(100, Math.round((estimatedRevenueTodayInr / targetDailyRevenueInr) * 100));
+
+    const settings = {
+      ad_monetization_enabled: getSystemSetting('ad_monetization_enabled', 'true') === 'true',
+      ad_network_provider: getSystemSetting('ad_network_provider', 'monetag'),
+      ad_publisher_id: getSystemSetting('ad_publisher_id', ''),
+      ad_banner_zone_id: getSystemSetting('ad_banner_zone_id', ''),
+      ad_interstitial_zone_id: getSystemSetting('ad_interstitial_zone_id', ''),
+      ad_rewarded_zone_id: getSystemSetting('ad_rewarded_zone_id', ''),
+      ad_custom_script: getSystemSetting('ad_custom_script', ''),
+      ad_banner_enabled: getSystemSetting('ad_banner_enabled', 'true') === 'true',
+      ad_interstitial_enabled: getSystemSetting('ad_interstitial_enabled', 'true') === 'true',
+      ad_target_daily_revenue_inr: targetDailyRevenueInr,
+      owner_bank_payout_notes: getSystemSetting('owner_bank_payout_notes', ''),
+    };
+
+    res.json({
+      settings,
+      analytics: {
+        todayImpressions,
+        totalImpressions,
+        rewardedToday,
+        bannerToday,
+        interstitialToday,
+        estimatedRevenueTodayInr,
+        targetDailyRevenueInr,
+        targetImpressionsNeeded,
+        progressPercent,
+      },
+    });
+  } catch (error: any) {
+    console.error('getAdSettings error:', error);
+    res.status(500).json({ error: 'Failed to retrieve ad monetization settings' });
+  }
+}
+
+export async function updateAdSettings(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const { settings } = req.body;
+    if (!settings || typeof settings !== 'object') {
+      res.status(400).json({ error: 'Settings object is required' });
+      return;
+    }
+
+    const allowedKeys = [
+      'ad_monetization_enabled',
+      'ad_network_provider',
+      'ad_publisher_id',
+      'ad_banner_zone_id',
+      'ad_interstitial_zone_id',
+      'ad_rewarded_zone_id',
+      'ad_custom_script',
+      'ad_banner_enabled',
+      'ad_interstitial_enabled',
+      'ad_target_daily_revenue_inr',
+      'owner_bank_payout_notes',
+    ];
+
+    for (const key of allowedKeys) {
+      if (settings[key] !== undefined) {
+        setSystemSetting(key, String(settings[key]));
+      }
+    }
+
+    res.json({
+      success: true,
+      message: 'Royal Owner Ad Monetization settings saved successfully! Ads are active live.',
+    });
+  } catch (error: any) {
+    console.error('updateAdSettings error:', error);
+    res.status(500).json({ error: 'Failed to update ad monetization settings' });
+  }
+}
+
 

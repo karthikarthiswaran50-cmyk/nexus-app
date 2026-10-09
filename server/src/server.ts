@@ -24,6 +24,7 @@ import * as webrtcCtrl from './controllers/webrtc.js';
 import * as storiesCtrl from './controllers/stories.js';
 import * as adminCtrl from './controllers/admin.js';
 import * as rewardsCtrl from './controllers/rewards.js';
+import * as adsCtrl from './controllers/ads.js';
 import { getVapidPublicKey, savePushSubscription, sendPushToUser } from './services/webpush.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -441,6 +442,12 @@ app.post('/api/rewards/claim-streak', requireAuth, rewardsCtrl.claimDailyStreak)
 app.post('/api/rewards/request-payout', requireAuth, rewardsCtrl.requestPayout);
 app.get('/api/admin/payouts', requireAdmin, rewardsCtrl.getAdminPayouts);
 app.post('/api/admin/payouts/:id/status', requireAdmin, rewardsCtrl.updateAdminPayoutStatus);
+
+// 6.7 Royal Owner Ad Monetization Routes
+app.get('/api/admin/ad-settings', requireAdmin, adminCtrl.getAdSettings);
+app.post('/api/admin/ad-settings', requireAdmin, adminCtrl.updateAdSettings);
+app.get('/api/ads/config', adsCtrl.getPublicAdConfig);
+app.post('/api/ads/track-impression', adsCtrl.trackAdImpression);
 
 
 // 7. Serve static client in production (with multi-path fallback for local, Render, and Docker)
