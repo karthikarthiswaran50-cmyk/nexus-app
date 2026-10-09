@@ -18,6 +18,7 @@ import {
   Gift,
 } from 'lucide-react';
 import { RewardedAdPlayer } from './RewardedAdPlayer';
+import { BannerAd } from '../ads/BannerAd';
 import { useAuth } from '../../context/AuthContext';
 
 interface RewardsModalProps {
@@ -265,6 +266,9 @@ export const RewardsModal: React.FC<RewardsModalProps> = ({ isOpen, onClose }) =
           {activeTab === 'earn' && (
             <div className="space-y-6">
               
+              {/* Sponsored Banner Ad */}
+              <BannerAd className="mb-1" />
+
               {/* Royal Wallet Balance Card */}
               <div className="relative rounded-3xl p-6 sm:p-7 overflow-hidden bg-gradient-to-br from-amber-600/25 via-dark-850 to-dark-950 border border-gold-500/40 shadow-xl">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-gold-500/10 rounded-full blur-3xl pointer-events-none" />
