@@ -9,12 +9,12 @@ export async function getPublicAdConfig(req: Request, res: Response): Promise<vo
   try {
     const config = {
       enabled: getSystemSetting('ad_monetization_enabled', 'true') === 'true',
-      provider: getSystemSetting('ad_network_provider', 'monetag'),
-      publisherId: getSystemSetting('ad_publisher_id', ''),
+      provider: getSystemSetting('ad_network_provider', 'adsterra'),
+      publisherId: getSystemSetting('ad_publisher_id', '6109232'),
       bannerZoneId: getSystemSetting('ad_banner_zone_id', ''),
       interstitialZoneId: getSystemSetting('ad_interstitial_zone_id', ''),
       rewardedZoneId: getSystemSetting('ad_rewarded_zone_id', ''),
-      customScript: getSystemSetting('ad_custom_script', ''),
+      customScript: getSystemSetting('ad_custom_script', '<script data-cfasync="false" src="https://bicea.org/14/fdc62d798090ac18b8e831e601033773"></script>'),
       bannerEnabled: getSystemSetting('ad_banner_enabled', 'true') === 'true',
       interstitialEnabled: getSystemSetting('ad_interstitial_enabled', 'true') === 'true',
     };

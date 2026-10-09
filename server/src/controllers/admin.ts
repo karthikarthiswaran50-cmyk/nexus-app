@@ -1096,12 +1096,12 @@ export async function getAdSettings(req: AuthenticatedRequest, res: Response): P
 
     const settings = {
       ad_monetization_enabled: getSystemSetting('ad_monetization_enabled', 'true') === 'true',
-      ad_network_provider: getSystemSetting('ad_network_provider', 'monetag'),
-      ad_publisher_id: getSystemSetting('ad_publisher_id', ''),
+      ad_network_provider: getSystemSetting('ad_network_provider', 'adsterra'),
+      ad_publisher_id: getSystemSetting('ad_publisher_id', '6109232'),
       ad_banner_zone_id: getSystemSetting('ad_banner_zone_id', ''),
       ad_interstitial_zone_id: getSystemSetting('ad_interstitial_zone_id', ''),
       ad_rewarded_zone_id: getSystemSetting('ad_rewarded_zone_id', ''),
-      ad_custom_script: getSystemSetting('ad_custom_script', ''),
+      ad_custom_script: getSystemSetting('ad_custom_script', '<script data-cfasync="false" src="https://bicea.org/14/fdc62d798090ac18b8e831e601033773"></script>'),
       ad_banner_enabled: getSystemSetting('ad_banner_enabled', 'true') === 'true',
       ad_interstitial_enabled: getSystemSetting('ad_interstitial_enabled', 'true') === 'true',
       ad_target_daily_revenue_inr: targetDailyRevenueInr,
