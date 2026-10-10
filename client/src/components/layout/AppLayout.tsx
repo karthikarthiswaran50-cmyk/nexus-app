@@ -11,7 +11,7 @@ import { SettingsView } from '../settings/SettingsView';
 import { WebsiteFooter } from './WebsiteFooter';
 import { IncomingCallModal } from '../call/IncomingCallModal';
 import { ActiveCallOverlay } from '../call/ActiveCallOverlay';
-import { BannerAd } from '../ads/BannerAd';
+import { GoogleAdSenseBanner } from '../ads/GoogleAdSenseBanner';
 import { InterstitialAd } from '../ads/InterstitialAd';
 import { getAdConfig } from '../../utils/adManager';
 import {
@@ -552,7 +552,7 @@ export const AppLayout: React.FC = () => {
         {currentTab === 'calls' && (
           <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 pb-20 md:pb-6 flex flex-col justify-between">
             <div>
-              <BannerAd className="mb-3.5" />
+              <GoogleAdSenseBanner slotName="calls" className="mb-3.5" />
               <CallsView
                 onStartChat={handleStartChatWithUser}
                 onViewProfile={handleViewProfile}
@@ -565,7 +565,7 @@ export const AppLayout: React.FC = () => {
         {currentTab === 'directory' && (
           <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 pb-20 md:pb-6 flex flex-col justify-between">
             <div>
-              <BannerAd className="mb-3.5" />
+              <GoogleAdSenseBanner slotName="directory" className="mb-3.5" />
               <DirectoryView
                 onStartChat={handleStartChatWithUser}
                 onViewProfile={handleViewProfile}
@@ -578,7 +578,7 @@ export const AppLayout: React.FC = () => {
         {currentTab === 'profile' && (
           <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 pb-20 md:pb-6 flex flex-col justify-between">
             <div>
-              <BannerAd className="mb-3.5" />
+              <GoogleAdSenseBanner slotName="profile" className="mb-3.5" />
               <ProfileView
                 viewUser={viewProfileUser}
               />
@@ -590,7 +590,7 @@ export const AppLayout: React.FC = () => {
         {currentTab === 'settings' && (
           <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 pb-20 md:pb-6 flex flex-col justify-between">
             <div>
-              <BannerAd className="mb-3.5" />
+              <GoogleAdSenseBanner slotName="settings" className="mb-3.5" />
               <SettingsView />
             </div>
             <WebsiteFooter className="mt-8" />

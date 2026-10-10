@@ -7,6 +7,7 @@ import { PlanBadge } from '../common/Badge';
 import { ChatRoom } from './ChatRoom';
 import { StoriesBar } from '../stories/StoriesBar';
 import { CreateGroupModal } from './CreateGroupModal';
+import { AdsterraSidebarBanner } from '../ads/AdsterraSidebarBanner';
 import {
   Search,
   MessageSquare,
@@ -533,6 +534,11 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
                 })
             )
           )}
+        </div>
+
+        {/* 👑 Dedicated Adsterra Monetization Slot (Sidebar Only - Strictly separated from active ChatRoom & Video calls) */}
+        <div className="shrink-0 border-t border-gold-500/15 bg-dark-950/60">
+          <AdsterraSidebarBanner />
         </div>
       </div>
 

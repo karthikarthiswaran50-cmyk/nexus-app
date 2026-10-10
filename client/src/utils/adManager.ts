@@ -10,10 +10,42 @@ export interface AdConfig {
   customScript: string;
   bannerEnabled: boolean;
   interstitialEnabled: boolean;
+  adsenseClientId?: string;
+  adsenseSlotId?: string;
+  adsterraBannerZoneId?: string;
+  adsenseEnabled?: boolean;
+  adsterraEnabled?: boolean;
 }
 
 let cachedConfig: AdConfig | null = null;
 let scriptInjected = false;
+let adsenseInjected = false;
+
+/**
+ * Dynamically injects Google AdSense library if not already injected
+ */
+export function injectGoogleAdSense(clientId?: string): void {
+  if (typeof window === 'undefined' || adsenseInjected) return;
+  const targetClient = clientId || cachedConfig?.adsenseClientId || 'ca-pub-6502758117978252';
+  const cleanId = targetClient.startsWith('ca-pub-') ? targetClient : `ca-pub-${targetClient}`;
+
+  // Check if script tag already exists in DOM
+  if (document.querySelector(`script[src*="pagead2.googlesyndication.com"]`)) {
+    adsenseInjected = true;
+    return;
+  }
+
+  try {
+    const script = document.createElement('script');
+    script.src = `https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${cleanId}`;
+    script.async = true;
+    script.crossOrigin = 'anonymous';
+    document.head.appendChild(script);
+    adsenseInjected = true;
+  } catch (err) {
+    console.warn('Could not inject AdSense script:', err);
+  }
+}
 
 /**
  * Fetch ad configuration from server
@@ -29,7 +61,7 @@ export async function getAdConfig(): Promise<AdConfig> {
     console.warn('Failed to load ad configuration, using safe defaults:', err);
     return {
       enabled: true,
-      provider: 'monetag',
+      provider: 'adsterra',
       publisherId: '',
       bannerZoneId: '',
       interstitialZoneId: '',
@@ -37,6 +69,11 @@ export async function getAdConfig(): Promise<AdConfig> {
       customScript: '',
       bannerEnabled: true,
       interstitialEnabled: true,
+      adsenseClientId: 'ca-pub-6502758117978252',
+      adsenseSlotId: '7182930415',
+      adsterraBannerZoneId: '14/fdc62d798090ac18b8e831e601033773',
+      adsenseEnabled: true,
+      adsterraEnabled: true,
     };
   }
 }
@@ -52,24 +89,17 @@ export function invalidateAdConfigCache() {
  * Dynamically injects external ad network SDK or custom header script
  */
 export function applyGlobalAdScripts(config: AdConfig | null) {
-  if (!config || !config.enabled || scriptInjected) return;
+  if (!config || !config.enabled) return;
 
   try {
-    // 1. Google AdSense Script Injection
-    if (config.provider === 'google_adsense' && config.publisherId) {
-      const pubId = config.publisherId.startsWith('ca-pub-')
-        ? config.publisherId
-        : `ca-pub-${config.publisherId}`;
-      const script = document.createElement('script');
-      script.src = `https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${pubId}`;
-      script.async = true;
-      script.crossOrigin = 'anonymous';
-      document.head.appendChild(script);
-      scriptInjected = true;
+    // 1. Google AdSense Script Injection (for compliant static banner areas)
+    if (config.adsenseEnabled !== false && (config.adsenseClientId || config.provider === 'google_adsense')) {
+      const pubId = config.adsenseClientId || config.publisherId || 'ca-pub-6502758117978252';
+      injectGoogleAdSense(pubId);
     }
 
-    // 2. Custom Script Injection (Monetag MultiTag, Adsterra Social Bar, etc.)
-    if (config.customScript && config.customScript.trim()) {
+    // 2. Custom Script Injection (Adsterra Social Bar, Monetag, etc.)
+    if (config.customScript && config.customScript.trim() && !scriptInjected) {
       const container = document.createElement('div');
       container.id = 'nexus-royal-custom-ad-tag';
       container.innerHTML = config.customScript;

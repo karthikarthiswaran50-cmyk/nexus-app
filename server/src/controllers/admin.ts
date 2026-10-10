@@ -1107,6 +1107,11 @@ export async function getAdSettings(req: AuthenticatedRequest, res: Response): P
       ad_interstitial_enabled: getSystemSetting('ad_interstitial_enabled', 'true') === 'true',
       ad_target_daily_revenue_inr: targetDailyRevenueInr,
       owner_bank_payout_notes: getSystemSetting('owner_bank_payout_notes', ''),
+      adsense_client_id: getSystemSetting('adsense_client_id', 'ca-pub-6502758117978252'),
+      adsense_slot_id: getSystemSetting('adsense_slot_id', '7182930415'),
+      adsterra_banner_zone_id: getSystemSetting('adsterra_banner_zone_id', '14/fdc62d798090ac18b8e831e601033773'),
+      adsense_enabled: getSystemSetting('adsense_enabled', 'true') === 'true',
+      adsterra_enabled: getSystemSetting('adsterra_enabled', 'true') === 'true',
     };
 
     res.json({
@@ -1149,6 +1154,11 @@ export async function updateAdSettings(req: AuthenticatedRequest, res: Response)
       'ad_interstitial_enabled',
       'ad_target_daily_revenue_inr',
       'owner_bank_payout_notes',
+      'adsense_client_id',
+      'adsense_slot_id',
+      'adsterra_banner_zone_id',
+      'adsense_enabled',
+      'adsterra_enabled',
     ];
 
     for (const key of allowedKeys) {
