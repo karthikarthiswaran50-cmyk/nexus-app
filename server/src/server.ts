@@ -64,7 +64,7 @@ app.use(
 // Rate Limiting (Anti-DDoS & Brute-Force Protection)
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 200, // Limit each IP to 200 requests per 15 minutes
+  max: 600, // Generous limit for real-time app interactions
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Rate limit exceeded: Too many requests. Please try again in 15 minutes.' },
@@ -72,10 +72,10 @@ const apiLimiter = rateLimit({
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 10, // Max 10 login/register attempts per 15 minutes (strictly blocks brute-force bots)
+  max: 60, // 60 attempts per 15 minutes prevents bot spam while avoiding false positives
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'Security Alert: Too many authentication attempts. Please wait 15 minutes.' },
+  message: { error: 'Security Alert: Too many authentication attempts. Please wait a moment.' },
 });
 
 const strictApiLimiter = rateLimit({
@@ -468,12 +468,22 @@ const clientDistDir = candidateDistPaths.find((dirPath) => fs.existsSync(dirPath
 
 if (clientDistDir) {
   console.log(`🚀 Serving static web client from: ${clientDistDir}`);
-  app.use(express.static(clientDistDir));
+  app.use(express.static(clientDistDir, {
+    maxAge: '1d',
+    setHeaders: (res, filePath) => {
+      if (filePath.includes('/assets/') || filePath.includes('\\assets\\')) {
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      } else if (filePath.endsWith('.html')) {
+        res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
+      }
+    },
+  }));
   app.get('*', (req, res) => {
     if (req.path.startsWith('/api/')) {
       res.status(404).json({ error: 'API route not found' });
       return;
     }
+    res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
     res.sendFile(path.join(clientDistDir, 'index.html'));
   });
 } else {

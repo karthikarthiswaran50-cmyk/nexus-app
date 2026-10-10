@@ -38,7 +38,7 @@ import { requestFcmToken } from '../../config/firebase';
 import { UsernameSetupModal } from '../auth/UsernameSetupModal';
 import { AppLockOverlay } from '../auth/AppLockOverlay';
 import { GlobalAnnouncementBanner } from '../common/GlobalAnnouncementBanner';
-import { AdminDashboardModal } from '../admin/AdminDashboardModal';
+const AdminDashboardModal = React.lazy(() => import('../admin/AdminDashboardModal').then(m => ({ default: m.AdminDashboardModal })));
 import { GlobalSearchModal } from '../common/GlobalSearchModal';
 import { usePWAInstall } from '../../hooks/usePWAInstall';
 import { InstallModal } from '../pwa/InstallModal';
@@ -660,40 +660,50 @@ export const AppLayout: React.FC = () => {
 
 
       {/* Custom Unique Username / Royal ID Onboarding Modal */}
-      <UsernameSetupModal
-        isOpen={showUsernameSetup}
-        onClose={() => setShowUsernameSetup(false)}
-      />
+      {showUsernameSetup && (
+        <UsernameSetupModal
+          isOpen={showUsernameSetup}
+          onClose={() => setShowUsernameSetup(false)}
+        />
+      )}
 
       {/* Global Royal Announcements Banner */}
       <GlobalAnnouncementBanner />
 
       {/* Royal Admin Command Center Modal */}
-      <AdminDashboardModal
-        isOpen={isAdminModalOpen}
-        onClose={() => setIsAdminModalOpen(false)}
-      />
+      {isAdminModalOpen && user?.role === 'admin' && (
+        <React.Suspense fallback={null}>
+          <AdminDashboardModal
+            isOpen={isAdminModalOpen}
+            onClose={() => setIsAdminModalOpen(false)}
+          />
+        </React.Suspense>
+      )}
 
       {/* 📲 PWA Standalone Mobile Install Modal */}
-      <InstallModal
-        isOpen={isInstallModalOpen}
-        onClose={() => setIsInstallModalOpen(false)}
-        pwaState={pwaState}
-      />
+      {isInstallModalOpen && (
+        <InstallModal
+          isOpen={isInstallModalOpen}
+          onClose={() => setIsInstallModalOpen(false)}
+          pwaState={pwaState}
+        />
+      )}
 
       {/* 🔍 Universal Global Search Modal */}
-      <GlobalSearchModal
-        isOpen={isGlobalSearchOpen}
-        onClose={() => setIsGlobalSearchOpen(false)}
-        onSelectUser={(u) => {
-          setSelectedUserForChat(u);
-          setCurrentTab('chats');
-        }}
-        onSelectGroup={() => {
-          setSelectedUserForChat(null);
-          setCurrentTab('chats');
-        }}
-      />
+      {isGlobalSearchOpen && (
+        <GlobalSearchModal
+          isOpen={isGlobalSearchOpen}
+          onClose={() => setIsGlobalSearchOpen(false)}
+          onSelectUser={(u) => {
+            setSelectedUserForChat(u);
+            setCurrentTab('chats');
+          }}
+          onSelectGroup={() => {
+            setSelectedUserForChat(null);
+            setCurrentTab('chats');
+          }}
+        />
+      )}
 
     </div>
   );

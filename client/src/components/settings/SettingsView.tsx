@@ -63,7 +63,7 @@ import {
   showMessageNotification,
 } from '../../utils/notifications';
 import { requestFcmToken } from '../../config/firebase';
-import { AdminDashboardModal } from '../admin/AdminDashboardModal';
+const AdminDashboardModal = React.lazy(() => import('../admin/AdminDashboardModal').then(m => ({ default: m.AdminDashboardModal })));
 import { usePWAInstall } from '../../hooks/usePWAInstall';
 import { InstallModal } from '../pwa/InstallModal';
 
@@ -2029,10 +2029,16 @@ export const SettingsView: React.FC = () => {
       )}
 
       {/* Royal Admin Dashboard Modal */}
-      <AdminDashboardModal isOpen={isAdminModalOpen} onClose={() => setIsAdminModalOpen(false)} />
+      {isAdminModalOpen && (
+        <React.Suspense fallback={null}>
+          <AdminDashboardModal isOpen={isAdminModalOpen} onClose={() => setIsAdminModalOpen(false)} />
+        </React.Suspense>
+      )}
 
       {/* PWA Standalone Install Modal */}
-      <InstallModal isOpen={isInstallModalOpen} onClose={() => setIsInstallModalOpen(false)} pwaState={pwaState} />
+      {isInstallModalOpen && (
+        <InstallModal isOpen={isInstallModalOpen} onClose={() => setIsInstallModalOpen(false)} pwaState={pwaState} />
+      )}
     </div>
   );
 };

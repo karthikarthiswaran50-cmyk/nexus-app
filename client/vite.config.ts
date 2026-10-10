@@ -5,12 +5,25 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   plugins: [react()],
   build: {
-    // Strip console.log and debugger statements from production bundle
+    // Strip debugger and verbose debug statements from production bundle
     minify: 'esbuild',
     esbuildOptions: {
       drop: ['debugger'],
-      pure: ['console.log', 'console.debug', 'console.warn'],
+      pure: ['console.debug'],
     },
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('firebase')) return 'vendor-firebase';
+            if (id.includes('lucide-react')) return 'vendor-icons';
+            if (id.includes('react') || id.includes('scheduler')) return 'vendor-react';
+            if (id.includes('socket.io-client') || id.includes('axios')) return 'vendor-network';
+          }
+        },
+      },
+    },
+    chunkSizeWarningLimit: 900,
   },
   server: {
     port: 5173,

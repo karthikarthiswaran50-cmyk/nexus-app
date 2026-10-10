@@ -4,7 +4,8 @@ class SoundEffectsManager {
   private ctx: AudioContext | null = null;
   private ringOscillator: OscillatorNode | null = null;
   private ringGain: GainNode | null = null;
-  private ringInterval: any = null;
+  private outgoingInterval: any = null;
+  private incomingInterval: any = null;
 
   private getAudioContext(): AudioContext {
     if (!this.ctx || this.ctx.state === 'closed') {
@@ -12,7 +13,7 @@ class SoundEffectsManager {
       this.ctx = new AudioCtx();
     }
     if (this.ctx.state === 'suspended') {
-      this.ctx.resume();
+      this.ctx.resume().catch(() => {});
     }
     return this.ctx;
   }
@@ -50,16 +51,16 @@ class SoundEffectsManager {
       };
 
       playTone();
-      this.ringInterval = setInterval(playTone, 4000);
+      this.outgoingInterval = setInterval(playTone, 4000);
     } catch (e) {
       console.warn('Audio play error:', e);
     }
   }
 
   stopOutgoingRing() {
-    if (this.ringInterval) {
-      clearInterval(this.ringInterval);
-      this.ringInterval = null;
+    if (this.outgoingInterval) {
+      clearInterval(this.outgoingInterval);
+      this.outgoingInterval = null;
     }
   }
 
@@ -92,17 +93,22 @@ class SoundEffectsManager {
       };
 
       playChime();
-      this.ringInterval = setInterval(playChime, 2500);
+      this.incomingInterval = setInterval(playChime, 2500);
     } catch (e) {
       console.warn('Audio play error:', e);
     }
   }
 
   stopIncomingCallTone() {
-    if (this.ringInterval) {
-      clearInterval(this.ringInterval);
-      this.ringInterval = null;
+    if (this.incomingInterval) {
+      clearInterval(this.incomingInterval);
+      this.incomingInterval = null;
     }
+  }
+
+  stopAll() {
+    this.stopOutgoingRing();
+    this.stopIncomingCallTone();
   }
 
   // 3. New Message Pop

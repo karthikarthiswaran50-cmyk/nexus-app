@@ -2601,34 +2601,38 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, on
       )}
 
       {/* Create Poll Modal */}
-      <CreatePollModal
-        isOpen={isPollModalOpen}
-        onClose={() => setIsPollModalOpen(false)}
-        onSubmit={handleCreatePoll}
-      />
+      {isPollModalOpen && (
+        <CreatePollModal
+          isOpen={isPollModalOpen}
+          onClose={() => setIsPollModalOpen(false)}
+          onSubmit={handleCreatePoll}
+        />
+      )}
 
       {/* Starred Messages Modal */}
-      <StarredMessagesModal
-        isOpen={isStarredModalOpen}
-        onClose={() => setIsStarredModalOpen(false)}
-        onJumpToMessage={(msg) => {
-          const el = document.getElementById(`msg-${msg.id}`);
-          if (el) {
-            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            el.classList.add('ring-2', 'ring-gold-400', 'ring-offset-2', 'ring-offset-dark-950');
-            setTimeout(() => {
-              el.classList.remove('ring-2', 'ring-gold-400', 'ring-offset-2', 'ring-offset-dark-950');
-            }, 2500);
-          }
-        }}
-        onUnstar={(msgId) => {
-          setStarredMessageIds(prev => {
-            const next = new Set(prev);
-            next.delete(msgId);
-            return next;
-          });
-        }}
-      />
+      {isStarredModalOpen && (
+        <StarredMessagesModal
+          isOpen={isStarredModalOpen}
+          onClose={() => setIsStarredModalOpen(false)}
+          onJumpToMessage={(msg) => {
+            const el = document.getElementById(`msg-${msg.id}`);
+            if (el) {
+              el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              el.classList.add('ring-2', 'ring-gold-400', 'ring-offset-2', 'ring-offset-dark-950');
+              setTimeout(() => {
+                el.classList.remove('ring-2', 'ring-gold-400', 'ring-offset-2', 'ring-offset-dark-950');
+              }, 2500);
+            }
+          }}
+          onUnstar={(msgId) => {
+            setStarredMessageIds(prev => {
+              const next = new Set(prev);
+              next.delete(msgId);
+              return next;
+            });
+          }}
+        />
+      )}
 
       {/* Fullscreen HD Media Viewer Modal */}
       {viewingMediaUrl && (
@@ -2640,17 +2644,19 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, on
       )}
 
       {/* Shared Media & Files Gallery Modal */}
-      <ChatMediaGalleryModal
-        isOpen={showMediaGallery}
-        onClose={() => setShowMediaGallery(false)}
-        messages={messages}
-        otherUser={otherUser}
-        onSelectMedia={(url, senderName) => {
-          setShowMediaGallery(false);
-          setViewingMediaUrl(url);
-          setViewingMediaSender(senderName);
-        }}
-      />
+      {showMediaGallery && (
+        <ChatMediaGalleryModal
+          isOpen={showMediaGallery}
+          onClose={() => setShowMediaGallery(false)}
+          messages={messages}
+          otherUser={otherUser}
+          onSelectMedia={(url, senderName) => {
+            setShowMediaGallery(false);
+            setViewingMediaUrl(url);
+            setViewingMediaSender(senderName);
+          }}
+        />
+      )}
 
       {/* Forward Message Modal */}
       <ForwardMessageModal
@@ -2713,11 +2719,13 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, on
       )}
 
       {/* Video Circle Recorder Modal */}
-      <VideoCircleRecorder
-        isOpen={isVideoCircleRecorderOpen}
-        onClose={() => setIsVideoCircleRecorderOpen(false)}
-        onSend={handleSendVideoCircle}
-      />
+      {isVideoCircleRecorderOpen && (
+        <VideoCircleRecorder
+          isOpen={isVideoCircleRecorderOpen}
+          onClose={() => setIsVideoCircleRecorderOpen(false)}
+          onSend={handleSendVideoCircle}
+        />
+      )}
 
       {/* Live Voice Stage Modal */}
       {activeGroupSpace && isStageModalOpen && (
@@ -2732,12 +2740,14 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, on
       )}
 
       {/* Create Stage Modal */}
-      <CreateStageModal
-        isOpen={isCreateStageModalOpen}
-        onClose={() => setIsCreateStageModalOpen(false)}
-        onSubmit={handleStartVoiceStage}
-        groupName={group?.name}
-      />
+      {isCreateStageModalOpen && (
+        <CreateStageModal
+          isOpen={isCreateStageModalOpen}
+          onClose={() => setIsCreateStageModalOpen(false)}
+          onSubmit={handleStartVoiceStage}
+          groupName={group?.name}
+        />
+      )}
     </div>
   );
 };

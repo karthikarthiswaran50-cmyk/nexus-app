@@ -53,12 +53,12 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   }
 }
 
-import { PrivacyPolicyView } from './components/legal/PrivacyPolicyView';
-import { TermsOfServiceView } from './components/legal/TermsOfServiceView';
-import { AccountDeletionView } from './components/legal/AccountDeletionView';
-import { AboutUsView } from './components/legal/AboutUsView';
-import { ContactUsView } from './components/legal/ContactUsView';
-import { CommunityGuidelinesView } from './components/legal/CommunityGuidelinesView';
+const PrivacyPolicyView = React.lazy(() => import('./components/legal/PrivacyPolicyView').then(m => ({ default: m.PrivacyPolicyView })));
+const TermsOfServiceView = React.lazy(() => import('./components/legal/TermsOfServiceView').then(m => ({ default: m.TermsOfServiceView })));
+const AccountDeletionView = React.lazy(() => import('./components/legal/AccountDeletionView').then(m => ({ default: m.AccountDeletionView })));
+const AboutUsView = React.lazy(() => import('./components/legal/AboutUsView').then(m => ({ default: m.AboutUsView })));
+const ContactUsView = React.lazy(() => import('./components/legal/ContactUsView').then(m => ({ default: m.ContactUsView })));
+const CommunityGuidelinesView = React.lazy(() => import('./components/legal/CommunityGuidelinesView').then(m => ({ default: m.CommunityGuidelinesView })));
 
 type AppRoute = 'app' | 'privacy' | 'terms' | 'delete-account' | 'about' | 'contact' | 'community-guidelines';
 
@@ -75,6 +75,13 @@ const getInitialRoute = (): AppRoute => {
   if (path === '/community-guidelines' || path.startsWith('/community-guidelines') || pageParam === 'community-guidelines') return 'community-guidelines';
   return 'app';
 };
+
+const LazyRouteFallback = () => (
+  <div className="min-h-screen bg-dark-950 flex flex-col items-center justify-center">
+    <div className="w-8 h-8 border-2 border-brand-500 border-t-transparent rounded-full animate-spin mb-3" />
+    <p className="text-xs text-dark-400">Loading page...</p>
+  </div>
+);
 
 const AppContent: React.FC = () => {
   const { user, loading } = useAuth();
@@ -104,27 +111,51 @@ const AppContent: React.FC = () => {
   };
 
   if (route === 'about') {
-    return <AboutUsView onBack={navigateToApp} />;
+    return (
+      <React.Suspense fallback={<LazyRouteFallback />}>
+        <AboutUsView onBack={navigateToApp} />
+      </React.Suspense>
+    );
   }
 
   if (route === 'contact') {
-    return <ContactUsView onBack={navigateToApp} />;
+    return (
+      <React.Suspense fallback={<LazyRouteFallback />}>
+        <ContactUsView onBack={navigateToApp} />
+      </React.Suspense>
+    );
   }
 
   if (route === 'community-guidelines') {
-    return <CommunityGuidelinesView onBack={navigateToApp} />;
+    return (
+      <React.Suspense fallback={<LazyRouteFallback />}>
+        <CommunityGuidelinesView onBack={navigateToApp} />
+      </React.Suspense>
+    );
   }
 
   if (route === 'privacy') {
-    return <PrivacyPolicyView onBack={navigateToApp} />;
+    return (
+      <React.Suspense fallback={<LazyRouteFallback />}>
+        <PrivacyPolicyView onBack={navigateToApp} />
+      </React.Suspense>
+    );
   }
 
   if (route === 'terms') {
-    return <TermsOfServiceView onBack={navigateToApp} />;
+    return (
+      <React.Suspense fallback={<LazyRouteFallback />}>
+        <TermsOfServiceView onBack={navigateToApp} />
+      </React.Suspense>
+    );
   }
 
   if (route === 'delete-account') {
-    return <AccountDeletionView onBack={navigateToApp} />;
+    return (
+      <React.Suspense fallback={<LazyRouteFallback />}>
+        <AccountDeletionView onBack={navigateToApp} />
+      </React.Suspense>
+    );
   }
 
   if (loading) {
