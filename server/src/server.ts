@@ -266,6 +266,7 @@ app.get('/api/health', (_req, res) => {
 app.post('/api/auth/register', authLimiter, authCtrl.register);
 app.post('/api/auth/login', authLimiter, authCtrl.login);
 app.post('/api/auth/firebase-login', authLimiter, authCtrl.firebaseLogin);
+app.post('/api/auth/instant-email-login', authLimiter, authCtrl.instantEmailLogin);
 app.get('/api/auth/me', requireAuth, authCtrl.getMe);
 app.post('/api/auth/set-username', requireAuth, authCtrl.setUsername);
 app.post('/api/auth/update-password', requireAuth, authCtrl.updatePassword);

@@ -17,6 +17,7 @@ interface AuthContextType {
   updateSettings: (data: Partial<UserSettings>) => Promise<void>;
   claimUsername: (username: string) => Promise<void>;
   loginDemoUser: (username: string) => Promise<void>;
+  instantEmailLogin: (email: string, name?: string) => Promise<void>;
 }
 
 
@@ -253,6 +254,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     persistSettings(res.data.settings);
   };
 
+  const instantEmailLogin = async (email: string, name?: string) => {
+    const res = await axios.post('/api/auth/instant-email-login', { email, name });
+    const newToken = res.data.token;
+    localStorage.setItem('nexus_auth_token', newToken);
+    localStorage.setItem('nexus_last_email', email.trim().toLowerCase());
+    setToken(newToken);
+    persistUser(res.data.user);
+    axios.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
+
+    if (res.data.user?.id) {
+      localStorage.setItem(`nexus_custom_username_set_${res.data.user.id}`, 'true');
+    }
+    localStorage.setItem('nexus_username_prompt_dismissed', 'true');
+    if (res.data.user?.username) {
+      localStorage.setItem('nexus_saved_username', res.data.user.username);
+    }
+
+    trackUserActivity({
+      userId: res.data.user?.id,
+      username: res.data.user?.username,
+      action: 'login',
+      details: { method: 'instant_email', email: email.trim().toLowerCase() },
+    });
+
+    try {
+      const setRes = await axios.get('/api/users/settings');
+      persistSettings(setRes.data.settings);
+    } catch (e) {}
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -269,6 +300,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updateSettings,
         claimUsername,
         loginDemoUser,
+        instantEmailLogin,
       }}
     >
 

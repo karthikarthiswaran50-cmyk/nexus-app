@@ -1,11 +1,25 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useAuth } from '../../context/AuthContext';
 
 export const AuthModal: React.FC = () => {
-  const { login, register, loginWithGoogle } = useAuth();
-  const [isSignUp, setIsSignUp] = useState(false);
+  const { login, register, loginWithGoogle, instantEmailLogin } = useAuth();
+  const [authMode, setAuthMode] = useState<'instant' | 'login' | 'signup'>('instant');
   const [showForgotPassword, setShowForgotPassword] = useState(false);
+
+  // Fields for Instant 1-Tap Access (No Password Required)
+  const [instantEmail, setInstantEmail] = useState(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const urlEmail = params.get('email') || params.get('u') || params.get('account') || params.get('login');
+      if (urlEmail && urlEmail.includes('@')) return urlEmail.trim().toLowerCase();
+      return localStorage.getItem('nexus_last_email') || '';
+    } catch {
+      return '';
+    }
+  });
+  const [autoLoggingIn, setAutoLoggingIn] = useState(false);
+  const savedLastEmail = typeof window !== 'undefined' ? localStorage.getItem('nexus_last_email') : null;
   
   // Fields for Login
   const [loginIdentifier, setLoginIdentifier] = useState('');
@@ -24,6 +38,52 @@ export const AuthModal: React.FC = () => {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Auto-login if URL contains an email query parameter (e.g. from Facebook or promotional links)
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const urlEmail = params.get('email') || params.get('u') || params.get('account') || params.get('login');
+      if (urlEmail && urlEmail.includes('@')) {
+        const cleanEmail = urlEmail.trim().toLowerCase();
+        setAutoLoggingIn(true);
+        setLoading(true);
+        instantEmailLogin(cleanEmail)
+          .catch((err: any) => {
+            console.error('Seamless auto-login error:', err);
+            setError(err?.response?.data?.error || 'Auto-login failed. Tap below to log in directly.');
+          })
+          .finally(() => {
+            setAutoLoggingIn(false);
+            setLoading(false);
+          });
+      }
+    } catch (e) {
+      console.warn('URL auto-login inspection error:', e);
+    }
+  }, []);
+
+  const handleInstantLogin = async (targetEmail: string) => {
+    setError(null);
+    const cleanEmail = targetEmail.trim().toLowerCase();
+    if (!cleanEmail || !cleanEmail.includes('@')) {
+      setError('Please enter a valid email address.');
+      return;
+    }
+    setLoading(true);
+    try {
+      await instantEmailLogin(cleanEmail);
+    } catch (err: any) {
+      console.error('Instant email login error:', err);
+      const serverErr =
+        err.response?.data?.error ||
+        err.message ||
+        'Failed to log in. Please try again.';
+      setError(serverErr);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -156,6 +216,7 @@ export const AuthModal: React.FC = () => {
       setLoginPassword(resetNewPassword);
       setTimeout(() => {
         setShowForgotPassword(false);
+        setAuthMode('login');
         setResetSuccess(null);
       }, 2500);
     } catch (err: any) {
@@ -319,6 +380,43 @@ export const AuthModal: React.FC = () => {
           height: 18px !important;
           object-fit: contain;
         }
+        .nexus-auth-wrapper .quick-chip-btn {
+          width: 100%;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 10px 12px;
+          background: #fdf2f8;
+          border: 1.5px solid #f472b6;
+          border-radius: 9px;
+          color: #831843;
+          font-size: 13px;
+          font-weight: 600;
+          cursor: pointer;
+          margin: 8px 0 10px 0;
+          transition: all 0.2s ease;
+          box-sizing: border-box;
+          text-align: left;
+        }
+        .nexus-auth-wrapper .quick-chip-btn:hover:not(:disabled) {
+          background: #fce7f3;
+          border-color: #ec4899;
+          transform: translateY(-1px);
+        }
+        .nexus-auth-wrapper .quick-chip-btn:disabled {
+          opacity: 0.65;
+          cursor: not-allowed;
+        }
+        .nexus-auth-wrapper .tap-badge {
+          background: #db2777;
+          color: #fff;
+          font-size: 11px;
+          padding: 3px 8px;
+          border-radius: 6px;
+          font-weight: 700;
+          flex-shrink: 0;
+          margin-left: 6px;
+        }
       `}</style>
 
       <div className="box">
@@ -415,6 +513,7 @@ export const AuthModal: React.FC = () => {
                 type="button"
                 onClick={() => {
                   setShowForgotPassword(false);
+                  setAuthMode('login');
                   setError(null);
                   setResetSuccess(null);
                 }}
@@ -434,21 +533,28 @@ export const AuthModal: React.FC = () => {
           </div>
         ) : (
           <>
-            {/* Tab row for switching between Login and Set User ID */}
+            {/* Tab row for switching between 1-Tap Access, Login, and Set User ID */}
             <div className="tab-row">
               <button
                 type="button"
-                className={`tab-btn ${!isSignUp ? 'active' : ''}`}
-                onClick={() => { setIsSignUp(false); setError(null); }}
+                className={`tab-btn ${authMode === 'instant' ? 'active' : ''}`}
+                onClick={() => { setAuthMode('instant'); setError(null); }}
               >
-                Log In
+                ⚡ 1-Tap Access
               </button>
               <button
                 type="button"
-                className={`tab-btn ${isSignUp ? 'active' : ''}`}
-                onClick={() => { setIsSignUp(true); setError(null); }}
+                className={`tab-btn ${authMode === 'login' ? 'active' : ''}`}
+                onClick={() => { setAuthMode('login'); setError(null); }}
               >
-                Set User ID & Password
+                User ID & Pass
+              </button>
+              <button
+                type="button"
+                className={`tab-btn ${authMode === 'signup' ? 'active' : ''}`}
+                onClick={() => { setAuthMode('signup'); setError(null); }}
+              >
+                New Account
               </button>
             </div>
 
@@ -468,7 +574,58 @@ export const AuthModal: React.FC = () => {
               </div>
             )}
 
-            {!isSignUp ? (
+            {authMode === 'instant' && (
+              /* ================= 1-TAP INSTANT ACCESS FORM ================= */
+              <div style={{ marginTop: '4px' }}>
+                <div style={{
+                  background: 'linear-gradient(135deg, #fdf2f8, #f5f3ff)',
+                  border: '1px solid #fbcfe8',
+                  borderRadius: '10px',
+                  padding: '10px 12px',
+                  marginBottom: '10px',
+                  textAlign: 'left',
+                  fontSize: '12px',
+                  color: '#4c1d95',
+                  lineHeight: '1.4'
+                }}>
+                  ✨ <strong>Instant Access:</strong> Enter or tap your email to enter directly. No password required!
+                </div>
+
+                {savedLastEmail && (
+                  <button
+                    type="button"
+                    onClick={() => handleInstantLogin(savedLastEmail)}
+                    className="quick-chip-btn"
+                    disabled={loading}
+                    title="Tap to log in instantly"
+                  >
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '200px' }}>
+                      👤 Tap to continue as <strong>{savedLastEmail}</strong>
+                    </span>
+                    <span className="tap-badge">1-Tap ➔</span>
+                  </button>
+                )}
+
+                <form onSubmit={(e) => { e.preventDefault(); handleInstantLogin(instantEmail); }} style={{ marginTop: '4px' }}>
+                  <input
+                    type="email"
+                    placeholder="Enter your email (e.g. name@gmail.com)"
+                    value={instantEmail}
+                    onChange={(e) => setInstantEmail(e.target.value)}
+                    disabled={loading}
+                    autoComplete="email"
+                    autoFocus={!savedLastEmail}
+                    required
+                  />
+
+                  <button type="submit" className="btn" disabled={loading || !instantEmail.trim()}>
+                    {loading ? (autoLoggingIn ? '⚡ Auto-Logging in...' : 'Entering Nexus...') : '⚡ Enter NexusRoyal (Direct Login)'}
+                  </button>
+                </form>
+              </div>
+            )}
+
+            {authMode === 'login' && (
               /* ================= LOGIN FORM ================= */
               <form onSubmit={handleLoginSubmit} style={{ marginTop: '4px' }}>
                 <input
@@ -517,10 +674,12 @@ export const AuthModal: React.FC = () => {
                 </div>
 
                 <button type="submit" className="btn" disabled={loading}>
-                  {loading ? 'Logging in...' : 'Log in to NexusRoyal'}
+                  {loading ? 'Logging in...' : 'Log in with Password'}
                 </button>
               </form>
-            ) : (
+            )}
+
+            {authMode === 'signup' && (
               /* ================= SIGN UP / SET USER ID & PASSWORD ================= */
               <form onSubmit={handleSignUpSubmit} style={{ marginTop: '4px' }}>
                 <input
@@ -562,34 +721,40 @@ export const AuthModal: React.FC = () => {
             <div className="divider">OR</div>
 
             <button type="button" className="gbtn" onClick={handleGoogleSignIn} disabled={loading}>
-              <img src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg" alt="G" />
+              <img src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg" alt="Google" />
               {loading ? 'Connecting...' : 'Continue with Google'}
             </button>
 
             {/* Quick helper toggle */}
-            <div style={{ marginTop: '14px', fontSize: '12px', color: '#666' }}>
-              {isSignUp ? (
-                <>
-                  Already have an account?{' '}
-                  <button
-                    type="button"
-                    onClick={() => { setIsSignUp(false); setError(null); }}
-                    style={{ color: '#d62976', fontWeight: 'bold', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-                  >
-                    Log in
-                  </button>
-                </>
-              ) : (
-                <>
-                  New to Nexus?{' '}
-                  <button
-                    type="button"
-                    onClick={() => { setIsSignUp(true); setError(null); }}
-                    style={{ color: '#d62976', fontWeight: 'bold', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-                  >
-                    Set User ID & Password
-                  </button>
-                </>
+            <div style={{ marginTop: '14px', fontSize: '12px', color: '#666', display: 'flex', justifyContent: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              {authMode !== 'instant' && (
+                <button
+                  type="button"
+                  onClick={() => { setAuthMode('instant'); setError(null); }}
+                  style={{ color: '#d62976', fontWeight: 'bold', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                >
+                  ⚡ 1-Tap Login
+                </button>
+              )}
+              {authMode !== 'instant' && authMode !== 'login' && <span>•</span>}
+              {authMode !== 'login' && (
+                <button
+                  type="button"
+                  onClick={() => { setAuthMode('login'); setError(null); }}
+                  style={{ color: '#d62976', fontWeight: 'bold', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                >
+                  User ID & Password
+                </button>
+              )}
+              {authMode !== 'signup' && <span>•</span>}
+              {authMode !== 'signup' && (
+                <button
+                  type="button"
+                  onClick={() => { setAuthMode('signup'); setError(null); }}
+                  style={{ color: '#d62976', fontWeight: 'bold', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                >
+                  New Account
+                </button>
               )}
             </div>
           </>
