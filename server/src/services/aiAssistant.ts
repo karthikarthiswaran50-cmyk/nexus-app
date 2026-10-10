@@ -4,7 +4,7 @@
  */
 
 export function generateNexusAIResponse(prompt: string, senderName: string = 'Friend'): string {
-  const query = prompt.toLowerCase().trim();
+  const query = (prompt || '').toLowerCase().trim();
 
   // Greeting
   if (query.match(/^(hi|hello|hey|vanakkam|வணக்கம்|hola|namaste)/)) {

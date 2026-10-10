@@ -284,9 +284,10 @@ export function setupSocket(io: Server) {
         ).catch(() => {});
 
         // 🤖 Automatic Nexus Royal Smart AI Assistant Response (@nexus or bot DM)
-        if (result && (receiverId === 'nexus_bot' || content?.toLowerCase().includes('@nexus') || content?.toLowerCase().startsWith('/ai'))) {
+        const hasContent = typeof content === 'string' && content.trim().length > 0;
+        if (result && (receiverId === 'nexus_bot' || (hasContent && (content.toLowerCase().includes('@nexus') || content.toLowerCase().startsWith('/ai'))))) {
           setTimeout(() => {
-            const botReply = generateNexusAIResponse(content, sender?.full_name || 'Friend');
+            const botReply = generateNexusAIResponse(content || '', sender?.full_name || 'Friend');
             const botResult = saveMessage({
               senderId: 'nexus_bot',
               receiverId: userId,
@@ -500,10 +501,11 @@ export function setupSocket(io: Server) {
         socket.emit('group:message_sent', { ...result, tempId: (data as any)?.tempId });
 
         // 🤖 Automatic Nexus Royal Smart AI Assistant Response in Group (@nexus or /ai)
-        if (result && (content?.toLowerCase().includes('@nexus') || content?.toLowerCase().startsWith('/ai'))) {
+        const hasGrpContent = typeof content === 'string' && content.trim().length > 0;
+        if (result && hasGrpContent && (content.toLowerCase().includes('@nexus') || content.toLowerCase().startsWith('/ai'))) {
           setTimeout(() => {
             const sender = getUserWithPlan(userId);
-            const botReply = generateNexusAIResponse(content, sender?.full_name || 'Friend');
+            const botReply = generateNexusAIResponse(content || '', sender?.full_name || 'Friend');
             const botResult = saveGroupMessage({
               groupId,
               senderId: 'nexus_bot',

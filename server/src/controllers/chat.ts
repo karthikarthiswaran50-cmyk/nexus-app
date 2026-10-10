@@ -522,7 +522,7 @@ export async function forwardMessageHttp(req: AuthenticatedRequest, res: Respons
 
     // Forward to individual users
     for (const targetId of targetUserIds) {
-      const res = saveMessage({
+      const fwdResult = saveMessage({
         senderId,
         receiverId: targetId,
         content: sourceMsg.content,
@@ -531,12 +531,12 @@ export async function forwardMessageHttp(req: AuthenticatedRequest, res: Respons
         fileName: sourceMsg.file_name,
         fileSize: sourceMsg.file_size,
       });
-      forwardedMessages.push(res.message);
+      forwardedMessages.push(fwdResult.message);
     }
 
     // Forward to groups
     for (const groupId of targetGroupIds) {
-      const res = saveGroupMessage({
+      const grpResult = saveGroupMessage({
         senderId,
         groupId,
         content: sourceMsg.content,
@@ -545,7 +545,7 @@ export async function forwardMessageHttp(req: AuthenticatedRequest, res: Respons
         fileName: sourceMsg.file_name,
         fileSize: sourceMsg.file_size,
       });
-      if (res) forwardedMessages.push(res.message);
+      if (grpResult) forwardedMessages.push(grpResult.message);
     }
 
     res.json({ success: true, forwardedCount: forwardedMessages.length });

@@ -266,6 +266,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, on
   const audioStreamRef = useRef<MediaStream | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const prevLastMessageIdRef = useRef<string | undefined>(undefined);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const typingTimeoutRef = useRef<any>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -508,6 +509,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, on
   useEffect(() => {
     setLoading(true);
     setMessages([]); // Clear messages immediately to prevent stale flash when switching chats
+    prevLastMessageIdRef.current = undefined;
     setReplyingTo(null);
     setEditingMessage(null);
     fetchMessages();
@@ -706,9 +708,13 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ otherUser, group, onBack, on
     };
   }, [socket]);
 
-  // Auto-scroll on new message
+  // Auto-scroll on new message or peer typing (avoids jump when loading older messages)
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const lastMsgId = messages[messages.length - 1]?.id;
+    if (lastMsgId !== prevLastMessageIdRef.current || isPeerTyping) {
+      prevLastMessageIdRef.current = lastMsgId;
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [messages, isPeerTyping]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {

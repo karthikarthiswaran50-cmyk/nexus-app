@@ -62,6 +62,11 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const activeCallRef = useRef<ActiveCallSession | null>(null);
   activeCallRef.current = activeCall;
 
+  const settingsRef = useRef(settings);
+  useEffect(() => {
+    settingsRef.current = settings;
+  }, [settings]);
+
   // Global ICE candidate buffer (captured even when phone is ringing / before useWebRTC mounts)
   const bufferedCandidatesRef = useRef<Array<{ fromUserId: string; candidate: any }>>([]);
   const candidateListenersRef = useRef<Set<(data: { fromUserId: string; candidate: any }) => void>>(new Set());
@@ -169,7 +174,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     // Handle Incoming Call
     newSocket.on('call:incoming', (data: IncomingCallData) => {
       setIncomingCall(data);
-      if (settings?.notification_sound !== false) {
+      if (settingsRef.current?.notification_sound !== false) {
         soundEffects.playIncomingCallTone();
       }
       // Trigger Web/System Notification & Mobile Haptic Vibration
@@ -228,7 +233,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     // Real-time Messages
     newSocket.on('chat:new_message', (data: { message: Message; conversationId: string }) => {
       setLatestMessage(data.message);
-      if (settings?.notification_sound !== false) {
+      if (settingsRef.current?.notification_sound !== false) {
         soundEffects.playMessageSound();
       }
       // If message is from another user, trigger system notification & mobile vibration
