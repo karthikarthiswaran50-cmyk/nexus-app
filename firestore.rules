@@ -1,0 +1,36 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // 1. User Activity Logs
+    // Users can write activity logs (or log anonymous actions), but cannot read other users' activities.
+    // Reading is restricted to the user themselves for their own logs, or admin console.
+    match /user_activities/{activityId} {
+      allow create: if true; // Allows anonymous and authenticated activity tracking
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid);
+      allow update, delete: if false; // Logs are immutable
+    }
+
+    // 2. Real-Time Online Presence
+    // Authenticated users can see online presence; users can only modify their own presence document.
+    match /users_live_presence/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if isOwner(userId);
+    }
+
+    // 3. Default Deny All Other Collections
+    // Any other collection in Firestore is locked down by default.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

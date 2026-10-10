@@ -1881,14 +1881,44 @@ export const SettingsView: React.FC = () => {
               </span>
             </div>
 
-            <div className="flex items-center justify-between py-2">
+            <div className="flex flex-wrap items-center justify-between gap-y-2 py-2 border-t border-white/5">
+              <button
+                type="button"
+                onClick={() => {
+                  window.history.pushState({}, '', '/about');
+                  window.dispatchEvent(new CustomEvent('nexus_navigate', { detail: 'about' }));
+                }}
+                className="text-xs text-amber-300 hover:underline cursor-pointer"
+              >
+                About Us
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  window.history.pushState({}, '', '/contact');
+                  window.dispatchEvent(new CustomEvent('nexus_navigate', { detail: 'contact' }));
+                }}
+                className="text-xs text-amber-300 hover:underline cursor-pointer"
+              >
+                Contact Support
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  window.history.pushState({}, '', '/community-guidelines');
+                  window.dispatchEvent(new CustomEvent('nexus_navigate', { detail: 'community-guidelines' }));
+                }}
+                className="text-xs text-amber-300 hover:underline cursor-pointer"
+              >
+                Guidelines
+              </button>
               <button
                 type="button"
                 onClick={() => {
                   window.history.pushState({}, '', '/terms');
                   window.dispatchEvent(new CustomEvent('nexus_navigate', { detail: 'terms' }));
                 }}
-                className="text-xs text-cyan-400 hover:underline"
+                className="text-xs text-cyan-400 hover:underline cursor-pointer"
               >
                 Terms of Service
               </button>
@@ -1898,7 +1928,7 @@ export const SettingsView: React.FC = () => {
                   window.history.pushState({}, '', '/privacy');
                   window.dispatchEvent(new CustomEvent('nexus_navigate', { detail: 'privacy' }));
                 }}
-                className="text-xs text-cyan-400 hover:underline"
+                className="text-xs text-cyan-400 hover:underline cursor-pointer"
               >
                 Privacy Policy
               </button>

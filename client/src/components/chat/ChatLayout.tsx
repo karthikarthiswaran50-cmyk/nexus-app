@@ -588,6 +588,75 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
                 <span>Create Group</span>
               </button>
             </div>
+
+            {/* Quick Website Footer Links */}
+            <div className="mt-8 pt-6 border-t border-gold-500/10 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[11px] text-dark-500">
+              <button
+                type="button"
+                onClick={() => {
+                  window.history.pushState({}, '', '/about');
+                  window.dispatchEvent(new CustomEvent('nexus_navigate', { detail: 'about' }));
+                }}
+                className="hover:text-amber-300 underline cursor-pointer"
+              >
+                About Us
+              </button>
+              <span>•</span>
+              <button
+                type="button"
+                onClick={() => {
+                  window.history.pushState({}, '', '/contact');
+                  window.dispatchEvent(new CustomEvent('nexus_navigate', { detail: 'contact' }));
+                }}
+                className="hover:text-amber-300 underline cursor-pointer"
+              >
+                Contact
+              </button>
+              <span>•</span>
+              <button
+                type="button"
+                onClick={() => {
+                  window.history.pushState({}, '', '/privacy');
+                  window.dispatchEvent(new CustomEvent('nexus_navigate', { detail: 'privacy' }));
+                }}
+                className="hover:text-amber-300 underline cursor-pointer"
+              >
+                Privacy Policy
+              </button>
+              <span>•</span>
+              <button
+                type="button"
+                onClick={() => {
+                  window.history.pushState({}, '', '/terms');
+                  window.dispatchEvent(new CustomEvent('nexus_navigate', { detail: 'terms' }));
+                }}
+                className="hover:text-amber-300 underline cursor-pointer"
+              >
+                Terms
+              </button>
+              <span>•</span>
+              <button
+                type="button"
+                onClick={() => {
+                  window.history.pushState({}, '', '/community-guidelines');
+                  window.dispatchEvent(new CustomEvent('nexus_navigate', { detail: 'community-guidelines' }));
+                }}
+                className="hover:text-amber-300 underline cursor-pointer"
+              >
+                Guidelines
+              </button>
+              <span>•</span>
+              <button
+                type="button"
+                onClick={() => {
+                  window.history.pushState({}, '', '/delete-account');
+                  window.dispatchEvent(new CustomEvent('nexus_navigate', { detail: 'delete-account' }));
+                }}
+                className="hover:text-rose-400 underline cursor-pointer"
+              >
+                Account Deletion
+              </button>
+            </div>
           </div>
         )}
       </div>

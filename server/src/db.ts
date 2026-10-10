@@ -303,6 +303,17 @@ export function initDatabase() {
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       processed_at TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS contact_messages (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      email TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      message TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'new',
+      ip_address TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `);
 
   // 2. Safe idempotent column migrations for existing databases created before newer fields were added
@@ -606,6 +617,17 @@ async function initPostgresAndRestore() {
         transaction_ref VARCHAR(255) DEFAULT '',
         created_at TIMESTAMPTZ DEFAULT NOW(),
         processed_at TIMESTAMPTZ
+      );
+
+      CREATE TABLE IF NOT EXISTS contact_messages (
+        id VARCHAR(100) PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        email VARCHAR(255) NOT NULL,
+        subject VARCHAR(255) NOT NULL,
+        message TEXT NOT NULL,
+        status VARCHAR(50) DEFAULT 'new',
+        ip_address VARCHAR(100),
+        created_at TIMESTAMPTZ DEFAULT NOW()
       );
     `);
 
@@ -1644,6 +1666,34 @@ export function setSystemSetting(key: string, value: string): void {
   } catch (err: any) {
     console.error(`Error saving system setting ${key}:`, err?.message);
   }
+}
+
+export function persistContactMessageToPg(msg: {
+  id: string;
+  name: string;
+  email: string;
+  subject: string;
+  message: string;
+  status: string;
+  ip_address?: string;
+  created_at?: string;
+}): void {
+  if (!pgPool) return;
+  pgPool.query(
+    `INSERT INTO contact_messages (id, name, email, subject, message, status, ip_address, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+     ON CONFLICT (id) DO NOTHING`,
+    [
+      msg.id,
+      msg.name,
+      msg.email,
+      msg.subject,
+      msg.message,
+      msg.status || 'new',
+      msg.ip_address || '',
+      msg.created_at ? new Date(msg.created_at) : new Date(),
+    ]
+  ).catch(err => console.error('Error persisting contact message to PostgreSQL:', err.message));
 }
 
 

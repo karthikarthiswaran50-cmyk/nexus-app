@@ -56,8 +56,13 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
 import { PrivacyPolicyView } from './components/legal/PrivacyPolicyView';
 import { TermsOfServiceView } from './components/legal/TermsOfServiceView';
 import { AccountDeletionView } from './components/legal/AccountDeletionView';
+import { AboutUsView } from './components/legal/AboutUsView';
+import { ContactUsView } from './components/legal/ContactUsView';
+import { CommunityGuidelinesView } from './components/legal/CommunityGuidelinesView';
 
-const getInitialRoute = (): 'app' | 'privacy' | 'terms' | 'delete-account' => {
+type AppRoute = 'app' | 'privacy' | 'terms' | 'delete-account' | 'about' | 'contact' | 'community-guidelines';
+
+const getInitialRoute = (): AppRoute => {
   if (typeof window === 'undefined') return 'app';
   const path = window.location.pathname.toLowerCase();
   const search = new URLSearchParams(window.location.search);
@@ -65,19 +70,23 @@ const getInitialRoute = (): 'app' | 'privacy' | 'terms' | 'delete-account' => {
   if (path === '/privacy' || path.startsWith('/privacy') || pageParam === 'privacy') return 'privacy';
   if (path === '/terms' || path.startsWith('/terms') || pageParam === 'terms') return 'terms';
   if (path === '/delete-account' || path.startsWith('/delete-account') || path === '/account-deletion' || pageParam === 'delete-account') return 'delete-account';
+  if (path === '/about' || path.startsWith('/about') || pageParam === 'about') return 'about';
+  if (path === '/contact' || path.startsWith('/contact') || pageParam === 'contact') return 'contact';
+  if (path === '/community-guidelines' || path.startsWith('/community-guidelines') || pageParam === 'community-guidelines') return 'community-guidelines';
   return 'app';
 };
 
 const AppContent: React.FC = () => {
   const { user, loading } = useAuth();
-  const [route, setRoute] = React.useState<'app' | 'privacy' | 'terms' | 'delete-account'>(getInitialRoute);
+  const [route, setRoute] = React.useState<AppRoute>(getInitialRoute);
 
   React.useEffect(() => {
     const handlePopState = () => {
       setRoute(getInitialRoute());
     };
     const handleCustomNav = (e: any) => {
-      if (e.detail === 'privacy' || e.detail === 'terms' || e.detail === 'delete-account' || e.detail === 'app') {
+      const validRoutes: AppRoute[] = ['privacy', 'terms', 'delete-account', 'about', 'contact', 'community-guidelines', 'app'];
+      if (validRoutes.includes(e.detail)) {
         setRoute(e.detail);
       }
     };
@@ -93,6 +102,18 @@ const AppContent: React.FC = () => {
     window.history.pushState({}, '', '/');
     setRoute('app');
   };
+
+  if (route === 'about') {
+    return <AboutUsView onBack={navigateToApp} />;
+  }
+
+  if (route === 'contact') {
+    return <ContactUsView onBack={navigateToApp} />;
+  }
+
+  if (route === 'community-guidelines') {
+    return <CommunityGuidelinesView onBack={navigateToApp} />;
+  }
 
   if (route === 'privacy') {
     return <PrivacyPolicyView onBack={navigateToApp} />;

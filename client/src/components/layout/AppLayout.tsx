@@ -8,6 +8,7 @@ import { CallsView } from '../calls/CallsView';
 import { DirectoryView } from '../directory/DirectoryView';
 import { ProfileView } from '../profile/ProfileView';
 import { SettingsView } from '../settings/SettingsView';
+import { WebsiteFooter } from './WebsiteFooter';
 import { IncomingCallModal } from '../call/IncomingCallModal';
 import { ActiveCallOverlay } from '../call/ActiveCallOverlay';
 import { BannerAd } from '../ads/BannerAd';
@@ -582,38 +583,50 @@ export const AppLayout: React.FC = () => {
         )}
 
         {currentTab === 'calls' && (
-          <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 pb-20 md:pb-6">
-            <BannerAd className="mb-3.5" />
-            <CallsView
-              onStartChat={handleStartChatWithUser}
-              onViewProfile={handleViewProfile}
-            />
+          <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 pb-20 md:pb-6 flex flex-col justify-between">
+            <div>
+              <BannerAd className="mb-3.5" />
+              <CallsView
+                onStartChat={handleStartChatWithUser}
+                onViewProfile={handleViewProfile}
+              />
+            </div>
+            <WebsiteFooter className="mt-8" />
           </div>
         )}
 
         {currentTab === 'directory' && (
-          <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 pb-20 md:pb-6">
-            <BannerAd className="mb-3.5" />
-            <DirectoryView
-              onStartChat={handleStartChatWithUser}
-              onViewProfile={handleViewProfile}
-            />
+          <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 pb-20 md:pb-6 flex flex-col justify-between">
+            <div>
+              <BannerAd className="mb-3.5" />
+              <DirectoryView
+                onStartChat={handleStartChatWithUser}
+                onViewProfile={handleViewProfile}
+              />
+            </div>
+            <WebsiteFooter className="mt-8" />
           </div>
         )}
 
         {currentTab === 'profile' && (
-          <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 pb-20 md:pb-6">
-            <BannerAd className="mb-3.5" />
-            <ProfileView
-              viewUser={viewProfileUser}
-            />
+          <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 pb-20 md:pb-6 flex flex-col justify-between">
+            <div>
+              <BannerAd className="mb-3.5" />
+              <ProfileView
+                viewUser={viewProfileUser}
+              />
+            </div>
+            <WebsiteFooter className="mt-8" />
           </div>
         )}
 
         {currentTab === 'settings' && (
-          <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 pb-20 md:pb-6">
-            <BannerAd className="mb-3.5" />
-            <SettingsView />
+          <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 pb-20 md:pb-6 flex flex-col justify-between">
+            <div>
+              <BannerAd className="mb-3.5" />
+              <SettingsView />
+            </div>
+            <WebsiteFooter className="mt-8" />
           </div>
         )}
       </main>

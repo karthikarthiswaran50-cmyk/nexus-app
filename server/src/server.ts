@@ -434,6 +434,11 @@ app.get('/api/admin/activities', requireAdmin, adminCtrl.getAdminUserActivities)
 app.get('/api/admin/users/:id/inspection', requireAdmin, adminCtrl.getAdminUserInspection);
 app.get('/api/admin/reports', requireAdmin, adminCtrl.getAdminReports);
 app.post('/api/admin/reports/:id/resolve', requireAdmin, adminCtrl.resolveAdminReport);
+app.get('/api/admin/contacts', requireAdmin, adminCtrl.getAdminContactMessages);
+app.post('/api/admin/contacts/:id/resolve', requireAdmin, adminCtrl.resolveAdminContactMessage);
+
+// Public Contact Form (Rate limited)
+app.post('/api/contact', apiLimiter, adminCtrl.submitContactMessage);
 
 // 6.6 Royal Watch Ads & Earn Money Routes
 app.get('/api/rewards/wallet', requireAuth, rewardsCtrl.getWallet);

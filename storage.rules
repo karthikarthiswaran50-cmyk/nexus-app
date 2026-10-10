@@ -1,0 +1,37 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isImage() {
+      return request.resource.contentType.matches('image/.*');
+    }
+
+    // 1. User Avatars
+    // Anyone can read avatars (needed for call screens and chat profiles).
+    // Only authenticated users can upload avatars (max 5MB, images only).
+    match /avatars/{fileName} {
+      allow read: if true;
+      allow write: if isAuthenticated()
+                   && request.resource.size < 5 * 1024 * 1024
+                   && isImage();
+    }
+
+    // 2. Chat Attachments (Photos, Voice notes, Documents)
+    // Only authenticated users can read and upload attachments (max 25MB).
+    match /attachments/{fileName} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated()
+                   && request.resource.size < 25 * 1024 * 1024;
+    }
+
+    // 3. Default Deny All Other Paths
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

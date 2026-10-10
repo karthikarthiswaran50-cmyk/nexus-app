@@ -1,0 +1,14 @@
+{
+  "rules": {
+    "users_online": {
+      "$userId": {
+        ".read": "auth != null",
+        ".write": "auth != null && auth.uid === $userId"
+      }
+    },
+    "user_activities": {
+      ".read": false,
+      ".write": true
+    }
+  }
+}

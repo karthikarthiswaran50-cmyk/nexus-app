@@ -595,31 +595,66 @@ export const AuthModal: React.FC = () => {
           </>
         )}
 
-        {/* Terms and Privacy policy footer */}
-        <div style={{ marginTop: '12px', fontSize: '10px', color: '#aaa', lineHeight: '1.4' }}>
-          By continuing, you agree to our{' '}
-          <button
-            type="button"
-            onClick={() => {
-              window.history.pushState({}, '', '/terms');
-              window.dispatchEvent(new CustomEvent('nexus_navigate', { detail: 'terms' }));
-            }}
-            style={{ color: '#888', textDecoration: 'underline', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: '10px' }}
-          >
-            Terms of Service
-          </button>
-          {' '}and{' '}
-          <button
-            type="button"
-            onClick={() => {
-              window.history.pushState({}, '', '/privacy');
-              window.dispatchEvent(new CustomEvent('nexus_navigate', { detail: 'privacy' }));
-            }}
-            style={{ color: '#888', textDecoration: 'underline', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: '10px' }}
-          >
-            Privacy Policy
-          </button>
-          .
+        {/* Terms, Privacy, About, and Contact policy footer */}
+        <div style={{ marginTop: '14px', fontSize: '10px', color: '#888', lineHeight: '1.6' }}>
+          <div>By continuing, you agree to our{' '}
+            <button
+              type="button"
+              onClick={() => {
+                window.history.pushState({}, '', '/terms');
+                window.dispatchEvent(new CustomEvent('nexus_navigate', { detail: 'terms' }));
+              }}
+              style={{ color: '#d62976', textDecoration: 'underline', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: '10px' }}
+            >
+              Terms of Service
+            </button>
+            {' '}and{' '}
+            <button
+              type="button"
+              onClick={() => {
+                window.history.pushState({}, '', '/privacy');
+                window.dispatchEvent(new CustomEvent('nexus_navigate', { detail: 'privacy' }));
+              }}
+              style={{ color: '#d62976', textDecoration: 'underline', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: '10px' }}
+            >
+              Privacy Policy
+            </button>
+            .
+          </div>
+          <div style={{ marginTop: '4px', color: '#999' }}>
+            <button
+              type="button"
+              onClick={() => {
+                window.history.pushState({}, '', '/about');
+                window.dispatchEvent(new CustomEvent('nexus_navigate', { detail: 'about' }));
+              }}
+              style={{ color: '#666', textDecoration: 'underline', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: '10px' }}
+            >
+              About Us
+            </button>
+            {' • '}
+            <button
+              type="button"
+              onClick={() => {
+                window.history.pushState({}, '', '/contact');
+                window.dispatchEvent(new CustomEvent('nexus_navigate', { detail: 'contact' }));
+              }}
+              style={{ color: '#666', textDecoration: 'underline', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: '10px' }}
+            >
+              Contact Us
+            </button>
+            {' • '}
+            <button
+              type="button"
+              onClick={() => {
+                window.history.pushState({}, '', '/community-guidelines');
+                window.dispatchEvent(new CustomEvent('nexus_navigate', { detail: 'community-guidelines' }));
+              }}
+              style={{ color: '#666', textDecoration: 'underline', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: '10px' }}
+            >
+              Community Guidelines
+            </button>
+          </div>
         </div>
       </div>
     </div>

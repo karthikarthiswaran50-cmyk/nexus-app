@@ -1,9 +1,10 @@
 import { Response } from 'express';
 import bcrypt from 'bcryptjs';
-import { db, pgPool, persistUserToPg, purgeUserPermanently, upsertUserToSqlite, getSystemSetting, setSystemSetting } from '../db.js';
+import { db, pgPool, persistUserToPg, purgeUserPermanently, upsertUserToSqlite, getSystemSetting, setSystemSetting, persistContactMessageToPg } from '../db.js';
 import { AuthenticatedRequest } from '../middleware/auth.js';
 import { getOnlineUsersCount, disconnectUserSockets, broadcastAnnouncementSocket } from '../socket.js';
 import { getUserWithPlan } from './auth.js';
+import { sanitizeText, sanitizeEmail } from '../utils/sanitize.js';
 
 const OWNER_MASTER_KEY = process.env.OWNER_MASTER_KEY || 'nexusroyal2026';
 
@@ -1165,5 +1166,99 @@ export async function updateAdSettings(req: AuthenticatedRequest, res: Response)
     res.status(500).json({ error: 'Failed to update ad monetization settings' });
   }
 }
+
+// ----------------------------------------------------
+// Public Contact Form & Inquiries
+// ----------------------------------------------------
+export async function submitContactMessage(req: any, res: Response): Promise<void> {
+  try {
+    const { name, email, subject, message } = req.body;
+
+    if (!name || typeof name !== 'string' || !name.trim()) {
+      res.status(400).json({ error: 'Your name is required.' });
+      return;
+    }
+    if (!email || typeof email !== 'string' || !email.trim()) {
+      res.status(400).json({ error: 'A valid email address is required.' });
+      return;
+    }
+    if (!message || typeof message !== 'string' || !message.trim()) {
+      res.status(400).json({ error: 'Message content is required.' });
+      return;
+    }
+
+    const cleanName = sanitizeText(name.trim().slice(0, 100));
+    const cleanEmail = sanitizeEmail(email.trim().slice(0, 150));
+    const cleanSubject = sanitizeText((subject && typeof subject === 'string' ? subject.trim() : 'General Inquiry').slice(0, 200));
+    const cleanMessage = sanitizeText(message.trim().slice(0, 5000));
+
+    // Basic email format validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(cleanEmail)) {
+      res.status(400).json({ error: 'Please provide a valid email format.' });
+      return;
+    }
+
+    const id = 'msg_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 7);
+    const nowIso = new Date().toISOString();
+    const clientIp = (req.headers['x-forwarded-for'] || req.socket?.remoteAddress || req.ip || '') as string;
+
+    db.prepare(`
+      INSERT INTO contact_messages (id, name, email, subject, message, status, ip_address, created_at)
+      VALUES (?, ?, ?, ?, ?, 'new', ?, ?)
+    `).run(id, cleanName, cleanEmail, cleanSubject, cleanMessage, String(clientIp).slice(0, 100), nowIso);
+
+    persistContactMessageToPg({
+      id,
+      name: cleanName,
+      email: cleanEmail,
+      subject: cleanSubject,
+      message: cleanMessage,
+      status: 'new',
+      ip_address: String(clientIp).slice(0, 100),
+      created_at: nowIso,
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Thank you for reaching out! Your message has been received and our support team will reply to your email promptly.',
+      id,
+    });
+  } catch (error: any) {
+    console.error('submitContactMessage error:', error);
+    res.status(500).json({ error: 'Failed to submit contact message. Please try again or email karthikarthiswaran50@gmail.com directly.' });
+  }
+}
+
+export async function getAdminContactMessages(_req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const rows = db.prepare(`
+      SELECT * FROM contact_messages
+      ORDER BY created_at DESC
+      LIMIT 100
+    `).all() as any[];
+
+    res.json({ messages: rows });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'Failed to fetch contact inquiries.' });
+  }
+}
+
+export async function resolveAdminContactMessage(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const { id } = req.params;
+    const { status = 'resolved' } = req.body;
+
+    db.prepare('UPDATE contact_messages SET status = ? WHERE id = ?').run(status, id);
+    if (pgPool) {
+      pgPool.query('UPDATE contact_messages SET status = $1 WHERE id = $2', [status, id]).catch(() => {});
+    }
+
+    res.json({ success: true, message: `Inquiry marked as ${status}.` });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'Failed to update contact inquiry status.' });
+  }
+}
+
 
 
