@@ -17,7 +17,7 @@ export async function getPublicAdConfig(req: Request, res: Response): Promise<vo
       customScript: getSystemSetting('ad_custom_script', '<script data-cfasync="false" src="https://bicea.org/14/fdc62d798090ac18b8e831e601033773"></script>'),
       bannerEnabled: getSystemSetting('ad_banner_enabled', 'true') === 'true',
       interstitialEnabled: getSystemSetting('ad_interstitial_enabled', 'true') === 'true',
-      adsenseClientId: getSystemSetting('adsense_client_id', 'ca-pub-6502758117978252'),
+      adsenseClientId: getSystemSetting('adsense_client_id', 'ca-pub-1878140842080937'),
       adsenseSlotId: getSystemSetting('adsense_slot_id', '7182930415'),
       adsterraBannerZoneId: getSystemSetting('adsterra_banner_zone_id', '14/fdc62d798090ac18b8e831e601033773'),
       adsenseEnabled: getSystemSetting('adsense_enabled', 'true') === 'true',

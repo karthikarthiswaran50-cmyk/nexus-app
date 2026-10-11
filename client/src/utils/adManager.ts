@@ -26,7 +26,7 @@ let adsenseInjected = false;
  */
 export function injectGoogleAdSense(clientId?: string): void {
   if (typeof window === 'undefined' || adsenseInjected) return;
-  const targetClient = clientId || cachedConfig?.adsenseClientId || 'ca-pub-6502758117978252';
+  const targetClient = clientId || cachedConfig?.adsenseClientId || 'ca-pub-1878140842080937';
   const cleanId = targetClient.startsWith('ca-pub-') ? targetClient : `ca-pub-${targetClient}`;
 
   // Check if script tag already exists in DOM
@@ -69,7 +69,7 @@ export async function getAdConfig(): Promise<AdConfig> {
       customScript: '',
       bannerEnabled: true,
       interstitialEnabled: true,
-      adsenseClientId: 'ca-pub-6502758117978252',
+      adsenseClientId: 'ca-pub-1878140842080937',
       adsenseSlotId: '7182930415',
       adsterraBannerZoneId: '14/fdc62d798090ac18b8e831e601033773',
       adsenseEnabled: true,

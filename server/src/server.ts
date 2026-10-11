@@ -253,6 +253,21 @@ app.get('/.well-known/assetlinks.json', (_req, res) => {
   }
 });
 
+// Google AdSense ads.txt verification endpoint
+app.get('/ads.txt', (_req, res) => {
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  const distPath = path.resolve(__dirname, '../../client/dist/ads.txt');
+  const publicPath = path.resolve(__dirname, '../../client/public/ads.txt');
+  if (fs.existsSync(distPath)) {
+    res.sendFile(distPath);
+  } else if (fs.existsSync(publicPath)) {
+    res.sendFile(publicPath);
+  } else {
+    res.send('google.com, pub-1878140842080937, DIRECT, f08c47fec0942fa0\n');
+  }
+});
+
 // Health check
 app.get('/api/health', (_req, res) => {
   res.json({

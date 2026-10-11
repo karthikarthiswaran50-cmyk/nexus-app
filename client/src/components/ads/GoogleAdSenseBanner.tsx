@@ -124,7 +124,7 @@ export const GoogleAdSenseBanner: React.FC<GoogleAdSenseBannerProps> = ({
   if (config && !config.enabled) return null;
 
   const creative = DEFAULT_SPONSORED_CREATIVES[creativeIndex];
-  const clientId = config?.adsenseClientId || 'ca-pub-6502758117978252';
+  const clientId = config?.adsenseClientId || 'ca-pub-1878140842080937';
   const effectiveSlot = slotId || config?.adsenseSlotId || '7182930415';
 
   return (
